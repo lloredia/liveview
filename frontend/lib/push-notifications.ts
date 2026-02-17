@@ -29,7 +29,6 @@ export function sendLocalNotification(title: string, body: string, icon?: string
       icon: icon || "/icons/logo.png",
       badge: "/icons/logo.png",
       tag: "lv-score-" + Date.now(),
-      renotify: true,
       silent: false,
     });
 
