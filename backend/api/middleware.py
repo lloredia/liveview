@@ -117,9 +117,9 @@ def setup_cors(app: FastAPI) -> None:
     """Configure CORS middleware."""
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # In production, restrict to known origins
-        allow_credentials=True,
-        allow_methods=["GET", "OPTIONS"],
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["ETag", "X-Request-ID", "Cache-Control"],
     )
