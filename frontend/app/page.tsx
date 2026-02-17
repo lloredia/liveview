@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchScoreboard } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
@@ -15,7 +15,7 @@ import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { useScoreAlerts } from "@/hooks/use-score-alerts";
 import { requestPushPermission, getPushPermission } from "@/lib/push-notifications";
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -229,5 +229,19 @@ export default function Home() {
         onMatchSelect={(id) => handleMatchSelect(id)}
       />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-border border-t-accent-green" />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }
