@@ -1,0 +1,133 @@
+x-common-env: &common-env
+  LV_DATABASE_URL: "postgresql+asyncpg://liveview:liveview_dev_password@postgres:5432/liveview"
+  LV_REDIS_URL: "redis://redis:6379/0"
+  LV_LOG_LEVEL: info
+  LV_SPORTRADAR_API_KEY: ${SPORTRADAR_API_KEY:-}
+  LV_THESPORTSDB_API_KEY: ${THESPORTSDB_API_KEY:-2}
+
+services:
+  # ── Infrastructure ──────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: liveview
+      POSTGRES_USER: liveview
+      POSTGRES_PASSWORD: liveview_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liveview -d liveview"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Application Services ────────────────────────────────
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      <<: *common-env
+      LV_API_HOST: "0.0.0.0"
+      LV_API_PORT: "8000"
+      LV_API_WORKERS: "2"
+      LV_INSTANCE_ID: api-1
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ingest:
+    build:
+      context: .
+      target: ingest
+    environment:
+      <<: *common-env
+      LV_INSTANCE_ID: ingest-1
+    ports:
+      - "9091:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      target: scheduler
+    environment:
+      <<: *common-env
+      LV_INSTANCE_ID: scheduler-1
+      LV_SCHEDULER_TICK_INTERVAL_S: "1.0"
+      LV_SCHEDULER_LEADER_TTL_S: "30"
+      LV_SCHEDULER_LEADER_RENEW_S: "10"
+    ports:
+      - "9092:9092"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler-standby:
+    build:
+      context: .
+      target: scheduler
+    environment:
+      <<: *common-env
+      LV_INSTANCE_ID: scheduler-2
+      LV_SCHEDULER_TICK_INTERVAL_S: "1.0"
+      LV_SCHEDULER_LEADER_TTL_S: "30"
+      LV_SCHEDULER_LEADER_RENEW_S: "10"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  builder:
+    build:
+      context: .
+      target: builder
+    environment:
+      <<: *common-env
+      LV_INSTANCE_ID: builder-1
+    ports:
+      - "9093:9093"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
