@@ -95,7 +95,7 @@ export async function loadCloudFavorites(): Promise<void> {
 
     // Merge: cloud + local (deduplicate)
     const local = getStored(STORAGE_KEY_LEAGUES);
-    const merged = [...new Set([...cloudLeagues, ...local])];
+    const merged = Array.from(new Set([...cloudLeagues, ...local]));
     setStored(STORAGE_KEY_LEAGUES, merged);
 
     // Push any local-only favorites to cloud
