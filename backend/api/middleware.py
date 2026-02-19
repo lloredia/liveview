@@ -158,10 +158,12 @@ def setup_cors(app: FastAPI) -> None:
     """Configure CORS middleware."""
     settings = get_settings()
     origins = settings.cors_origins
-    if settings.environment.value == "production" and origins == ["*"]:
+    if origins == ["*"] or not origins:
         origins = [
-            "https://liveview-sports.vercel.app",
-            "https://*.vercel.app",
+            "https://www.liveview-tracker.com",
+            "https://liveview-tracker.com",
+            "https://frontend-lloredias-projects.vercel.app",
+            "http://localhost:3000",
         ]
 
     app.add_middleware(
