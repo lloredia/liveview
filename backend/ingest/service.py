@@ -35,6 +35,9 @@ logger = get_logger(__name__)
 POLL_COMMAND_CHANNEL = "ingest:poll_commands"
 
 
+MAX_CONCURRENT_POLLS = 20
+
+
 class IngestService:
     """
     Main ingest service that processes poll commands.
@@ -57,6 +60,7 @@ class IngestService:
         self._normalizer = normalizer
         self._settings = settings or get_settings()
         self._shutdown = asyncio.Event()
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_POLLS)
 
     async def process_poll_command(self, command: dict[str, Any]) -> None:
         """
@@ -66,6 +70,10 @@ class IngestService:
             command: Dict with match_id, tier, sport, league_provider_id,
                      match_provider_id, canonical_match_id.
         """
+        async with self._semaphore:
+            await self._execute_poll(command)
+
+    async def _execute_poll(self, command: dict[str, Any]) -> None:
         canonical_match_id = uuid.UUID(command["canonical_match_id"])
         tier = Tier(command["tier"])
         sport = Sport(command["sport"])

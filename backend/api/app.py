@@ -20,6 +20,7 @@ from fastapi import FastAPI, WebSocket
 from sqlalchemy import text
 
 from shared.config import get_settings
+from shared.models.enums import MatchPhase
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
 from shared.utils.metrics import start_metrics_server
@@ -53,39 +54,43 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             await asyncio.sleep(60)
 
             async with db.write_session() as session:
+                scheduled = MatchPhase.SCHEDULED.value
+                live_first_half = MatchPhase.LIVE_FIRST_HALF.value
+                finished = MatchPhase.FINISHED.value
+
                 # 1. Auto-live: matches whose start_time has passed (within 3 hours)
                 kickoff_result = await session.execute(text("""
                     UPDATE matches
-                    SET phase = 'live'
-                    WHERE phase = 'scheduled'
+                    SET phase = :live_phase
+                    WHERE phase = :scheduled
                       AND start_time <= NOW()
                       AND start_time > NOW() - INTERVAL '3 hours'
                     RETURNING id
-                """))
+                """), {"live_phase": live_first_half, "scheduled": scheduled})
                 kickoff_ids = [str(row[0]) for row in kickoff_result.fetchall()]
 
                 # 2. Auto-live: matches with scores > 0 still marked scheduled
                 score_result = await session.execute(text("""
                     UPDATE matches
-                    SET phase = 'live'
-                    WHERE phase = 'scheduled'
+                    SET phase = :live_phase
+                    WHERE phase = :scheduled
                       AND start_time <= NOW()
                       AND id IN (
                           SELECT match_id FROM match_state
                           WHERE score_home + score_away > 0
                       )
                     RETURNING id
-                """))
+                """), {"live_phase": live_first_half, "scheduled": scheduled})
                 score_ids = [str(row[0]) for row in score_result.fetchall()]
 
                 # 3. Auto-finish: matches started 3+ hours ago still not finished
                 finished_result = await session.execute(text("""
                     UPDATE matches
-                    SET phase = 'finished'
-                    WHERE phase IN ('scheduled', 'live')
+                    SET phase = :finished
+                    WHERE (phase = :scheduled OR phase LIKE 'live_%' OR phase = 'break')
                       AND start_time < NOW() - INTERVAL '3 hours'
                     RETURNING id
-                """))
+                """), {"finished": finished, "scheduled": scheduled})
                 finished_ids = [str(row[0]) for row in finished_result.fetchall()]
 
                 # 4. Sync match_state.phase to match matches.phase

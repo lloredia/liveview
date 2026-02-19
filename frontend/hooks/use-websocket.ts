@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getWsUrl } from "@/lib/api";
 import type { WSMessage } from "@/lib/types";
 
@@ -32,6 +32,9 @@ export function useWebSocket({
   const matchIdRef = useRef(matchId);
   matchIdRef.current = matchId;
 
+  // Stable reference: only changes when tier values actually change
+  const tiersKey = useMemo(() => tiers.slice().sort().join(","), [tiers]);
+
   useEffect(() => {
     if (!matchId) {
       setConnected(false);
@@ -43,8 +46,9 @@ export function useWebSocket({
     setMessages([]);
     reconnectAttempts.current = 0;
 
+    const currentTiers = tiersKey.split(",").map(Number);
+
     const connect = () => {
-      // Guard: don't reconnect if matchId changed or too many attempts
       if (matchIdRef.current !== matchId || reconnectAttempts.current > 10) return;
 
       try {
@@ -60,7 +64,7 @@ export function useWebSocket({
             JSON.stringify({
               op: "subscribe",
               match_id: matchId,
-              tiers,
+              tiers: currentTiers,
             }),
           );
         };
@@ -109,8 +113,7 @@ export function useWebSocket({
         wsRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId]);
+  }, [matchId, tiersKey, bufferSize]);
 
   return { messages, connected, error };
 }

@@ -105,17 +105,25 @@ class RedisManager:
         key = _fmt(PRESENCE_KEY, channel=channel)
         return await self.client.scard(key)
 
-    async def increment_presence(self, channel: str) -> int:
+    async def increment_presence(self, channel: str, ttl_s: int = 120) -> int:
         """Increment the subscriber count for a channel. Returns new count."""
         key = f"presence:count:{channel}"
-        return await self.client.incr(key)
+        pipe = self.client.pipeline(transaction=True)
+        pipe.incr(key)
+        pipe.expire(key, ttl_s)
+        results = await pipe.execute()
+        return int(results[0])
 
-    async def decrement_presence(self, channel: str) -> int:
+    async def decrement_presence(self, channel: str, ttl_s: int = 120) -> int:
         """Decrement the subscriber count for a channel. Returns new count."""
         key = f"presence:count:{channel}"
-        val = await self.client.decr(key)
+        pipe = self.client.pipeline(transaction=True)
+        pipe.decr(key)
+        pipe.expire(key, ttl_s)
+        results = await pipe.execute()
+        val = int(results[0])
         if val < 0:
-            await self.client.set(key, 0)
+            await self.client.set(key, 0, ex=ttl_s)
             return 0
         return val
 
@@ -197,28 +205,45 @@ class RedisManager:
         return int(val) if val else 0
 
     # ── Leader election ─────────────────────────────────────────────────
+
+    # Lua script: atomically renew TTL only if we hold the lock
+    _RENEW_LEADER_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    redis.call("expire", KEYS[1], ARGV[2])
+    return 1
+end
+return 0
+"""
+
+    # Lua script: atomically delete only if we hold the lock
+    _RELEASE_LEADER_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    redis.call("del", KEYS[1])
+    return 1
+end
+return 0
+"""
+
     async def try_acquire_leader(self, role: str, instance_id: str, ttl_s: int = 30) -> bool:
         """Attempt to acquire leadership using SET NX."""
         key = _fmt(LEADER_KEY, role=role)
         return await self.client.set(key, instance_id, nx=True, ex=ttl_s)
 
     async def renew_leader(self, role: str, instance_id: str, ttl_s: int = 30) -> bool:
-        """Renew leadership if still the current leader."""
+        """Atomically renew leadership if still the current leader."""
         key = _fmt(LEADER_KEY, role=role)
-        current = await self.client.get(key)
-        if current == instance_id:
-            await self.client.expire(key, ttl_s)
-            return True
-        return False
+        result = await self.client.eval(
+            self._RENEW_LEADER_SCRIPT, 1, key, instance_id, str(ttl_s)
+        )
+        return bool(result)
 
     async def release_leader(self, role: str, instance_id: str) -> bool:
-        """Release leadership only if we hold it."""
+        """Atomically release leadership only if we hold it."""
         key = _fmt(LEADER_KEY, role=role)
-        current = await self.client.get(key)
-        if current == instance_id:
-            await self.client.delete(key)
-            return True
-        return False
+        result = await self.client.eval(
+            self._RELEASE_LEADER_SCRIPT, 1, key, instance_id
+        )
+        return bool(result)
 
     # ── Stream helpers for event replay ─────────────────────────────────
     async def append_event_stream(

@@ -18,6 +18,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import orjson
+
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
@@ -390,7 +392,6 @@ class WebSocketManager:
         if not subscriber_ids:
             return
 
-        # Parse channel to extract match_id and tier
         parts = channel.split(":")
         match_id = parts[2] if len(parts) > 2 else ""
         tier = int(parts[4]) if len(parts) > 4 else 0
@@ -408,12 +409,14 @@ class WebSocketManager:
             "timestamp": time.time(),
         }
 
-        # Fan-out to all subscribers (concurrent sends)
+        # Serialize once, send the same string to all subscribers
+        serialized = orjson.dumps(message, default=str).decode()
+
         tasks = []
         for conn_id in list(subscriber_ids):
             conn = self._connections.get(conn_id)
             if conn:
-                tasks.append(self._send(conn, message))
+                tasks.append(self._send_raw(conn, serialized))
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -465,7 +468,19 @@ class WebSocketManager:
         """Send a JSON message to a WebSocket connection."""
         try:
             if conn.ws.client_state == WebSocketState.CONNECTED:
-                await conn.ws.send_text(json.dumps(message, default=str))
+                await conn.ws.send_text(orjson.dumps(message, default=str).decode())
+        except Exception as exc:
+            logger.debug(
+                "ws_send_error",
+                connection_id=conn.connection_id,
+                error=str(exc),
+            )
+
+    async def _send_raw(self, conn: WSConnection, serialized: str) -> None:
+        """Send a pre-serialized string to a WebSocket connection."""
+        try:
+            if conn.ws.client_state == WebSocketState.CONNECTED:
+                await conn.ws.send_text(serialized)
         except Exception as exc:
             logger.debug(
                 "ws_send_error",

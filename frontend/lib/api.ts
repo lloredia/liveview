@@ -38,6 +38,11 @@ export async function fetchMatch(matchId: string): Promise<MatchDetailResponse> 
   return apiFetch<MatchDetailResponse>(`/v1/matches/${matchId}`);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function fetchLiveCounts(): Promise<any> {
+  return apiFetch("/v1/today");
+}
+
 export async function fetchTimeline(
   matchId: string,
   afterSeq?: number,

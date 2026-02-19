@@ -61,19 +61,6 @@ class DatabaseManager:
         return self._engine
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[AsyncSession]:
-        """Provide a transactional async session scope."""
-        if self._session_factory is None:
-            raise RuntimeError("DatabaseManager not connected.")
-        async with self._session_factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    @asynccontextmanager
     async def read_session(self) -> AsyncIterator[AsyncSession]:
         """Provide a read-only session (no commit)."""
         if self._session_factory is None:
@@ -93,3 +80,6 @@ class DatabaseManager:
             except Exception:
                 await session.rollback()
                 raise
+
+    # Alias: session() behaves identically to write_session()
+    session = write_session

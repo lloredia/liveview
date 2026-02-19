@@ -5,7 +5,7 @@ These are the canonical wire/internal representations — NOT ORM models.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -76,7 +76,7 @@ class MatchScoreboard(DomainModel):
     start_time: datetime
     version: int = 0
     seq: int = 0
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Match event ─────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ class MatchEvent(DomainModel):
     source_provider: Optional[ProviderName] = None
     provider_event_id: Optional[str] = None
     seq: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Match stats (Tier 2) ───────────────────────────────────────────────
@@ -150,7 +150,7 @@ class MatchStats(DomainModel):
     away_stats: TeamStats = Field(default_factory=TeamStats)
     version: int = 0
     seq: int = 0
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Full Match Center ───────────────────────────────────────────────────
@@ -179,7 +179,7 @@ class ProviderSelection(DomainModel):
     match_id: uuid.UUID
     tier: Tier
     provider: ProviderName
-    selected_at: datetime = Field(default_factory=datetime.utcnow)
+    selected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     locked_until: Optional[datetime] = None
 
 
@@ -199,7 +199,7 @@ class WSEnvelope(DomainModel):
     channel: Optional[str] = None
     seq: int = 0
     version: int = 0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     provider: Optional[ProviderName] = None
     synthetic: bool = False
     data: Any = None
@@ -213,7 +213,7 @@ class MatchSnapshot(DomainModel):
     recent_events: list[MatchEvent] = Field(default_factory=list)
     stats: Optional[MatchStats] = None
     version: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Subscription tracking ──────────────────────────────────────────────
@@ -221,4 +221,4 @@ class SubscriptionInfo(DomainModel):
     connection_id: str
     match_id: uuid.UUID
     tiers: list[Tier] = Field(default_factory=lambda: [Tier.SCOREBOARD])
-    subscribed_at: datetime = Field(default_factory=datetime.utcnow)
+    subscribed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

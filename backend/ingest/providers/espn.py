@@ -341,9 +341,8 @@ class ESPNProvider(BaseProvider):
 
         # Parse period scores
         breakdown: list[ScoreBreakdown] = []
-        for ls in home_data.get("linescores", []):
-            idx = home_data["linescores"].index(ls)
-            away_ls = away_data.get("linescores", [{}])
+        for idx, ls in enumerate(home_data.get("linescores", [])):
+            away_ls = away_data.get("linescores", [])
             away_val = int(away_ls[idx].get("value", 0)) if idx < len(away_ls) else 0
             breakdown.append(ScoreBreakdown(
                 period=str(idx + 1),

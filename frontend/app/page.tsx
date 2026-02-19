@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { fetchLeagues, fetchScoreboard } from "@/lib/api";
+import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
-import { isLive } from "@/lib/utils";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { Scoreboard } from "@/components/scoreboard";
@@ -64,37 +63,33 @@ function HomeContent() {
       });
   }, []);
 
-  // Poll live counts
+  // Poll live counts via dedicated endpoint (single request instead of N)
   useEffect(() => {
     if (leagues.length === 0) return;
 
-    const pollLiveCounts = async () => {
-      const allIds = leagues.flatMap((g) => g.leagues.map((l) => l.id));
-      const counts: Record<string, number> = {};
-      let total = 0;
-
-      for (let i = 0; i < allIds.length; i += 5) {
-        const batch = allIds.slice(i, i + 5);
-        const results = await Promise.allSettled(
-          batch.map((id) => fetchScoreboard(id)),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            const liveCount = r.value.matches.filter((m) => isLive(m.phase)).length;
-            if (liveCount > 0) {
-              counts[r.value.league_id] = liveCount;
-              total += liveCount;
-            }
+    const pollCounts = async () => {
+      try {
+        const data = await fetchLiveCounts();
+        const counts: Record<string, number> = {};
+        let total = 0;
+        for (const lg of data.leagues ?? []) {
+          const liveCount = (lg.matches ?? []).filter(
+            (m: { phase: string }) => m.phase.startsWith("live_") || m.phase === "break",
+          ).length;
+          if (liveCount > 0) {
+            counts[lg.league_id] = liveCount;
+            total += liveCount;
           }
         }
+        setLiveCounts(counts);
+        setTotalLive(total);
+      } catch {
+        // Silently degrade — counts will just stay stale
       }
-
-      setLiveCounts(counts);
-      setTotalLive(total);
     };
 
-    pollLiveCounts();
-    const timer = setInterval(pollLiveCounts, 45000);
+    pollCounts();
+    const timer = setInterval(pollCounts, 30000);
     return () => clearInterval(timer);
   }, [leagues]);
 
@@ -114,18 +109,27 @@ function HomeContent() {
     return () => clearInterval(timer);
   }, []);
 
-  // Get favorite league IDs for score alerts
-  const favoriteLeagueIds = leagues
-    .flatMap((g) => g.leagues)
-    .filter((l) => {
-      try {
-        const favs = JSON.parse(localStorage.getItem("lv_favorites") || "{}");
-        return favs.leagues?.includes(l.id);
-      } catch {
-        return false;
+  // Load favorite league IDs once (SSR-safe)
+  const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const favs = JSON.parse(localStorage.getItem("lv_favorites") || "{}");
+      if (Array.isArray(favs.leagues)) {
+        setFavLeagueIds(favs.leagues);
       }
-    })
-    .map((l) => l.id);
+    } catch {
+      // Ignore corrupt localStorage
+    }
+  }, []);
+
+  const favoriteLeagueIds = useMemo(
+    () =>
+      leagues
+        .flatMap((g) => g.leagues)
+        .filter((l) => favLeagueIds.includes(l.id))
+        .map((l) => l.id),
+    [leagues, favLeagueIds],
+  );
 
   // Score alerts for favorited leagues
   useScoreAlerts(leagues, favoriteLeagueIds);
