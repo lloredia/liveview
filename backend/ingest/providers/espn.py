@@ -39,13 +39,27 @@ _LEAGUE_SLUGS: dict[str, tuple[str, str]] = {
     # league_provider_id -> (sport_slug, league_slug)
     # Soccer
     "eng.1": ("soccer", "eng.1"),
+    "eng.2": ("soccer", "eng.2"),
+    "eng.fa": ("soccer", "eng.fa"),
+    "eng.league_cup": ("soccer", "eng.league_cup"),
     "usa.1": ("soccer", "usa.1"),
     "esp.1": ("soccer", "esp.1"),
     "ger.1": ("soccer", "ger.1"),
     "ita.1": ("soccer", "ita.1"),
     "fra.1": ("soccer", "fra.1"),
+    "ned.1": ("soccer", "ned.1"),
+    "por.1": ("soccer", "por.1"),
+    "tur.1": ("soccer", "tur.1"),
+    "sco.1": ("soccer", "sco.1"),
+    "sau.1": ("soccer", "sau.1"),
+    "uefa.champions": ("soccer", "uefa.champions"),
+    "uefa.europa": ("soccer", "uefa.europa"),
+    "uefa.europa.conf": ("soccer", "uefa.europa.conf"),
     # Basketball
     "nba": ("basketball", "nba"),
+    "wnba": ("basketball", "wnba"),
+    "mens-college-basketball": ("basketball", "mens-college-basketball"),
+    "womens-college-basketball": ("basketball", "womens-college-basketball"),
     # Hockey
     "nhl": ("hockey", "nhl"),
     # Baseball

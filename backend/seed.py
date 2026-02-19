@@ -1,20 +1,23 @@
 """
 Seed script for Live View.
 
-Fetches today's matches from ESPN's free API across all supported sports/leagues,
+Fetches matches from ESPN's free API across all supported sports/leagues,
 creates the corresponding leagues, teams, and matches in the database,
 and registers provider mappings so the scheduler can start polling.
 
 Usage:
-    docker compose exec api python -m seed
+    python seed.py                    # Seed today only
+    python seed.py --days-ahead 3     # Seed today + next 3 days
+    python seed.py --date 2026-02-20  # Seed a specific date
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -45,6 +48,16 @@ ESPN_LEAGUES: list[dict[str, str]] = [
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ita.1", "name": "Serie A", "country": "Italy"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "fra.1", "name": "Ligue 1", "country": "France"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.champions", "name": "Champions League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa", "name": "Europa League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa.conf", "name": "Conference League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.2", "name": "Championship", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.fa", "name": "FA Cup", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.league_cup", "name": "EFL Cup", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ned.1", "name": "Eredivisie", "country": "Netherlands"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "por.1", "name": "Liga Portugal", "country": "Portugal"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "tur.1", "name": "Turkish Super Lig", "country": "Turkey"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia"},
     # Basketball
     {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA"},
     {"sport": "basketball", "espn_sport": "basketball", "espn_league": "wnba", "name": "WNBA", "country": "USA"},
@@ -74,12 +87,16 @@ ESPN_STATUS_MAP: dict[str, MatchPhase] = {
 
 
 async def fetch_espn_scoreboard(
-    client: httpx.AsyncClient, espn_sport: str, espn_league: str
+    client: httpx.AsyncClient, espn_sport: str, espn_league: str,
+    target_date: date | None = None,
 ) -> dict[str, Any]:
-    """Fetch the current scoreboard from ESPN."""
+    """Fetch the scoreboard from ESPN for a specific date (or today if None)."""
     url = f"{ESPN_BASE}/{espn_sport}/{espn_league}/scoreboard"
+    params = {}
+    if target_date:
+        params["dates"] = target_date.strftime("%Y%m%d")
     try:
-        resp = await client.get(url, timeout=15.0)
+        resp = await client.get(url, params=params, timeout=15.0)
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
@@ -87,15 +104,78 @@ async def fetch_espn_scoreboard(
         return {}
 
 
+async def seed_date(
+    db: DatabaseManager,
+    client: httpx.AsyncClient,
+    sports_db: dict[str, uuid.UUID],
+    target_date: date,
+) -> tuple[int, int, int]:
+    """Seed all leagues for a single date. Returns (leagues, teams, matches) counts."""
+    total_leagues = 0
+    total_teams = 0
+    total_matches = 0
+
+    for league_cfg in ESPN_LEAGUES:
+        sport_type = league_cfg["sport"]
+        sport_id = sports_db.get(sport_type)
+        if not sport_id:
+            continue
+
+        data = await fetch_espn_scoreboard(
+            client, league_cfg["espn_sport"], league_cfg["espn_league"],
+            target_date=target_date,
+        )
+        events = data.get("events", [])
+
+        if not events:
+            continue
+
+        async with db.write_session() as session:
+            league_id = await _upsert_league(
+                session, sport_id, league_cfg["name"],
+                league_cfg["country"], league_cfg["espn_league"],
+            )
+            total_leagues += 1
+
+            match_count = 0
+            for event in events:
+                try:
+                    teams_created = await _process_event(
+                        session, league_id, sport_id, sport_type,
+                        league_cfg["espn_league"], event,
+                    )
+                    match_count += 1
+                    total_teams += teams_created
+                except Exception as exc:
+                    logger.warning(
+                        "event_process_error",
+                        event_id=event.get("id"),
+                        error=str(exc),
+                    )
+
+            total_matches += match_count
+            status_summary = _summarize_statuses(events)
+            print(f"  ✓ {league_cfg['name']:25s} — {match_count} matches ({status_summary})")
+
+    return total_leagues, total_teams, total_matches
+
+
 async def seed() -> None:
     """Main seed function."""
     setup_logging("seed")
+
+    parser = argparse.ArgumentParser(description="Seed LiveView database from ESPN")
+    parser.add_argument("--days-ahead", type=int, default=0,
+                        help="Number of days ahead to seed (0 = today only)")
+    parser.add_argument("--date", type=str, default=None,
+                        help="Specific date to seed (YYYY-MM-DD)")
+    args = parser.parse_args()
+
     settings = get_settings()
     db = DatabaseManager(settings)
     await db.connect()
 
     async with httpx.AsyncClient() as client:
-        # Load sport IDs from DB
         async with db.read_session() as session:
             result = await session.execute(select(SportORM))
             sports_db = {s.sport_type: s.id for s in result.scalars().all()}
@@ -104,63 +184,33 @@ async def seed() -> None:
         print(f"  Live View Seed — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         print(f"{'='*60}")
         print(f"  Sports in DB: {list(sports_db.keys())}")
+        print(f"  Leagues configured: {len(ESPN_LEAGUES)}")
         print()
 
-        total_leagues = 0
-        total_teams = 0
-        total_matches = 0
+        grand_leagues = 0
+        grand_teams = 0
+        grand_matches = 0
 
-        for league_cfg in ESPN_LEAGUES:
-            sport_type = league_cfg["sport"]
-            sport_id = sports_db.get(sport_type)
-            if not sport_id:
-                print(f"  ⚠ Sport '{sport_type}' not found in DB, skipping {league_cfg['name']}")
-                continue
+        if args.date:
+            dates = [date.fromisoformat(args.date)]
+        else:
+            today = datetime.now(timezone.utc).date()
+            dates = [today + timedelta(days=d) for d in range(args.days_ahead + 1)]
 
-            data = await fetch_espn_scoreboard(
-                client, league_cfg["espn_sport"], league_cfg["espn_league"]
+        for target_date in dates:
+            print(f"  --- {target_date.isoformat()} ---")
+            leagues, teams, matches = await seed_date(
+                db, client, sports_db, target_date,
             )
-            events = data.get("events", [])
+            grand_leagues += leagues
+            grand_teams += teams
+            grand_matches += matches
+            if matches == 0:
+                print(f"  · No matches found for {target_date.isoformat()}")
+            print()
 
-            if not events:
-                print(f"  · {league_cfg['name']:25s} — no matches today")
-                continue
-
-            async with db.write_session() as session:
-                # Upsert league
-                league_id = await _upsert_league(
-                    session, sport_id, league_cfg["name"],
-                    league_cfg["country"], league_cfg["espn_league"],
-                )
-                total_leagues += 1
-
-                match_count = 0
-                for event in events:
-                    try:
-                        teams_created = await _process_event(
-                            session, league_id, sport_id, sport_type,
-                            league_cfg["espn_league"], event,
-                        )
-                        match_count += 1
-                        total_teams += teams_created
-                    except Exception as exc:
-                        logger.warning(
-                            "event_process_error",
-                            event_id=event.get("id"),
-                            error=str(exc),
-                        )
-
-                total_matches += match_count
-                status_summary = _summarize_statuses(events)
-                print(f"  ✓ {league_cfg['name']:25s} — {match_count} matches ({status_summary})")
-
-        print()
-        print(f"  Summary: {total_leagues} leagues, {total_teams} new teams, {total_matches} matches")
-        print(f"{'='*60}")
-        print()
-        print("  The scheduler will now discover these matches and start polling.")
-        print("  Watch logs: docker compose logs scheduler --tail 20 -f")
-        print()
+        print(f"  Summary: {grand_leagues} league-days, {grand_teams} new teams, {grand_matches} matches")
+        print(f"{'='*60}\n")
 
     await db.disconnect()
 

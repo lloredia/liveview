@@ -3,6 +3,7 @@ Scheduler service for Live View.
 Manages adaptive polling tasks for all active/live matches.
 Uses leader election to ensure only one scheduler instance drives polls.
 Publishes poll commands to the ingest service via Redis pub/sub.
+Includes automatic schedule sync that discovers new matches from ESPN.
 """
 from __future__ import annotations
 
@@ -11,14 +12,22 @@ import json
 import signal
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
+import httpx
 from sqlalchemy import or_, select
 
 from shared.config import Settings, get_settings
 from shared.models.enums import MatchPhase, ProviderName, Sport, Tier
-from shared.models.orm import LeagueORM, MatchORM, MatchStateORM, ProviderMappingORM, SportORM
+from shared.models.orm import (
+    LeagueORM,
+    MatchORM,
+    MatchStateORM,
+    ProviderMappingORM,
+    SportORM,
+    TeamORM,
+)
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
 from shared.utils.metrics import (
@@ -34,6 +43,49 @@ from scheduler.engine.polling import AdaptivePollingEngine
 logger = get_logger(__name__)
 
 POLL_COMMAND_CHANNEL = "ingest:poll_commands"
+
+ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
+
+ESPN_STATUS_MAP: dict[str, MatchPhase] = {
+    "STATUS_SCHEDULED": MatchPhase.SCHEDULED,
+    "STATUS_IN_PROGRESS": MatchPhase.LIVE_FIRST_HALF,
+    "STATUS_HALFTIME": MatchPhase.LIVE_HALFTIME,
+    "STATUS_END_PERIOD": MatchPhase.BREAK,
+    "STATUS_FINAL": MatchPhase.FINISHED,
+    "STATUS_FULL_TIME": MatchPhase.FINISHED,
+    "STATUS_POSTPONED": MatchPhase.POSTPONED,
+    "STATUS_CANCELED": MatchPhase.CANCELLED,
+    "STATUS_DELAYED": MatchPhase.SUSPENDED,
+    "STATUS_RAIN_DELAY": MatchPhase.SUSPENDED,
+}
+
+SCHEDULE_SYNC_LEAGUES: list[dict[str, str]] = [
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.1", "name": "Premier League", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "usa.1", "name": "MLS", "country": "USA"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "esp.1", "name": "La Liga", "country": "Spain"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ger.1", "name": "Bundesliga", "country": "Germany"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ita.1", "name": "Serie A", "country": "Italy"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "fra.1", "name": "Ligue 1", "country": "France"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.champions", "name": "Champions League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa", "name": "Europa League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa.conf", "name": "Conference League", "country": "Europe"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.2", "name": "Championship", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.fa", "name": "FA Cup", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.league_cup", "name": "EFL Cup", "country": "England"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ned.1", "name": "Eredivisie", "country": "Netherlands"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "por.1", "name": "Liga Portugal", "country": "Portugal"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "tur.1", "name": "Turkish Super Lig", "country": "Turkey"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "wnba", "name": "WNBA", "country": "USA"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "mens-college-basketball", "name": "NCAAM", "country": "USA"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "womens-college-basketball", "name": "NCAAW", "country": "USA"},
+    {"sport": "hockey", "espn_sport": "hockey", "espn_league": "nhl", "name": "NHL", "country": "USA"},
+    {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA"},
+]
+
+SCHEDULE_SYNC_INTERVAL_S = 4 * 3600  # 4 hours
 
 # Phases that require active polling
 ACTIVE_PHASES = [p.value for p in MatchPhase if p.is_live or p == MatchPhase.PRE_MATCH]
@@ -379,6 +431,287 @@ class SchedulerService:
         self._shutdown.set()
 
 
+class ScheduleSyncService:
+    """
+    Periodically discovers new matches from ESPN and upserts them into the database.
+    Runs alongside the main scheduler so the DB always has upcoming matches.
+    """
+
+    def __init__(self, db: DatabaseManager, settings: Settings | None = None) -> None:
+        self._db = db
+        self._settings = settings or get_settings()
+        self._shutdown = asyncio.Event()
+        self._sports_cache: dict[str, uuid.UUID] = {}
+
+    async def _load_sports(self) -> dict[str, uuid.UUID]:
+        if self._sports_cache:
+            return self._sports_cache
+        async with self._db.read_session() as session:
+            result = await session.execute(select(SportORM))
+            self._sports_cache = {s.sport_type: s.id for s in result.scalars().all()}
+        return self._sports_cache
+
+    async def run(self) -> None:
+        """Run the schedule sync loop: fetch today + tomorrow every SCHEDULE_SYNC_INTERVAL_S."""
+        # Initial sync on startup (after a short delay to let DB connect settle)
+        await asyncio.sleep(10)
+        await self._sync_once()
+
+        while not self._shutdown.is_set():
+            try:
+                await asyncio.sleep(SCHEDULE_SYNC_INTERVAL_S)
+                if self._shutdown.is_set():
+                    break
+                await self._sync_once()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error("schedule_sync_error", error=str(exc), exc_info=True)
+                await asyncio.sleep(60)
+
+    async def _sync_once(self) -> None:
+        """Fetch today + tomorrow from ESPN for all leagues and upsert matches."""
+        sports_db = await self._load_sports()
+        today = datetime.now(timezone.utc).date()
+        dates_to_sync = [today, today + timedelta(days=1)]
+
+        total_new = 0
+        total_updated = 0
+
+        async with httpx.AsyncClient() as client:
+            for target_date in dates_to_sync:
+                date_str = target_date.strftime("%Y%m%d")
+                for league_cfg in SCHEDULE_SYNC_LEAGUES:
+                    sport_id = sports_db.get(league_cfg["sport"])
+                    if not sport_id:
+                        continue
+                    try:
+                        new, updated = await self._sync_league_date(
+                            client, league_cfg, sport_id, date_str,
+                        )
+                        total_new += new
+                        total_updated += updated
+                    except Exception as exc:
+                        logger.warning(
+                            "schedule_sync_league_error",
+                            league=league_cfg["name"],
+                            date=date_str,
+                            error=str(exc),
+                        )
+
+        logger.info(
+            "schedule_sync_completed",
+            new_matches=total_new,
+            updated_matches=total_updated,
+            dates=[d.isoformat() for d in dates_to_sync],
+        )
+
+    async def _sync_league_date(
+        self,
+        client: httpx.AsyncClient,
+        league_cfg: dict[str, str],
+        sport_id: uuid.UUID,
+        date_str: str,
+    ) -> tuple[int, int]:
+        """Sync a single league for a single date. Returns (new, updated) counts."""
+        url = f"{ESPN_BASE}/{league_cfg['espn_sport']}/{league_cfg['espn_league']}/scoreboard"
+        resp = await client.get(url, params={"dates": date_str}, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+        events = data.get("events", [])
+        if not events:
+            return 0, 0
+
+        new_count = 0
+        updated_count = 0
+
+        async with self._db.write_session() as session:
+            # Ensure league exists
+            league_id = await self._upsert_league(
+                session, sport_id, league_cfg["name"],
+                league_cfg["country"], league_cfg["espn_league"],
+            )
+
+            for event in events:
+                try:
+                    is_new = await self._upsert_match_from_event(
+                        session, league_id, sport_id, league_cfg["espn_league"], event,
+                    )
+                    if is_new:
+                        new_count += 1
+                    else:
+                        updated_count += 1
+                except Exception as exc:
+                    logger.debug(
+                        "schedule_sync_event_error",
+                        event_id=event.get("id"),
+                        error=str(exc),
+                    )
+
+        return new_count, updated_count
+
+    async def _upsert_league(
+        self, session: Any, sport_id: uuid.UUID, name: str, country: str,
+        espn_league_id: str,
+    ) -> uuid.UUID:
+        stmt = select(LeagueORM).where(LeagueORM.sport_id == sport_id, LeagueORM.name == name)
+        result = await session.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            league_id = existing.id
+        else:
+            league_id = uuid.uuid4()
+            session.add(LeagueORM(
+                id=league_id, sport_id=sport_id, name=name,
+                short_name=name, country=country,
+            ))
+            await session.flush()
+
+        # Ensure provider mapping
+        mapping_stmt = select(ProviderMappingORM.id).where(
+            ProviderMappingORM.entity_type == "league",
+            ProviderMappingORM.provider == "espn",
+            ProviderMappingORM.provider_id == espn_league_id,
+        )
+        if not (await session.execute(mapping_stmt)).scalar_one_or_none():
+            session.add(ProviderMappingORM(
+                id=uuid.uuid4(), entity_type="league",
+                canonical_id=league_id, provider="espn",
+                provider_id=espn_league_id,
+            ))
+            await session.flush()
+        return league_id
+
+    async def _upsert_team(
+        self, session: Any, sport_id: uuid.UUID, team_data: dict[str, Any],
+    ) -> uuid.UUID:
+        espn_id = str(team_data.get("id", ""))
+        mapping_stmt = select(ProviderMappingORM.canonical_id).where(
+            ProviderMappingORM.entity_type == "team",
+            ProviderMappingORM.provider == "espn",
+            ProviderMappingORM.provider_id == espn_id,
+        )
+        existing_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
+        if existing_id:
+            return existing_id
+
+        name = team_data.get("displayName", team_data.get("name", "Unknown"))
+        short_name = team_data.get("abbreviation", name[:3].upper())
+        logos = team_data.get("logos", team_data.get("logo", []))
+        logo_url = ""
+        if isinstance(logos, list) and logos:
+            logo_url = logos[0].get("href", "") if isinstance(logos[0], dict) else logos[0]
+        elif isinstance(logos, str):
+            logo_url = logos
+
+        team_id = uuid.uuid4()
+        session.add(TeamORM(
+            id=team_id, sport_id=sport_id, name=name,
+            short_name=short_name, logo_url=logo_url,
+        ))
+        await session.flush()
+        session.add(ProviderMappingORM(
+            id=uuid.uuid4(), entity_type="team",
+            canonical_id=team_id, provider="espn", provider_id=espn_id,
+        ))
+        await session.flush()
+        return team_id
+
+    async def _upsert_match_from_event(
+        self, session: Any, league_id: uuid.UUID, sport_id: uuid.UUID,
+        espn_league_id: str, event: dict[str, Any],
+    ) -> bool:
+        """Upsert a match from an ESPN event. Returns True if newly created."""
+        espn_event_id = str(event.get("id", ""))
+        competitions = event.get("competitions", [])
+        if not competitions:
+            return False
+        comp = competitions[0]
+
+        competitors = comp.get("competitors", [])
+        home_team_id = away_team_id = None
+        score_home = score_away = 0
+
+        for competitor in competitors:
+            td = competitor.get("team", {})
+            if not td:
+                continue
+            team_id = await self._upsert_team(session, sport_id, td)
+            score = 0
+            try:
+                score = int(competitor.get("score", "0"))
+            except (ValueError, TypeError):
+                pass
+            if competitor.get("homeAway") == "home":
+                home_team_id, score_home = team_id, score
+            else:
+                away_team_id, score_away = team_id, score
+
+        if not home_team_id or not away_team_id:
+            return False
+
+        status_obj = comp.get("status", event.get("status", {}))
+        espn_status = status_obj.get("type", {}).get("name", "STATUS_SCHEDULED")
+        phase = ESPN_STATUS_MAP.get(espn_status, MatchPhase.SCHEDULED)
+
+        start_str = event.get("date", comp.get("date", ""))
+        try:
+            start_time = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            start_time = datetime.now(timezone.utc)
+
+        clock = status_obj.get("displayClock")
+        venue_obj = comp.get("venue", {})
+        venue = venue_obj.get("fullName", venue_obj.get("name")) if venue_obj else None
+
+        # Check if match exists
+        mapping_stmt = select(ProviderMappingORM.canonical_id).where(
+            ProviderMappingORM.entity_type == "match",
+            ProviderMappingORM.provider == "espn",
+            ProviderMappingORM.provider_id == espn_event_id,
+        )
+        existing_match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
+
+        if existing_match_id:
+            match_obj = (await session.execute(
+                select(MatchORM).where(MatchORM.id == existing_match_id)
+            )).scalar_one_or_none()
+            if match_obj:
+                match_obj.phase = phase.value
+            state_obj = (await session.execute(
+                select(MatchStateORM).where(MatchStateORM.match_id == existing_match_id)
+            )).scalar_one_or_none()
+            if state_obj:
+                state_obj.score_home = score_home
+                state_obj.score_away = score_away
+                state_obj.clock = clock
+                state_obj.phase = phase.value
+                state_obj.version += 1
+            return False
+
+        match_id = uuid.uuid4()
+        session.add(MatchORM(
+            id=match_id, league_id=league_id, home_team_id=home_team_id,
+            away_team_id=away_team_id, start_time=start_time,
+            phase=phase.value, venue=venue,
+        ))
+        await session.flush()
+        session.add(MatchStateORM(
+            match_id=match_id, score_home=score_home, score_away=score_away,
+            clock=clock, phase=phase.value,
+        ))
+        await session.flush()
+        session.add(ProviderMappingORM(
+            id=uuid.uuid4(), entity_type="match",
+            canonical_id=match_id, provider="espn", provider_id=espn_event_id,
+        ))
+        await session.flush()
+        return True
+
+    def request_shutdown(self) -> None:
+        self._shutdown.set()
+
+
 async def main() -> None:
     """Scheduler service entrypoint."""
     settings = get_settings()
@@ -395,16 +728,28 @@ async def main() -> None:
     health_scorer = HealthScorer(redis, settings)
 
     service = SchedulerService(redis, db, polling_engine, health_scorer, settings)
+    sync_service = ScheduleSyncService(db, settings)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, service.request_shutdown)
+        def shutdown_all(s=sig):
+            service.request_shutdown()
+            sync_service.request_shutdown()
+        loop.add_signal_handler(sig, shutdown_all)
 
     logger.info("scheduler_service_started", instance_id=settings.instance_id)
+
+    sync_task = asyncio.create_task(sync_service.run())
 
     try:
         await service.run()
     finally:
+        sync_service.request_shutdown()
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
         await service._stop_all_tasks()
         await db.disconnect()
         await redis.disconnect()
