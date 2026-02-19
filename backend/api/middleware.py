@@ -154,17 +154,25 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
 
+_PRODUCTION_ORIGINS = [
+    "https://www.liveview-tracker.com",
+    "https://liveview-tracker.com",
+    "https://frontend-lloredias-projects.vercel.app",
+    "http://localhost:3000",
+]
+
+
 def setup_cors(app: FastAPI) -> None:
     """Configure CORS middleware."""
     settings = get_settings()
-    origins = settings.cors_origins
-    if origins == ["*"] or not origins:
-        origins = [
-            "https://www.liveview-tracker.com",
-            "https://liveview-tracker.com",
-            "https://frontend-lloredias-projects.vercel.app",
-            "http://localhost:3000",
-        ]
+    origins = list(settings.cors_origins)
+
+    if origins == ["*"]:
+        origins = list(_PRODUCTION_ORIGINS)
+    else:
+        for o in _PRODUCTION_ORIGINS:
+            if o not in origins:
+                origins.append(o)
 
     app.add_middleware(
         CORSMiddleware,
@@ -177,14 +185,14 @@ def setup_cors(app: FastAPI) -> None:
 
 
 def setup_middleware(app: FastAPI) -> None:
-    """Apply all middleware to the FastAPI app in the correct order."""
-    # 1. CORS (must be outermost for preflight)
-    setup_cors(app)
-    # 2. Rate limiting
-    app.add_middleware(RateLimitMiddleware)
-    # 3. Request ID
-    app.add_middleware(RequestIDMiddleware)
-    # 4. Request logging
-    app.add_middleware(RequestLoggingMiddleware)
-    # 5. Exception handlers
+    """Apply all middleware to the FastAPI app in the correct order.
+
+    FastAPI/Starlette executes middleware in reverse registration order,
+    so CORS must be registered LAST to execute FIRST (outermost).
+    """
     setup_exception_handlers(app)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(RateLimitMiddleware)
+    # CORS registered last → runs first, handling preflight before other middleware
+    setup_cors(app)
