@@ -29,6 +29,7 @@ from api.dependencies import get_db, get_redis, init_dependencies
 from api.middleware import setup_middleware
 from api.routes.leagues import router as leagues_router
 from api.routes.matches import router as matches_router
+from api.routes.today import router as today_router
 from api.ws.manager import WebSocketManager
 
 logger = get_logger(__name__)
@@ -186,6 +187,7 @@ def create_app() -> FastAPI:
     # REST routes
     app.include_router(leagues_router)
     app.include_router(matches_router)
+    app.include_router(today_router)
 
     # Health check
     @app.get("/health", tags=["system"])

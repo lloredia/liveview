@@ -15,6 +15,7 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   open: boolean;
   liveCounts?: Record<string, number>;
+  onTodayClick?: () => void;
 }
 
 function LeagueLogo({ name, size = 20 }: { name: string; size?: number }) {
@@ -32,7 +33,7 @@ function LeagueLogo({ name, size = 20 }: { name: string; size?: number }) {
   );
 }
 
-export function Sidebar({ leagues, selectedLeagueId, onSelect, open, liveCounts = {} }: SidebarProps) {
+export function Sidebar({ leagues, selectedLeagueId, onSelect, open, liveCounts = {}, onTodayClick }: SidebarProps) {
   const [favIds, setFavIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -52,11 +53,29 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, liveCounts 
 
   return (
     <aside className="sticky top-[45px] h-[calc(100vh-45px)] w-[220px] min-w-[220px] animate-fade-in overflow-y-auto border-r border-surface-border bg-surface-raised max-md:fixed max-md:inset-y-[45px] max-md:left-0 max-md:z-50 max-md:w-[260px] max-md:shadow-2xl">
+      {/* Today button */}
+      {onTodayClick && (
+        <button
+          onClick={onTodayClick}
+          className={`
+            flex w-full items-center gap-2.5 px-4 py-3 text-left text-[13px] font-semibold transition-all duration-150
+            ${selectedLeagueId === null
+              ? "border-l-2 border-accent-green bg-gradient-to-r from-accent-green/7 to-transparent text-text-primary"
+              : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover/50 hover:text-text-primary"
+            }
+          `}
+        >
+          <span className="text-base">📅</span>
+          <span>Today</span>
+        </button>
+      )}
+
+      <div className="mx-4 my-1 border-b border-surface-border" />
 
       {/* Favorites section */}
       {favoriteLeagues.length > 0 && (
         <div className="mb-1">
-          <div className="flex items-center gap-2 px-4 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-accent-amber">
+          <div className="flex items-center gap-2 px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-accent-amber">
             ⭐ Favorites
           </div>
           {favoriteLeagues.map((league) => (

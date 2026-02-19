@@ -8,6 +8,7 @@ import { isLive } from "@/lib/utils";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { Scoreboard } from "@/components/scoreboard";
+import { TodayView } from "@/components/today-view";
 import { LiveTicker } from "@/components/live-ticker";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { MultiTracker } from "@/components/multi-tracker";
@@ -45,6 +46,8 @@ function HomeContent() {
     const leagueParam = searchParams.get("league");
     if (leagueParam) {
       setSelectedLeague(leagueParam);
+    } else {
+      setSelectedLeague(null);
     }
   }, [searchParams]);
 
@@ -54,9 +57,6 @@ function HomeContent() {
       .then((data) => {
         setLeagues(data);
         setConnected(true);
-        if (!selectedLeague && data.length > 0 && data[0].leagues?.length > 0) {
-          setSelectedLeague(data[0].leagues[0].id);
-        }
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : "Connection failed");
@@ -141,6 +141,14 @@ function HomeContent() {
     [router],
   );
 
+  const handleTodayView = useCallback(() => {
+    setSelectedLeague(null);
+    router.push("/");
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [router]);
+
   const handleMatchSelect = useCallback(
     (matchId: string, leagueName?: string) => {
       const params = leagueName ? `?league=${encodeURIComponent(leagueName)}` : "";
@@ -202,6 +210,7 @@ function HomeContent() {
           onSelect={handleLeagueSelect}
           open={sidebarOpen}
           liveCounts={liveCounts}
+          onTodayClick={handleTodayView}
         />
 
         <PullToRefresh onRefresh={handleRefresh}>
@@ -213,12 +222,21 @@ function HomeContent() {
               </div>
             )}
 
-            <Scoreboard
-              leagueId={selectedLeague}
-              onMatchSelect={handleMatchSelect}
-              pinnedIds={pinnedIds}
-              onTogglePin={handleTogglePin}
-            />
+            {selectedLeague ? (
+              <Scoreboard
+                leagueId={selectedLeague}
+                onMatchSelect={handleMatchSelect}
+                pinnedIds={pinnedIds}
+                onTogglePin={handleTogglePin}
+              />
+            ) : (
+              <TodayView
+                onMatchSelect={handleMatchSelect}
+                onLeagueSelect={handleLeagueSelect}
+                pinnedIds={pinnedIds}
+                onTogglePin={handleTogglePin}
+              />
+            )}
           </main>
         </PullToRefresh>
       </div>
