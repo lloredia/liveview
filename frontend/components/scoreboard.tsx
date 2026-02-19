@@ -104,12 +104,13 @@ export function Scoreboard({
   return (
     <div>
       {/* League header */}
-      <div className="mb-3 flex items-center gap-2 px-3">
+      <div className="mb-3 flex items-center gap-2.5 px-3">
         <LeagueIcon name={leagueName} />
-        <span className="text-[13px] font-bold text-text-primary">
+        <h2 className="text-[15px] font-extrabold text-text-primary">
           {leagueName}
-        </span>
-        <span className="ml-auto text-[10px] text-text-dim">
+        </h2>
+        <div className="ml-2 h-px flex-1 bg-surface-border" />
+        <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-text-muted">
           {(data?.matches || []).length} matches
         </span>
       </div>
@@ -153,10 +154,10 @@ export function Scoreboard({
           {/* Live */}
           {liveMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 flex items-center gap-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-accent-red">
-                <span className="relative flex h-1.5 w-1.5">
+              <div className="mb-1 flex items-center gap-2 px-3 text-[11px] font-extrabold uppercase tracking-wider text-accent-red">
+                <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-red" />
                 </span>
                 Live
               </div>
@@ -177,7 +178,7 @@ export function Scoreboard({
           {/* Scheduled */}
           {scheduledMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-accent-blue">
+              <div className="mb-1 px-3 text-[11px] font-extrabold uppercase tracking-wider text-accent-blue">
                 Upcoming
               </div>
               <div className="border-t border-surface-border">
@@ -197,7 +198,7 @@ export function Scoreboard({
           {/* Finished */}
           {finishedMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              <div className="mb-1 px-3 text-[11px] font-extrabold uppercase tracking-wider text-text-muted">
                 Finished
               </div>
               <div className="border-t border-surface-border">

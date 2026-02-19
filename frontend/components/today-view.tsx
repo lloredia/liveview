@@ -158,6 +158,27 @@ export function TodayView({
       .filter((league) => league.matches.length > 0);
   }, [data, filter]);
 
+  const groupedBySport = useMemo(() => {
+    const groups: { sport: string; sportType: string; leagues: typeof filteredLeagues }[] = [];
+    const map = new Map<string, typeof filteredLeagues>();
+    for (const league of filteredLeagues) {
+      const key = league.sport_type;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(league);
+    }
+    Array.from(map.entries()).forEach(([sportType, leagues]) => {
+      groups.push({ sport: leagues[0].sport, sportType, leagues });
+    });
+    return groups;
+  }, [filteredLeagues]);
+
+  const SPORT_ICONS: Record<string, string> = {
+    soccer: "⚽",
+    basketball: "🏀",
+    hockey: "🏒",
+    baseball: "⚾",
+  };
+
   const toMatchSummary = (m: TodayMatch) => ({
     id: m.id,
     phase: m.phase,
@@ -252,39 +273,58 @@ export function TodayView({
         </div>
       )}
 
-      {/* League groups with match rows */}
-      {filteredLeagues.map((league) => (
-        <section key={league.league_id} className="mb-4">
-          {/* League header row */}
-          <button
-            onClick={() => onLeagueSelect(league.league_id)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover"
-          >
-            <LeagueLogo name={league.league_name} />
-            <span className="text-[11px] font-bold uppercase tracking-wide text-text-secondary">
-              {league.league_name}
+      {/* Sport groups with league sections */}
+      {groupedBySport.map((sportGroup) => (
+        <div key={sportGroup.sportType} className="mb-6">
+          {/* Sport header */}
+          <div className="mb-2 flex items-center gap-2.5 px-3 py-1.5">
+            <span className="text-base leading-none">
+              {SPORT_ICONS[sportGroup.sportType] || "🏆"}
             </span>
-            <span className="text-[10px] text-text-dim">
-              {league.league_country}
+            <h2 className="text-[15px] font-extrabold uppercase tracking-wide text-text-primary">
+              {sportGroup.sport}
+            </h2>
+            <div className="ml-2 h-px flex-1 bg-surface-border" />
+            <span className="text-[10px] font-medium text-text-dim">
+              {sportGroup.leagues.reduce((s, l) => s + l.matches.length, 0)}
             </span>
-            <span className="ml-auto text-[10px] text-text-dim">
-              {league.matches.length}
-            </span>
-          </button>
-
-          {/* Match rows */}
-          <div className="border-t border-surface-border">
-            {league.matches.map((m) => (
-              <MatchCard
-                key={m.id}
-                match={toMatchSummary(m)}
-                onClick={() => onMatchSelect(m.id)}
-                pinned={pinnedIds.includes(m.id)}
-                onTogglePin={onTogglePin}
-              />
-            ))}
           </div>
-        </section>
+
+          {/* Leagues under this sport */}
+          {sportGroup.leagues.map((league) => (
+            <section key={league.league_id} className="mb-3">
+              {/* League header row */}
+              <button
+                onClick={() => onLeagueSelect(league.league_id)}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
+              >
+                <LeagueLogo name={league.league_name} />
+                <span className="text-[12px] font-bold text-text-secondary">
+                  {league.league_name}
+                </span>
+                <span className="text-[10px] text-text-dim">
+                  {league.league_country}
+                </span>
+                <span className="ml-auto rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+                  {league.matches.length}
+                </span>
+              </button>
+
+              {/* Match rows */}
+              <div className="border-t border-surface-border">
+                {league.matches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    match={toMatchSummary(m)}
+                    onClick={() => onMatchSelect(m.id)}
+                    pinned={pinnedIds.includes(m.id)}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       ))}
 
       {/* Empty state */}
