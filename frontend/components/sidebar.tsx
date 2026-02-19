@@ -14,11 +14,12 @@ interface SidebarProps {
   selectedLeagueId: string | null;
   onSelect: (id: string) => void;
   open: boolean;
+  onClose?: () => void;
   liveCounts?: Record<string, number>;
   onTodayClick?: () => void;
 }
 
-function LeagueLogo({ name, size = 20 }: { name: string; size?: number }) {
+function LeagueLogo({ name, size = 16 }: { name: string; size?: number }) {
   const [err, setErr] = useState(false);
   const url = getLeagueLogo(name);
   if (!url || err) return null;
@@ -33,7 +34,7 @@ function LeagueLogo({ name, size = 20 }: { name: string; size?: number }) {
   );
 }
 
-export function Sidebar({ leagues, selectedLeagueId, onSelect, open, liveCounts = {}, onTodayClick }: SidebarProps) {
+export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, liveCounts = {}, onTodayClick }: SidebarProps) {
   const [favIds, setFavIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -49,75 +50,88 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, liveCounts 
   const allLeagues = leagues.flatMap((g) => g.leagues);
   const favoriteLeagues = allLeagues.filter((l) => favIds.includes(l.id));
 
-  if (!open) return null;
-
   return (
-    <aside className="sticky top-[45px] h-[calc(100vh-45px)] w-[220px] min-w-[220px] animate-fade-in overflow-y-auto border-r border-surface-border bg-surface-raised max-md:fixed max-md:inset-y-[45px] max-md:left-0 max-md:z-50 max-md:w-[260px] max-md:shadow-2xl">
-      {/* Today button */}
-      {onTodayClick && (
-        <button
-          onClick={onTodayClick}
-          className={`
-            flex w-full items-center gap-2.5 px-4 py-3 text-left text-[13px] font-semibold transition-all duration-150
-            ${selectedLeagueId === null
-              ? "border-l-2 border-accent-green bg-gradient-to-r from-accent-green/7 to-transparent text-text-primary"
-              : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover/50 hover:text-text-primary"
-            }
-          `}
-        >
-          <span className="text-base">📅</span>
-          <span>Today</span>
-        </button>
+    <>
+      {/* Mobile backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={onClose}
+        />
       )}
 
-      <div className="mx-4 my-1 border-b border-surface-border" />
+      <aside
+        className={`
+          fixed inset-y-[44px] left-0 z-50 w-[260px] overflow-y-auto border-r border-surface-border bg-surface-raised
+          transition-transform duration-200 ease-out
+          md:sticky md:top-[44px] md:z-auto md:h-[calc(100vh-44px)] md:w-[200px] md:min-w-[200px] md:translate-x-0 md:transition-none
+          ${open ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        {/* Today button */}
+        {onTodayClick && (
+          <button
+            onClick={onTodayClick}
+            className={`
+              flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12px] font-semibold transition-colors
+              ${selectedLeagueId === null
+                ? "border-l-2 border-accent-green bg-accent-green/5 text-text-primary"
+                : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover"
+              }
+            `}
+          >
+            <span className="text-sm">Today</span>
+          </button>
+        )}
 
-      {/* Favorites section */}
-      {favoriteLeagues.length > 0 && (
-        <div className="mb-1">
-          <div className="flex items-center gap-2 px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-accent-amber">
-            ⭐ Favorites
+        <div className="mx-3 border-b border-surface-border" />
+
+        {/* Favorites */}
+        {favoriteLeagues.length > 0 && (
+          <div className="py-1">
+            <div className="px-4 pb-1 pt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-accent-amber">
+              Favorites
+            </div>
+            {favoriteLeagues.map((league) => (
+              <LeagueButton
+                key={`fav-${league.id}`}
+                league={league}
+                active={selectedLeagueId === league.id}
+                onSelect={onSelect}
+                onFavToggle={handleFavToggle}
+                isFav
+                liveCount={liveCounts[league.id] || 0}
+              />
+            ))}
+            <div className="mx-3 my-1 border-b border-surface-border" />
           </div>
-          {favoriteLeagues.map((league) => (
-            <LeagueButton
-              key={`fav-${league.id}`}
-              league={league}
-              active={selectedLeagueId === league.id}
-              onSelect={onSelect}
-              onFavToggle={handleFavToggle}
-              isFav={true}
-              liveCount={liveCounts[league.id] || 0}
-            />
-          ))}
-          <div className="mx-4 my-2 border-b border-surface-border" />
-        </div>
-      )}
+        )}
 
-      <div className="px-4 pb-2 pt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-text-dim">
-        Leagues
-      </div>
+        {/* All leagues */}
+        {leagues.map((group) => (
+          <div key={group.sport} className="py-0.5">
+            <div className="flex items-center gap-1.5 px-4 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-text-dim">
+              <span className="text-xs">{sportIcon(group.sport)}</span>
+              {group.sport_display}
+            </div>
 
-      {leagues.map((group) => (
-        <div key={group.sport} className="mb-1">
-          <div className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary">
-            <span className="text-sm">{sportIcon(group.sport)}</span>
-            {group.sport_display}
+            {group.leagues.map((league) => (
+              <LeagueButton
+                key={league.id}
+                league={league}
+                active={selectedLeagueId === league.id}
+                onSelect={onSelect}
+                onFavToggle={handleFavToggle}
+                isFav={favIds.includes(league.id)}
+                liveCount={liveCounts[league.id] || 0}
+              />
+            ))}
           </div>
+        ))}
 
-          {group.leagues.map((league) => (
-            <LeagueButton
-              key={league.id}
-              league={league}
-              active={selectedLeagueId === league.id}
-              onSelect={onSelect}
-              onFavToggle={handleFavToggle}
-              isFav={favIds.includes(league.id)}
-              liveCount={liveCounts[league.id] || 0}
-            />
-          ))}
-        </div>
-      ))}
-    </aside>
+        <div className="h-8" />
+      </aside>
+    </>
   );
 }
 
@@ -140,32 +154,30 @@ function LeagueButton({
     <button
       onClick={() => onSelect(league.id)}
       className={`
-        group flex w-full items-center gap-2 text-left transition-all duration-150
+        group flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-colors duration-150
         ${active
-          ? "border-l-2 border-accent-green bg-gradient-to-r from-accent-green/7 to-transparent py-2 pl-7 pr-3 text-[13px] font-semibold text-text-primary"
-          : "border-l-2 border-transparent py-2 pl-7 pr-3 text-[13px] text-text-secondary hover:bg-surface-hover/50 hover:text-text-primary"
+          ? "border-l-2 border-accent-green bg-accent-green/5 text-text-primary"
+          : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
         }
       `}
     >
-      <LeagueLogo name={league.short_name || league.name} size={18} />
-      <span className="flex-1 truncate">{league.short_name || league.name}</span>
+      <LeagueLogo name={league.short_name || league.name} />
+      <span className="flex-1 truncate text-[12px]">{league.short_name || league.name}</span>
 
-      {/* Live count badge */}
       {liveCount > 0 && (
-        <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+        <span className="flex items-center gap-0.5 rounded-full bg-accent-red/10 px-1.5 py-0.5 text-[8px] font-bold text-accent-red">
           <span className="relative h-1 w-1">
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" />
-            <span className="relative block h-1 w-1 rounded-full bg-red-500" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-accent-red opacity-75" />
+            <span className="relative block h-1 w-1 rounded-full bg-accent-red" />
           </span>
           {liveCount}
         </span>
       )}
 
-      {/* Favorite star */}
       <button
         onClick={(e) => onFavToggle(e, league.id)}
-        className={`text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-          isFav ? "!opacity-100 text-accent-amber" : "text-text-muted hover:text-accent-amber"
+        className={`text-[10px] opacity-0 transition-opacity group-hover:opacity-100 ${
+          isFav ? "!opacity-100 text-accent-amber" : "text-text-dim hover:text-accent-amber"
         }`}
       >
         {isFav ? "★" : "☆"}

@@ -30,27 +30,19 @@ function HomeContent() {
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
 
-  // Load pinned matches
   useEffect(() => {
     setPinnedIds(getPinnedMatches());
   }, []);
 
-  // Check push permission
   useEffect(() => {
     setPushEnabled(getPushPermission() === "granted");
   }, []);
 
-  // Sync URL → state
   useEffect(() => {
     const leagueParam = searchParams.get("league");
-    if (leagueParam) {
-      setSelectedLeague(leagueParam);
-    } else {
-      setSelectedLeague(null);
-    }
+    setSelectedLeague(leagueParam || null);
   }, [searchParams]);
 
-  // Initial data fetch
   useEffect(() => {
     fetchLeagues()
       .then((data) => {
@@ -63,10 +55,8 @@ function HomeContent() {
       });
   }, []);
 
-  // Poll live counts via dedicated endpoint (single request instead of N)
   useEffect(() => {
     if (leagues.length === 0) return;
-
     const pollCounts = async () => {
       try {
         const data = await fetchLiveCounts();
@@ -84,16 +74,14 @@ function HomeContent() {
         setLiveCounts(counts);
         setTotalLive(total);
       } catch {
-        // Silently degrade — counts will just stay stale
+        // silent
       }
     };
-
     pollCounts();
     const timer = setInterval(pollCounts, 30000);
     return () => clearInterval(timer);
   }, [leagues]);
 
-  // Health check
   useEffect(() => {
     const check = async () => {
       try {
@@ -109,7 +97,6 @@ function HomeContent() {
     return () => clearInterval(timer);
   }, []);
 
-  // Load favorite league IDs once (SSR-safe)
   const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
   useEffect(() => {
     try {
@@ -118,7 +105,7 @@ function HomeContent() {
         setFavLeagueIds(favs.leagues);
       }
     } catch {
-      // Ignore corrupt localStorage
+      // ignore
     }
   }, []);
 
@@ -131,16 +118,13 @@ function HomeContent() {
     [leagues, favLeagueIds],
   );
 
-  // Score alerts for favorited leagues
   useScoreAlerts(leagues, favoriteLeagueIds);
 
   const handleLeagueSelect = useCallback(
     (id: string) => {
       setSelectedLeague(id);
       router.push(`/?league=${id}`);
-      if (window.innerWidth < 768) {
-        setSidebarOpen(false);
-      }
+      if (window.innerWidth < 768) setSidebarOpen(false);
     },
     [router],
   );
@@ -148,9 +132,7 @@ function HomeContent() {
   const handleTodayView = useCallback(() => {
     setSelectedLeague(null);
     router.push("/");
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
+    if (window.innerWidth < 768) setSidebarOpen(false);
   }, [router]);
 
   const handleMatchSelect = useCallback(
@@ -173,11 +155,8 @@ function HomeContent() {
     setSelectedLeague(current);
   }, [selectedLeague]);
 
-  // Responsive sidebar
   useEffect(() => {
-    const handleResize = () => {
-      setSidebarOpen(window.innerWidth >= 768);
-    };
+    const handleResize = () => setSidebarOpen(window.innerWidth >= 768);
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -201,46 +180,42 @@ function HomeContent() {
       <LiveTicker leagues={leagues} onMatchSelect={handleMatchSelect} />
 
       <div className="flex flex-1">
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
         <Sidebar
           leagues={leagues}
           selectedLeagueId={selectedLeague}
           onSelect={handleLeagueSelect}
           open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
           liveCounts={liveCounts}
           onTodayClick={handleTodayView}
         />
 
         <PullToRefresh onRefresh={handleRefresh}>
-          <main className="p-4 md:p-7">
-            {error && (
-              <div className="mb-5 animate-fade-in rounded-lg border border-accent-red/20 bg-accent-red/5 px-4 py-3 text-[13px] text-accent-red">
-                ⚠ Cannot connect to API — make sure the backend is running.
-                <span className="block text-[11px] text-accent-red/60">{error}</span>
-              </div>
-            )}
+          <main className="min-w-0 flex-1 px-0 py-3 md:px-4">
+            <div className="mx-auto max-w-[900px]">
+              {error && (
+                <div className="mx-3 mb-3 rounded border border-accent-red/20 bg-accent-red/5 px-3 py-2 text-[12px] text-accent-red md:mx-0">
+                  Cannot connect to API
+                  <span className="block text-[10px] opacity-60">{error}</span>
+                </div>
+              )}
 
-            {selectedLeague ? (
-              <Scoreboard
-                leagueId={selectedLeague}
-                onMatchSelect={handleMatchSelect}
-                pinnedIds={pinnedIds}
-                onTogglePin={handleTogglePin}
-              />
-            ) : (
-              <TodayView
-                onMatchSelect={handleMatchSelect}
-                onLeagueSelect={handleLeagueSelect}
-                pinnedIds={pinnedIds}
-                onTogglePin={handleTogglePin}
-              />
-            )}
+              {selectedLeague ? (
+                <Scoreboard
+                  leagueId={selectedLeague}
+                  onMatchSelect={handleMatchSelect}
+                  pinnedIds={pinnedIds}
+                  onTogglePin={handleTogglePin}
+                />
+              ) : (
+                <TodayView
+                  onMatchSelect={handleMatchSelect}
+                  onLeagueSelect={handleLeagueSelect}
+                  pinnedIds={pinnedIds}
+                  onTogglePin={handleTogglePin}
+                />
+              )}
+            </div>
           </main>
         </PullToRefresh>
       </div>
@@ -258,8 +233,8 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-border border-t-accent-green" />
+        <div className="flex min-h-screen items-center justify-center bg-surface">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
         </div>
       }
     >

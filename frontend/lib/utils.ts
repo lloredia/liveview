@@ -42,10 +42,10 @@ export function phaseColorClass(phase: string): string {
 
 /** Returns a raw hex color for the phase. */
 export function phaseColor(phase: string): string {
-  if (isLive(phase)) return "#00ff87";
-  if (phase === "finished") return "#8b95a5";
-  if (phase === "scheduled") return "#5b9cf6";
-  return "#ff6b6b";
+  if (isLive(phase)) return "#00E676";
+  if (phase === "finished") return "#B8B8CC";
+  if (phase === "scheduled") return "#448AFF";
+  return "#FF1744";
 }
 
 /** Format an ISO timestamp as a localized time (e.g., "8:00 PM"). */

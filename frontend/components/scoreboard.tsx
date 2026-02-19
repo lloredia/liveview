@@ -26,7 +26,7 @@ function LeagueIcon({ name }: { name: string }) {
     <img
       src={url}
       alt={name}
-      className="h-8 w-8 object-contain"
+      className="h-6 w-6 object-contain"
       onError={() => setErr(true)}
     />
   );
@@ -52,7 +52,6 @@ export function Scoreboard({
     key: leagueId,
   });
 
-  // Reset to matches tab when league changes
   useMemo(() => {
     setTab("matches");
   }, [leagueId]);
@@ -75,14 +74,8 @@ export function Scoreboard({
 
   if (!leagueId) {
     return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center gap-3 text-center">
-        <div className="text-4xl">🏟</div>
-        <div className="text-base font-medium text-text-tertiary">
-          Select a league
-        </div>
-        <div className="text-xs text-text-dim">
-          Choose from the sidebar to see today&apos;s matches
-        </div>
+      <div className="py-16 text-center text-sm text-text-muted">
+        Select a league from the sidebar
       </div>
     );
   }
@@ -90,87 +83,60 @@ export function Scoreboard({
   if (loading && !data) {
     return (
       <div className="flex justify-center py-16">
-        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-border border-t-accent-green" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
       </div>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="rounded-lg border border-accent-red/20 bg-accent-red/5 px-4 py-3 text-sm text-accent-red">
-        ⚠ Failed to load scoreboard: {error}
+      <div className="px-3 py-4 text-center text-xs text-accent-red">
+        Failed to load scoreboard
       </div>
     );
   }
 
-  const totalMatches = (data?.matches || []).length;
   const leagueName = data?.league_name || "";
-  const leagueShortName = leagueName;
 
-  const renderCard = (
-    m: (typeof liveMatches)[0],
-    compact = false
-  ) => (
-    <MatchCard
-      key={m.id}
-      match={m}
-      onClick={() => onMatchSelect(m.id)}
-      compact={compact}
-      pinned={pinnedIds.includes(m.id)}
-      onTogglePin={onTogglePin}
-    />
-  );
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "matches", label: "Matches" },
+    { key: "standings", label: "Standings" },
+    { key: "stats", label: "Stats" },
+  ];
 
   return (
-    <div className="animate-fade-in">
-      {/* Header */}
-      <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <LeagueIcon name={leagueName} />
-          <h2 className="text-xl font-extrabold tracking-tight text-text-primary">
-            {leagueName}
-          </h2>
-        </div>
-        <span className="text-[11px] text-text-muted">
-          {totalMatches} match{totalMatches !== 1 ? "es" : ""}
+    <div>
+      {/* League header */}
+      <div className="mb-3 flex items-center gap-2 px-3">
+        <LeagueIcon name={leagueName} />
+        <span className="text-[13px] font-bold text-text-primary">
+          {leagueName}
+        </span>
+        <span className="ml-auto text-[10px] text-text-dim">
+          {(data?.matches || []).length} matches
         </span>
       </div>
 
-      {/* Tab switcher */}
-      <div className="mb-6 flex gap-1 rounded-xl border border-surface-border bg-surface-card p-1">
-        <button
-          onClick={() => setTab("matches")}
-          className={
-            "flex-1 rounded-lg py-2 text-[12px] font-semibold uppercase tracking-wider transition-all " +
-            (tab === "matches"
-              ? "bg-surface-hover text-text-primary shadow-sm"
-              : "text-text-tertiary hover:text-text-secondary")
-          }
-        >
-          ⚽ Matches
-        </button>
-        <button
-          onClick={() => setTab("standings")}
-          className={
-            "flex-1 rounded-lg py-2 text-[12px] font-semibold uppercase tracking-wider transition-all " +
-            (tab === "standings"
-              ? "bg-surface-hover text-text-primary shadow-sm"
-              : "text-text-tertiary hover:text-text-secondary")
-          }
-        >
-          📊 Standings
-        </button>
-        <button
-          onClick={() => setTab("stats")}
-          className={
-            "flex-1 rounded-lg py-2 text-[12px] font-semibold uppercase tracking-wider transition-all " +
-            (tab === "stats"
-              ? "bg-surface-hover text-text-primary shadow-sm"
-              : "text-text-tertiary hover:text-text-secondary")
-          }
-        >
-          🏆 Stats
-        </button>
+      {/* Tab switcher — underline style */}
+      <div className="mb-4 flex border-b border-surface-border">
+        {tabs.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`
+              relative px-4 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors
+              ${tab === key
+                ? "text-text-primary"
+                : "text-text-muted hover:text-text-secondary"
+              }
+            `}
+          >
+            {label}
+            {tab === key && (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent-green" />
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Tab content */}
@@ -178,61 +144,83 @@ export function Scoreboard({
         <Standings
           leagueId={leagueId}
           leagueName={leagueName}
-          leagueShortName={leagueShortName}
+          leagueShortName={leagueName}
         />
       ) : tab === "stats" ? (
         <StatsDashboard
           leagueName={leagueName}
-          leagueShortName={leagueShortName}
+          leagueShortName={leagueName}
         />
       ) : (
         <>
-          {/* Live section */}
+          {/* Live */}
           {liveMatches.length > 0 && (
-            <section className="mb-7">
-              <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em] text-red-400">
-                <div className="relative h-2 w-2">
-                  <div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" />
-                  <div className="relative h-2 w-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
-                </div>
-                Live Now
+            <section className="mb-4">
+              <div className="mb-1 flex items-center gap-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-accent-red">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+                </span>
+                Live
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {liveMatches.map((m) => renderCard(m))}
+              <div className="border-t border-surface-border">
+                {liveMatches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    onClick={() => onMatchSelect(m.id)}
+                    pinned={pinnedIds.includes(m.id)}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
               </div>
             </section>
           )}
 
           {/* Scheduled */}
           {scheduledMatches.length > 0 && (
-            <section className="mb-7">
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-accent-blue">
+            <section className="mb-4">
+              <div className="mb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-accent-blue">
                 Upcoming
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {scheduledMatches.map((m) => renderCard(m))}
+              <div className="border-t border-surface-border">
+                {scheduledMatches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    onClick={() => onMatchSelect(m.id)}
+                    pinned={pinnedIds.includes(m.id)}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
               </div>
             </section>
           )}
 
           {/* Finished */}
           {finishedMatches.length > 0 && (
-            <section>
-              <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+            <section className="mb-4">
+              <div className="mb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-text-muted">
                 Finished
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {finishedMatches.map((m) => renderCard(m, true))}
+              <div className="border-t border-surface-border">
+                {finishedMatches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    onClick={() => onMatchSelect(m.id)}
+                    compact
+                    pinned={pinnedIds.includes(m.id)}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
               </div>
             </section>
           )}
 
-          {totalMatches === 0 && (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-              <div className="text-3xl">📭</div>
-              <div className="text-sm text-text-tertiary">
-                No matches today
-              </div>
+          {(data?.matches || []).length === 0 && (
+            <div className="py-16 text-center text-sm text-text-muted">
+              No matches today
             </div>
           )}
         </>

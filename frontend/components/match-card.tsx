@@ -1,8 +1,7 @@
 "use client";
 
-import { Countdown } from "./countdown";
 import type { MatchSummary } from "@/lib/types";
-import { formatTime, isLive, phaseColor, phaseLabel } from "@/lib/utils";
+import { formatTime, isLive, phaseLabel } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
 
 interface MatchCardProps {
@@ -13,146 +12,115 @@ interface MatchCardProps {
   onTogglePin?: (matchId: string) => void;
 }
 
-export function MatchCard({ match, onClick, compact = false, pinned = false, onTogglePin }: MatchCardProps) {
+export function MatchCard({ match, onClick, pinned = false, onTogglePin }: MatchCardProps) {
   const live = isLive(match.phase);
   const finished = match.phase === "finished";
   const scheduled = match.phase === "scheduled" || match.phase === "pre_match";
-  const color = phaseColor(match.phase);
 
   return (
     <div
       onClick={onClick}
       className={`
-        group relative cursor-pointer overflow-hidden rounded-xl border
-        transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98]
-        ${live
-          ? "border-red-500/20 bg-gradient-to-br from-surface-card via-[#1a0f0f] to-surface-card shadow-[0_0_20px_rgba(239,68,68,0.05)] hover:border-red-500/35"
-          : "border-surface-border bg-surface-card hover:border-surface-border-light hover:shadow-lg hover:shadow-black/10"
-        }
-        ${compact ? "px-4 py-3" : "px-5 py-4"}
+        group relative flex h-12 cursor-pointer items-center border-b border-surface-border
+        transition-colors duration-150 hover:bg-surface-hover
+        ${live ? "bg-accent-red/[0.04]" : ""}
       `}
     >
-      {/* Live shimmer bar */}
-      {live && (
-        <div className="absolute inset-x-0 top-0 h-[2px] animate-shimmer bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-      )}
+      {/* Status column */}
+      <div className="flex w-[60px] shrink-0 items-center justify-center px-2">
+        {live ? (
+          <div className="flex items-center gap-1">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+            </span>
+            <span className="font-mono text-[11px] font-bold text-accent-green">
+              {match.clock || phaseLabel(match.phase)}
+            </span>
+          </div>
+        ) : finished ? (
+          <span className="text-[11px] font-semibold text-text-muted">FT</span>
+        ) : scheduled && match.start_time ? (
+          <span className="text-[11px] font-medium text-text-muted">
+            {formatTime(match.start_time)}
+          </span>
+        ) : (
+          <span className="text-[10px] font-semibold text-text-muted">
+            {phaseLabel(match.phase)}
+          </span>
+        )}
+      </div>
 
-      {/* Pin button */}
+      {/* Home team */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pr-2">
+        <span
+          className={`truncate text-right text-[13px] md:text-sm ${
+            !finished || match.score.home > match.score.away
+              ? "font-semibold text-text-primary"
+              : "text-text-secondary"
+          }`}
+        >
+          {match.home_team.name}
+        </span>
+        <TeamLogo url={match.home_team.logo_url} name={match.home_team.short_name} size={20} className="shrink-0 md:h-5 md:w-5 h-4 w-4" />
+      </div>
+
+      {/* Score */}
+      <div className="flex w-[52px] shrink-0 items-center justify-center gap-1">
+        {scheduled ? (
+          <span className="text-[11px] text-text-muted">vs</span>
+        ) : (
+          <>
+            <span
+              className={`font-mono text-base font-bold md:text-lg ${
+                live ? "text-text-primary" : finished && match.score.home > match.score.away ? "text-text-primary" : "text-text-secondary"
+              }`}
+            >
+              {match.score.home}
+            </span>
+            <span className="text-[10px] text-text-dim">-</span>
+            <span
+              className={`font-mono text-base font-bold md:text-lg ${
+                live ? "text-text-primary" : finished && match.score.away > match.score.home ? "text-text-primary" : "text-text-secondary"
+              }`}
+            >
+              {match.score.away}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Away team */}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-2">
+        <TeamLogo url={match.away_team.logo_url} name={match.away_team.short_name} size={20} className="shrink-0 md:h-5 md:w-5 h-4 w-4" />
+        <span
+          className={`truncate text-[13px] md:text-sm ${
+            !finished || match.score.away > match.score.home
+              ? "font-semibold text-text-primary"
+              : "text-text-secondary"
+          }`}
+        >
+          {match.away_team.name}
+        </span>
+      </div>
+
+      {/* Pin (hover only) */}
       {onTogglePin && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             onTogglePin(match.id);
           }}
-          className={`absolute right-2 top-2 z-10 rounded-lg p-1 text-[11px] transition-all ${
+          className={`mr-2 shrink-0 rounded p-1 text-[10px] transition-opacity ${
             pinned
               ? "text-accent-blue opacity-100"
               : "text-text-dim opacity-0 group-hover:opacity-100 hover:text-accent-blue"
           }`}
-          title={pinned ? "Unpin from tracker" : "Pin to tracker"}
+          aria-label={pinned ? "Unpin" : "Pin"}
         >
-          📌
+          {pinned ? "★" : "☆"}
         </button>
       )}
-
-      {/* Status row */}
-      <div className={`flex items-center justify-between ${compact ? "mb-2" : "mb-3"}`}>
-        <div className="flex items-center gap-1.5">
-          {live ? (
-            <div className="relative h-[7px] w-[7px]">
-              <div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" />
-              <div className="relative h-[7px] w-[7px] rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-            </div>
-          ) : (
-            <div
-              className="h-[7px] w-[7px] rounded-full"
-              style={{ background: color }}
-            />
-          )}
-          <span
-            className={`text-[11px] font-semibold uppercase tracking-wider ${live ? "text-red-400" : ""}`}
-            style={live ? undefined : { color }}
-          >
-            {phaseLabel(match.phase)}
-          </span>
-        </div>
-
-        {/* Clock / Countdown / Time */}
-        {scheduled && match.start_time ? (
-          <Countdown startTime={match.start_time} className="text-[11px] font-semibold" />
-        ) : match.clock && !scheduled ? (
-          <span
-            className={`font-mono text-xs font-bold ${live ? "text-red-400" : "text-text-secondary"}`}
-          >
-            {match.clock}
-          </span>
-        ) : match.start_time ? (
-          <span className="text-[11px] text-text-muted">
-            {formatTime(match.start_time)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Teams */}
-      <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
-        <TeamRow
-          team={match.home_team}
-          score={match.score.home}
-          winning={match.score.home > match.score.away}
-          live={live}
-          finished={finished}
-        />
-        <TeamRow
-          team={match.away_team}
-          score={match.score.away}
-          winning={match.score.away > match.score.home}
-          live={live}
-          finished={finished}
-        />
-      </div>
-
-      {/* Venue */}
-      {match.venue && !compact && (
-        <div className="mt-2.5 truncate text-[10px] text-text-muted">
-          📍 {match.venue}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TeamRow({
-  team,
-  score,
-  winning,
-  live,
-  finished,
-}: {
-  team: MatchSummary["home_team"];
-  score: number;
-  winning: boolean;
-  live: boolean;
-  finished: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <TeamLogo url={team.logo_url} name={team.short_name} size={28} />
-        <span
-          className={`truncate text-sm ${
-            winning ? "font-bold text-text-primary" : finished ? "text-text-tertiary" : "font-medium text-text-secondary"
-          }`}
-        >
-          {team.name}
-        </span>
-      </div>
-      <span
-        className={`min-w-[30px] text-right font-mono text-xl font-extrabold ${
-          winning && live ? "text-red-400" : winning ? "text-text-primary" : finished ? "text-text-tertiary" : "text-text-secondary"
-        }`}
-      >
-        {score}
-      </span>
     </div>
   );
 }
