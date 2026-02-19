@@ -67,6 +67,11 @@
   }
 }
 
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 @layer utilities {
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
@@ -78,6 +83,12 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+  .ticker-track {
+    animation: ticker-scroll var(--ticker-duration, 30s) linear infinite;
+  }
+  .ticker-track:hover {
+    animation-play-state: paused;
   }
 }
 
