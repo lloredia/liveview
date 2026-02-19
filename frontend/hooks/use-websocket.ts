@@ -83,7 +83,7 @@ export function useWebSocket({
         };
 
         ws.onerror = () => {
-          // Don't setState here — onclose always fires after onerror
+          setError("Connection error");
         };
 
         ws.onclose = () => {

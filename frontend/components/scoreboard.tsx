@@ -6,6 +6,7 @@ import { usePolling } from "@/hooks/use-polling";
 import { isLive } from "@/lib/utils";
 import { getLeagueLogo } from "@/lib/league-logos";
 import { MatchCard } from "./match-card";
+import { ScoreboardSkeleton } from "./skeleton";
 import { Standings } from "./standings";
 import { StatsDashboard } from "./stats-dashboard";
 
@@ -81,11 +82,7 @@ export function Scoreboard({
   }
 
   if (loading && !data) {
-    return (
-      <div className="flex justify-center py-16">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
-      </div>
-    );
+    return <ScoreboardSkeleton />;
   }
 
   if (error && !data) {

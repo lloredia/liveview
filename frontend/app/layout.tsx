@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/lib/auth";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: "LiveView — Real-Time Sports Tracker",
@@ -14,13 +15,16 @@ export const metadata: Metadata = {
     title: "LiveView",
   },
   icons: {
-    icon: "/icons/logo.png",
-    apple: "/icons/logo.png",
+    icon: [
+      { url: "/icons/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#080c14",
+  themeColor: "#1A1A2E",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -36,9 +40,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="safe-top safe-bottom">
-        <AuthProvider>
-          <ThemeProvider>{children}</ThemeProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

@@ -26,8 +26,8 @@ export function sendLocalNotification(title: string, body: string, icon?: string
   try {
     const notif = new Notification(title, {
       body,
-      icon: icon || "/icons/logo.png",
-      badge: "/icons/logo.png",
+      icon: icon || "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
       tag: "lv-score-" + Date.now(),
       silent: false,
     });

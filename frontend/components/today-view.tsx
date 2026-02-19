@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { getLeagueLogo } from "@/lib/league-logos";
 import { MatchCard } from "./match-card";
+import { TodayViewSkeleton } from "./skeleton";
 
 interface TodayTeam {
   id: string;
@@ -239,11 +240,9 @@ export function TodayView({
         ))}
       </div>
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && !data && (
-        <div className="flex justify-center py-16">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
-        </div>
+        <TodayViewSkeleton />
       )}
 
       {/* Error */}

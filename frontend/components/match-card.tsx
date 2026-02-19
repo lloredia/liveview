@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { MatchSummary } from "@/lib/types";
 import { formatTime, isLive, phaseLabel } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
@@ -12,7 +13,7 @@ interface MatchCardProps {
   onTogglePin?: (matchId: string) => void;
 }
 
-export function MatchCard({ match, onClick, pinned = false, onTogglePin }: MatchCardProps) {
+export const MatchCard = memo(function MatchCard({ match, onClick, pinned = false, onTogglePin }: MatchCardProps) {
   const live = isLive(match.phase);
   const finished = match.phase === "finished";
   const scheduled = match.phase === "scheduled" || match.phase === "pre_match";
@@ -123,4 +124,4 @@ export function MatchCard({ match, onClick, pinned = false, onTogglePin }: Match
       )}
     </div>
   );
-}
+});

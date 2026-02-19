@@ -7,23 +7,51 @@ import type {
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_RETRIES = 2;
+const RETRY_BACKOFF_MS = 1_000;
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: "application/json" },
-    next: { revalidate: 0 },
-  });
-  if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+async function apiFetch<T>(path: string, retries = MAX_RETRIES): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 0 },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+      }
+      return res.json();
+    } catch (err) {
+      clearTimeout(timeout);
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+        throw err;
+      }
+
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS * (attempt + 1)));
+      }
+    }
   }
-  return res.json();
+
+  throw lastError ?? new Error("Request failed");
 }
 
 export async function fetchLeagues(): Promise<LeagueGroup[]> {

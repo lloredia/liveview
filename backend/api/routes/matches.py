@@ -15,7 +15,6 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from shared.config import Settings, get_settings
 from shared.models.orm import (
@@ -60,50 +59,45 @@ async def get_match_center(
             return Response(status_code=304)
 
     async with db.read_session() as session:
-        # Match with teams
+        ht = TeamORM.__table__.alias("ht")
+        at = TeamORM.__table__.alias("at")
+
         stmt = (
-            select(MatchORM)
+            select(
+                MatchORM.id,
+                MatchORM.phase,
+                MatchORM.start_time,
+                MatchORM.venue,
+                MatchStateORM.score_home,
+                MatchStateORM.score_away,
+                MatchStateORM.clock,
+                MatchStateORM.period,
+                MatchStateORM.score_breakdown,
+                MatchStateORM.version,
+                ht.c.id.label("ht_id"),
+                ht.c.name.label("ht_name"),
+                ht.c.short_name.label("ht_short"),
+                ht.c.logo_url.label("ht_logo"),
+                at.c.id.label("at_id"),
+                at.c.name.label("at_name"),
+                at.c.short_name.label("at_short"),
+                at.c.logo_url.label("at_logo"),
+            )
+            .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
+            .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
+            .outerjoin(at, MatchORM.away_team_id == at.c.id)
             .where(MatchORM.id == match_id)
         )
         result = await session.execute(stmt)
-        match = result.scalar_one_or_none()
-        if match is None:
+        row = result.one_or_none()
+        if row is None:
             raise HTTPException(status_code=404, detail="Match not found")
 
-        # Match state
-        state_stmt = select(MatchStateORM).where(MatchStateORM.match_id == match_id)
-        state_result = await session.execute(state_stmt)
-        state = state_result.scalar_one_or_none()
+        home_team = {"id": str(row.ht_id), "name": row.ht_name, "short_name": row.ht_short, "logo_url": row.ht_logo} if row.ht_id else None
+        away_team = {"id": str(row.at_id), "name": row.at_name, "short_name": row.at_short, "logo_url": row.at_logo} if row.at_id else None
 
-        # Teams
-        home_team = None
-        away_team = None
-        if match.home_team_id:
-            ht_result = await session.execute(
-                select(TeamORM).where(TeamORM.id == match.home_team_id)
-            )
-            ht = ht_result.scalar_one_or_none()
-            if ht:
-                home_team = {
-                    "id": str(ht.id),
-                    "name": ht.name,
-                    "short_name": ht.short_name,
-                    "logo_url": ht.logo_url,
-                }
-        if match.away_team_id:
-            at_result = await session.execute(
-                select(TeamORM).where(TeamORM.id == match.away_team_id)
-            )
-            at = at_result.scalar_one_or_none()
-            if at:
-                away_team = {
-                    "id": str(at.id),
-                    "name": at.name,
-                    "short_name": at.short_name,
-                    "logo_url": at.logo_url,
-                }
+        state = row if row.score_home is not None else None
 
-        # Recent events (last 5 for the match center sidebar)
         events_stmt = (
             select(MatchEventORM)
             .where(MatchEventORM.match_id == match_id)
@@ -117,24 +111,24 @@ async def get_match_center(
 
     payload = {
         "match": {
-            "id": str(match.id),
-            "phase": match.phase,
-            "start_time": match.start_time.isoformat() if match.start_time else None,
-            "venue": match.venue,
+            "id": str(row.id),
+            "phase": row.phase,
+            "start_time": row.start_time.isoformat() if row.start_time else None,
+            "venue": row.venue,
             "home_team": home_team,
             "away_team": away_team,
         },
         "state": {
-            "score_home": state.score_home if state else 0,
-            "score_away": state.score_away if state else 0,
-            "clock": state.clock if state else None,
-            "period": state.period if state else None,
+            "score_home": row.score_home if state else 0,
+            "score_away": row.score_away if state else 0,
+            "clock": row.clock if state else None,
+            "period": row.period if state else None,
             "period_scores": (
-                json.loads(state.score_breakdown)
-                if state and isinstance(state.score_breakdown, str)
-                else (state.score_breakdown if state and state.score_breakdown else [])
+                json.loads(row.score_breakdown)
+                if state and isinstance(row.score_breakdown, str)
+                else (row.score_breakdown if state and row.score_breakdown else [])
             ),
-            "version": state.version if state else 0,
+            "version": row.version if state else 0,
         } if state else None,
         "recent_events": recent_events,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -243,9 +237,21 @@ async def get_match_stats(
         return data
 
     async with db.read_session() as session:
-        # Verify match
+        ht = TeamORM.__table__.alias("ht")
+        at = TeamORM.__table__.alias("at")
+
         match_stmt = (
-            select(MatchORM.id, MatchORM.home_team_id, MatchORM.away_team_id)
+            select(
+                MatchORM.id,
+                MatchORM.home_team_id,
+                MatchORM.away_team_id,
+                ht.c.short_name.label("ht_short"),
+                ht.c.name.label("ht_name"),
+                at.c.short_name.label("at_short"),
+                at.c.name.label("at_name"),
+            )
+            .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
+            .outerjoin(at, MatchORM.away_team_id == at.c.id)
             .where(MatchORM.id == match_id)
         )
         match_result = await session.execute(match_stmt)
@@ -253,31 +259,16 @@ async def get_match_stats(
         if match_row is None:
             raise HTTPException(status_code=404, detail="Match not found")
 
-        # Fetch stats
-        stats_stmt = (
-            select(MatchStatsORM)
-            .where(MatchStatsORM.match_id == match_id)
-        )
+        stats_stmt = select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
         stats_result = await session.execute(stats_stmt)
         stats = stats_result.scalar_one_or_none()
 
         teams_stats = []
         if stats:
-            # Resolve team names
-            for side, team_id, stats_data in [
-                ("home", match_row.home_team_id, stats.home_stats),
-                ("away", match_row.away_team_id, stats.away_stats),
+            for side, team_id, team_name, stats_data in [
+                ("home", match_row.home_team_id, match_row.ht_short or match_row.ht_name, stats.home_stats),
+                ("away", match_row.away_team_id, match_row.at_short or match_row.at_name, stats.away_stats),
             ]:
-                team_name = None
-                if team_id:
-                    team_result = await session.execute(
-                        select(TeamORM.name, TeamORM.short_name)
-                        .where(TeamORM.id == team_id)
-                    )
-                    team_row = team_result.one_or_none()
-                    if team_row:
-                        team_name = team_row.short_name or team_row.name
-
                 teams_stats.append({
                     "team_id": str(team_id) if team_id else None,
                     "team_name": team_name,

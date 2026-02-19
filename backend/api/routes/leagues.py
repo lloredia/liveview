@@ -109,14 +109,15 @@ async def league_scoreboard(
 
     # Query database
     async with db.read_session() as session:
-        # Verify league exists
         league_stmt = select(LeagueORM).where(LeagueORM.id == league_id)
         league_result = await session.execute(league_stmt)
         league = league_result.scalar_one_or_none()
         if league is None:
             raise HTTPException(status_code=404, detail="League not found")
 
-        # Fetch live/recent/upcoming matches
+        home_team = TeamORM.__table__.alias("ht")
+        away_team = TeamORM.__table__.alias("at")
+
         stmt = (
             select(
                 MatchORM.id,
@@ -128,8 +129,18 @@ async def league_scoreboard(
                 MatchStateORM.clock,
                 MatchStateORM.period,
                 MatchStateORM.version,
+                home_team.c.id.label("ht_id"),
+                home_team.c.name.label("ht_name"),
+                home_team.c.short_name.label("ht_short"),
+                home_team.c.logo_url.label("ht_logo"),
+                away_team.c.id.label("at_id"),
+                away_team.c.name.label("at_name"),
+                away_team.c.short_name.label("at_short"),
+                away_team.c.logo_url.label("at_logo"),
             )
             .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
+            .outerjoin(home_team, MatchORM.home_team_id == home_team.c.id)
+            .outerjoin(away_team, MatchORM.away_team_id == away_team.c.id)
             .where(MatchORM.league_id == league_id)
             .where(
                 MatchORM.phase.in_([
@@ -143,46 +154,8 @@ async def league_scoreboard(
         result = await session.execute(stmt)
         match_rows = result.all()
 
-        # Fetch team info for each match
         matches = []
         for row in match_rows:
-            # Get home and away teams
-            team_stmt = (
-                select(
-                    TeamORM.id,
-                    TeamORM.name,
-                    TeamORM.short_name,
-                    TeamORM.logo_url,
-                )
-                .join(MatchORM, (
-                    (TeamORM.id == MatchORM.home_team_id) |
-                    (TeamORM.id == MatchORM.away_team_id)
-                ))
-                .where(MatchORM.id == row.id)
-            )
-            team_result = await session.execute(team_stmt)
-            teams = team_result.all()
-
-            # Get home/away from the match ORM
-            match_detail_stmt = select(
-                MatchORM.home_team_id, MatchORM.away_team_id
-            ).where(MatchORM.id == row.id)
-            match_detail = (await session.execute(match_detail_stmt)).one()
-
-            home_team = None
-            away_team = None
-            for t in teams:
-                team_dict = {
-                    "id": str(t.id),
-                    "name": t.name,
-                    "short_name": t.short_name,
-                    "logo_url": t.logo_url,
-                }
-                if t.id == match_detail.home_team_id:
-                    home_team = team_dict
-                if t.id == match_detail.away_team_id:
-                    away_team = team_dict
-
             matches.append({
                 "id": str(row.id),
                 "phase": row.phase,
@@ -195,8 +168,18 @@ async def league_scoreboard(
                 "clock": row.clock,
                 "period": row.period,
                 "version": row.version or 0,
-                "home_team": home_team,
-                "away_team": away_team,
+                "home_team": {
+                    "id": str(row.ht_id) if row.ht_id else None,
+                    "name": row.ht_name,
+                    "short_name": row.ht_short,
+                    "logo_url": row.ht_logo,
+                } if row.ht_id else None,
+                "away_team": {
+                    "id": str(row.at_id) if row.at_id else None,
+                    "name": row.at_name,
+                    "short_name": row.at_short,
+                    "logo_url": row.at_logo,
+                } if row.at_id else None,
             })
 
     payload = {

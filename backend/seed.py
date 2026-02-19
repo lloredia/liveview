@@ -252,23 +252,31 @@ async def _upsert_team(
     session: Any,
     sport_id: uuid.UUID,
     espn_team: dict[str, Any],
+    espn_league: str = "",
 ) -> uuid.UUID:
-    """Create or get a team from ESPN data. Returns team UUID."""
-    espn_id = str(espn_team.get("id", ""))
+    """Create or get a team from ESPN data. Returns team UUID.
+    
+    Uses league-scoped provider IDs (e.g. 'nba:30') to prevent
+    cross-sport collisions where ESPN reuses the same numeric team ID.
+    """
+    raw_id = str(espn_team.get("id", ""))
+    scoped_id = f"{espn_league}:{raw_id}" if espn_league else raw_id
     name = espn_team.get("displayName", espn_team.get("name", "Unknown"))
     short_name = espn_team.get("abbreviation", name[:3].upper())
     logo_url = ""
-    logos = espn_team.get("logos", espn_team.get("logo", []))
-    if isinstance(logos, list) and logos:
-        logo_url = logos[0].get("href", "") if isinstance(logos[0], dict) else logos[0]
-    elif isinstance(logos, str):
-        logo_url = logos
+    logo_field = espn_team.get("logo")
+    logos_field = espn_team.get("logos")
+    if isinstance(logo_field, str) and logo_field:
+        logo_url = logo_field
+    elif isinstance(logos_field, list) and logos_field:
+        logo_url = logos_field[0].get("href", "") if isinstance(logos_field[0], dict) else str(logos_field[0])
+    elif isinstance(logos_field, str) and logos_field:
+        logo_url = logos_field
 
-    # Check if mapping already exists
     mapping_stmt = select(ProviderMappingORM.canonical_id).where(
         ProviderMappingORM.entity_type == "team",
         ProviderMappingORM.provider == "espn",
-        ProviderMappingORM.provider_id == espn_id,
+        ProviderMappingORM.provider_id == scoped_id,
     )
     mapping_result = await session.execute(mapping_stmt)
     existing_id = mapping_result.scalar_one_or_none()
@@ -276,7 +284,6 @@ async def _upsert_team(
     if existing_id:
         return existing_id
 
-    # Create new team
     team_id = uuid.uuid4()
     session.add(TeamORM(
         id=team_id,
@@ -287,7 +294,7 @@ async def _upsert_team(
     ))
     await session.flush()
 
-    await _ensure_provider_mapping(session, "team", team_id, "espn", espn_id)
+    await _ensure_provider_mapping(session, "team", team_id, "espn", scoped_id)
     return team_id
 
 
@@ -330,7 +337,7 @@ async def _process_event(
         existing = (await session.execute(mapping_stmt)).scalar_one_or_none()
         is_new = existing is None
 
-        team_id = await _upsert_team(session, sport_id, team_data)
+        team_id = await _upsert_team(session, sport_id, team_data, espn_league_id)
         if is_new:
             teams_created += 1
 

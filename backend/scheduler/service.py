@@ -584,12 +584,14 @@ class ScheduleSyncService:
 
     async def _upsert_team(
         self, session: Any, sport_id: uuid.UUID, team_data: dict[str, Any],
+        espn_league: str = "",
     ) -> uuid.UUID:
-        espn_id = str(team_data.get("id", ""))
+        raw_id = str(team_data.get("id", ""))
+        scoped_id = f"{espn_league}:{raw_id}" if espn_league else raw_id
         mapping_stmt = select(ProviderMappingORM.canonical_id).where(
             ProviderMappingORM.entity_type == "team",
             ProviderMappingORM.provider == "espn",
-            ProviderMappingORM.provider_id == espn_id,
+            ProviderMappingORM.provider_id == scoped_id,
         )
         existing_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
         if existing_id:
@@ -597,12 +599,15 @@ class ScheduleSyncService:
 
         name = team_data.get("displayName", team_data.get("name", "Unknown"))
         short_name = team_data.get("abbreviation", name[:3].upper())
-        logos = team_data.get("logos", team_data.get("logo", []))
         logo_url = ""
-        if isinstance(logos, list) and logos:
-            logo_url = logos[0].get("href", "") if isinstance(logos[0], dict) else logos[0]
-        elif isinstance(logos, str):
-            logo_url = logos
+        logo_field = team_data.get("logo")
+        logos_field = team_data.get("logos")
+        if isinstance(logo_field, str) and logo_field:
+            logo_url = logo_field
+        elif isinstance(logos_field, list) and logos_field:
+            logo_url = logos_field[0].get("href", "") if isinstance(logos_field[0], dict) else str(logos_field[0])
+        elif isinstance(logos_field, str) and logos_field:
+            logo_url = logos_field
 
         team_id = uuid.uuid4()
         session.add(TeamORM(
@@ -612,7 +617,7 @@ class ScheduleSyncService:
         await session.flush()
         session.add(ProviderMappingORM(
             id=uuid.uuid4(), entity_type="team",
-            canonical_id=team_id, provider="espn", provider_id=espn_id,
+            canonical_id=team_id, provider="espn", provider_id=scoped_id,
         ))
         await session.flush()
         return team_id
@@ -636,7 +641,7 @@ class ScheduleSyncService:
             td = competitor.get("team", {})
             if not td:
                 continue
-            team_id = await self._upsert_team(session, sport_id, td)
+            team_id = await self._upsert_team(session, sport_id, td, espn_league_id)
             score = 0
             try:
                 score = int(competitor.get("score", "0"))
