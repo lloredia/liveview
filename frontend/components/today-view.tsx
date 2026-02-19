@@ -98,12 +98,17 @@ export function TodayView({
 
   const fetcher = useCallback(() => fetchToday(dateStr), [dateStr]);
 
+  const [hasLive, setHasLive] = useState(false);
   const { data, loading, error } = usePolling({
     fetcher,
-    interval: 20000,
+    interval: hasLive ? 10000 : 20000,
     enabled: true,
     key: dateStr,
   });
+
+  useEffect(() => {
+    setHasLive((data?.live ?? 0) > 0);
+  }, [data]);
 
   // Scroll date strip to center "today" on mount
   useEffect(() => {

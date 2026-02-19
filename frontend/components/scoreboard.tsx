@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchScoreboard } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { isLive } from "@/lib/utils";
@@ -46,9 +46,10 @@ export function Scoreboard({
     return fetchScoreboard(leagueId);
   }, [leagueId]);
 
+  const [hasLive, setHasLive] = useState(false);
   const { data, loading, error } = usePolling({
     fetcher,
-    interval: 20000,
+    interval: hasLive ? 10000 : 20000,
     enabled: !!leagueId,
     key: leagueId,
   });
@@ -72,6 +73,10 @@ export function Scoreboard({
       ),
     };
   }, [data]);
+
+  useEffect(() => {
+    setHasLive(liveMatches.length > 0);
+  }, [liveMatches]);
 
   if (!leagueId) {
     return (
