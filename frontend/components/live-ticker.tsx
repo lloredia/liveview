@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
-import type { LeagueGroup, LiveTickerResponse } from "@/lib/types";
+import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
 interface LiveTickerProps {
   leagues: LeagueGroup[];
@@ -14,7 +14,7 @@ function TickerItem({
   match,
   onClick,
 }: {
-  match: LiveTickerResponse["matches"][number];
+  match: MatchSummaryWithLeague;
   onClick: () => void;
 }) {
   return (
@@ -44,12 +44,21 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
     key: "live-ticker",
   });
 
-  const liveMatches = data?.matches || [];
+  // Keep the last non-empty match list so the ticker never flickers away
+  const stableMatchesRef = useRef<MatchSummaryWithLeague[]>([]);
+  const [stableMatches, setStableMatches] = useState<MatchSummaryWithLeague[]>([]);
 
-  if (liveMatches.length === 0) return null;
+  useEffect(() => {
+    const fresh = data?.matches || [];
+    if (fresh.length > 0) {
+      stableMatchesRef.current = fresh;
+      setStableMatches(fresh);
+    }
+  }, [data]);
 
-  // ~4 seconds per match, minimum 20s so short lists don't fly by
-  const duration = Math.max(20, liveMatches.length * 4);
+  if (stableMatches.length === 0) return null;
+
+  const duration = Math.max(20, stableMatches.length * 4);
 
   return (
     <div className="flex h-8 items-center border-b border-surface-border bg-surface-raised overflow-hidden">
@@ -70,7 +79,7 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
           className="ticker-track flex items-center gap-4 whitespace-nowrap"
           style={{ "--ticker-duration": `${duration}s` } as React.CSSProperties}
         >
-          {liveMatches.map((m) => (
+          {stableMatches.map((m) => (
             <TickerItem
               key={`a-${m.id}`}
               match={m}
@@ -78,11 +87,9 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
             />
           ))}
 
-          {/* Separator dot between the two copies */}
           <span className="mx-2 h-1 w-1 shrink-0 rounded-full bg-surface-border" />
 
-          {/* Second copy for seamless wrap */}
-          {liveMatches.map((m) => (
+          {stableMatches.map((m) => (
             <TickerItem
               key={`b-${m.id}`}
               match={m}

@@ -40,11 +40,10 @@ export function usePolling<T>({
     }
   }, []);
 
-  // Re-fetch when key or enabled changes
+  // Re-fetch when key or enabled changes (keep stale data visible during load)
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    setData(null);
     refresh();
   }, [enabled, key, refresh]);
 
