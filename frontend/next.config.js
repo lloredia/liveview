@@ -50,6 +50,12 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/v1/ws",
   },
+  async rewrites() {
+    return [
+      { source: "/robots.txt", destination: "/api/robots" },
+      { source: "/sitemap.xml", destination: "/api/sitemap" },
+    ];
+  },
 };
 
 module.exports = withPWA(nextConfig);
