@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import select, func, case, and_
+from sqlalchemy import select, func, case, and_, or_
 
 from shared.models.orm import (
     LeagueORM,
@@ -70,6 +70,7 @@ async def get_today(
         tzinfo=timezone.utc,
     )
     day_end = day_start + timedelta(days=1)
+    is_today_utc = target_date == datetime.now(timezone.utc).date()
 
     # Try Redis cache first (short TTL for live data)
     cache_key = f"today:{target_date.isoformat()}"
@@ -81,6 +82,21 @@ async def get_today(
             return Response(status_code=304)
 
     async with db.read_session() as session:
+        # Matches that started on the selected date
+        date_condition = and_(
+            MatchORM.start_time >= day_start,
+            MatchORM.start_time < day_end,
+        )
+        # When viewing "today", also include all currently live matches (e.g. started yesterday, still in progress)
+        if is_today_utc:
+            live_condition = or_(
+                MatchORM.phase.like("live%"),
+                MatchORM.phase == "break",
+            )
+            where_clause = or_(date_condition, live_condition)
+        else:
+            where_clause = date_condition
+
         # Fetch all matches for the date with their state, teams, and league info
         stmt = (
             select(
@@ -106,12 +122,7 @@ async def get_today(
             .join(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
             .join(SportORM, LeagueORM.sport_id == SportORM.id)
-            .where(
-                and_(
-                    MatchORM.start_time >= day_start,
-                    MatchORM.start_time < day_end,
-                )
-            )
+            .where(where_clause)
             .order_by(MatchORM.start_time.asc())
         )
 
@@ -171,10 +182,14 @@ async def get_today(
                     "away_team": team_info.get(away_id, {}),
                 }
 
-    # Group matches by league
+    # Group matches by league (dedupe: "today" query can return same match via date and live conditions)
     league_groups: dict[str, dict[str, Any]] = {}
+    seen_match_ids: set[uuid.UUID] = set()
 
     for row in rows:
+        if row.id in seen_match_ids:
+            continue
+        seen_match_ids.add(row.id)
         lid = str(row.league_id)
 
         if lid not in league_groups:
