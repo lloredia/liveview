@@ -301,6 +301,7 @@ def _event_orm_to_dict(event: MatchEventORM) -> dict[str, Any]:
         "period": event.period,
         "team_id": str(event.team_id) if event.team_id else None,
         "player_id": str(event.player_id) if event.player_id else None,
+        "player_name": event.player_name,
         "detail": event.detail,
         "score_home": event.score_home,
         "score_away": event.score_away,

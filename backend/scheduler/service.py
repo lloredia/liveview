@@ -470,10 +470,10 @@ class ScheduleSyncService:
                 await asyncio.sleep(60)
 
     async def _sync_once(self) -> None:
-        """Fetch today + tomorrow from ESPN for all leagues and upsert matches."""
+        """Fetch the next 7 days from ESPN for all leagues and upsert matches."""
         sports_db = await self._load_sports()
         today = datetime.now(timezone.utc).date()
-        dates_to_sync = [today, today + timedelta(days=1)]
+        dates_to_sync = [today + timedelta(days=d) for d in range(7)]
 
         total_new = 0
         total_updated = 0

@@ -45,6 +45,7 @@ export interface MatchEvent {
   second: number | null;
   period: string | null;
   team_id: string | null;
+  player_name: string | null;
   detail: string | null;
   score_home: number | null;
   score_away: number | null;
@@ -99,6 +100,19 @@ export interface TimelineResponse {
 export interface LiveTickerResponse {
   matches: MatchSummaryWithLeague[];
   fetched_at: string;
+}
+
+export interface TeamStatsEntry {
+  team_id: string | null;
+  team_name: string;
+  side: "home" | "away";
+  stats: Record<string, number | string | null>;
+}
+
+export interface MatchStatsResponse {
+  match_id: string;
+  teams: TeamStatsEntry[];
+  generated_at: string;
 }
 
 // ── WebSocket message types ─────────────────────────────────────────

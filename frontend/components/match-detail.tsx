@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { fetchMatch, fetchTimeline } from "@/lib/api";
+import { fetchMatch, fetchStats, fetchTimeline } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { useWebSocket } from "@/hooks/use-websocket";
 import {
@@ -22,7 +22,7 @@ import { HeadToHead } from "./head-to-head";
 import { Lineup } from "./lineup";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
-import type { MatchDetailResponse, MatchEvent, TimelineResponse } from "@/lib/types";
+import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse, WSMessage } from "@/lib/types";
 
 interface MatchDetailProps {
   matchId: string;
@@ -248,10 +248,17 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
       {/* Tab content */}
       <div className="mt-4 animate-fade-in">
         {activeTab === "timeline" && (
-          <TimelineTab events={timeline?.events || []} live={live} />
+          <TimelineTab
+            events={timeline?.events || []}
+            phase={match.phase}
+            homeTeamId={match.home_team?.id}
+            awayTeamId={match.away_team?.id}
+            homeTeamName={match.home_team?.short_name}
+            awayTeamName={match.away_team?.short_name}
+          />
         )}
         {activeTab === "stats" && (
-          <StatsTab matchData={matchData} />
+          <StatsTab matchId={matchId} live={live} />
         )}
         {activeTab === "feed" && (
           <FeedTab messages={wsMessages} connected={wsConnected} />
@@ -288,13 +295,221 @@ function ScoreWatcher({ scoreHome, scoreAway, live }: { scoreHome: number; score
   return null;
 }
 
-function TimelineTab({ events, live }: { events: MatchEvent[]; live: boolean }) {
+interface TimelineTabProps {
+  events: MatchEvent[];
+  phase: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
+}
+
+function TimelineTab({ events, phase, homeTeamId, awayTeamId, homeTeamName, awayTeamName }: TimelineTabProps) {
+  const live = isLive(phase);
+
   if (events.length === 0) {
+    const isScheduled = phase === "scheduled" || phase === "pre_match";
+    const isFinished = phase === "finished" || phase === "postponed" || phase === "cancelled";
     return (
       <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
-        <div className="mb-2 text-2xl">⏱</div>
+        <div className="mb-2 text-2xl">{isScheduled ? "📅" : live ? "⏱" : "🏁"}</div>
         <div className="text-[13px] text-text-tertiary">
-          {live ? "Waiting for events..." : "No events yet"}
+          {isScheduled
+            ? "Match hasn't started yet"
+            : live
+              ? "Waiting for events..."
+              : isFinished
+                ? "No events recorded for this match"
+                : "No events yet"}
+        </div>
+      </div>
+    );
+  }
+
+  const grouped: { period: string; events: MatchEvent[] }[] = [];
+  let currentPeriod = "";
+  for (const evt of events) {
+    const p = evt.period || "—";
+    if (p !== currentPeriod) {
+      currentPeriod = p;
+      grouped.push({ period: p, events: [] });
+    }
+    grouped[grouped.length - 1].events.push(evt);
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+      {grouped.map((group, gi) => (
+        <div key={`${group.period}-${gi}`}>
+          {group.period !== "—" && (
+            <div className="flex items-center gap-3 bg-surface-hover/40 px-4 py-1.5">
+              <div className="h-px flex-1 bg-surface-border" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                {group.period}
+              </span>
+              <div className="h-px flex-1 bg-surface-border" />
+            </div>
+          )}
+          {group.events.map((evt, i) => {
+            const meta = eventMeta(evt.event_type);
+            const isGoal = evt.event_type === "goal" || evt.event_type === "basket" || evt.event_type === "run";
+            const isHome = evt.team_id === homeTeamId;
+            const isAway = evt.team_id === awayTeamId;
+            const teamLabel = isHome ? homeTeamName : isAway ? awayTeamName : null;
+
+            return (
+              <div
+                key={evt.id || `${gi}-${i}`}
+                className={`flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover/30 ${
+                  i < group.events.length - 1 ? "border-b border-surface-border/50" : gi < grouped.length - 1 ? "border-b border-surface-border" : ""
+                } ${isGoal ? "bg-accent-green/[0.03]" : ""}`}
+                style={{ animation: `fadeIn 0.3s ease ${i * 0.05}s both` }}
+              >
+                {/* Team side dot */}
+                <div
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    isHome ? "bg-accent-blue" : isAway ? "bg-accent-red/70" : "bg-surface-border"
+                  }`}
+                />
+
+                <span className="min-w-[32px] font-mono text-[11px] font-bold text-accent-blue">
+                  {evt.minute != null ? `${evt.minute}'` : "—"}
+                </span>
+                <span className="text-sm">{meta.icon}</span>
+                <span
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  style={{ color: meta.color, background: `${meta.color}12` }}
+                >
+                  {meta.label}
+                </span>
+                <div className="min-w-0 flex-1">
+                  {evt.player_name && (
+                    <span className="mr-1 text-xs font-semibold text-text-primary">
+                      {evt.player_name}
+                    </span>
+                  )}
+                  {teamLabel && !evt.player_name && (
+                    <span className="mr-1 text-[10px] font-medium text-text-muted">
+                      {teamLabel}
+                    </span>
+                  )}
+                  {evt.detail && (
+                    <span className="truncate text-xs text-text-secondary">
+                      {evt.player_name ? `— ${evt.detail}` : evt.detail}
+                    </span>
+                  )}
+                </div>
+                {evt.score_home != null && evt.score_away != null && (
+                  <span className="shrink-0 font-mono text-[11px] font-bold text-text-primary">
+                    {evt.score_home}-{evt.score_away}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const STAT_LABELS: Record<string, string> = {
+  possession: "Possession",
+  shots: "Total Shots",
+  shots_on_target: "Shots on Target",
+  corners: "Corners",
+  fouls: "Fouls",
+  offsides: "Offsides",
+  passes: "Passes",
+  pass_accuracy: "Pass Accuracy",
+  yellow_cards: "Yellow Cards",
+  red_cards: "Red Cards",
+  field_goal_pct: "Field Goal %",
+  three_point_pct: "3-Point %",
+  free_throw_pct: "Free Throw %",
+  rebounds: "Rebounds",
+  assists: "Assists",
+  turnovers: "Turnovers",
+  steals: "Steals",
+  blocks: "Blocks",
+  power_plays: "Power Plays",
+  penalty_minutes: "Penalty Minutes",
+  faceoff_wins: "Faceoff Wins",
+  hits: "Hits",
+  at_bats: "At Bats",
+  runs: "Runs",
+  home_runs: "Home Runs",
+  strikeouts: "Strikeouts",
+  walks: "Walks",
+  era: "ERA",
+};
+
+function StatBar({ homeVal, awayVal }: { homeVal: number; awayVal: number }) {
+  const total = homeVal + awayVal || 1;
+  const homePct = Math.round((homeVal / total) * 100);
+  const awayPct = 100 - homePct;
+  return (
+    <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full">
+      <div
+        className="rounded-l-full bg-accent-blue transition-all duration-500"
+        style={{ width: `${homePct}%` }}
+      />
+      <div
+        className="rounded-r-full bg-accent-red/70 transition-all duration-500"
+        style={{ width: `${awayPct}%` }}
+      />
+    </div>
+  );
+}
+
+function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
+  const statsFetcher = useCallback(() => fetchStats(matchId), [matchId]);
+  const { data, loading } = usePolling<MatchStatsResponse>({
+    fetcher: statsFetcher,
+    interval: live ? 15000 : 30000,
+    key: `stats-${matchId}`,
+  });
+
+  const homeStats = data?.teams?.find((t) => t.side === "home");
+  const awayStats = data?.teams?.find((t) => t.side === "away");
+
+  const statKeys =
+    homeStats?.stats || awayStats?.stats
+      ? Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter(
+          (k) => {
+            const h = homeStats?.stats?.[k];
+            const a = awayStats?.stats?.[k];
+            return h != null || a != null;
+          },
+        )
+      : [];
+
+  if (loading && !data) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+        <div className="border-b border-surface-border px-4 py-3">
+          <div className="h-3 w-28 animate-pulse rounded bg-surface-hover" />
+        </div>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between border-b border-surface-border px-4 py-3 last:border-0"
+          >
+            <div className="h-3 w-8 animate-pulse rounded bg-surface-hover" />
+            <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
+            <div className="h-3 w-8 animate-pulse rounded bg-surface-hover" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (statKeys.length === 0) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
+        <div className="mb-2 text-2xl">📊</div>
+        <div className="text-[13px] text-text-tertiary">
+          {live ? "Stats will appear as the match progresses" : "No statistics available"}
         </div>
       </div>
     );
@@ -302,38 +517,45 @@ function TimelineTab({ events, live }: { events: MatchEvent[]; live: boolean }) 
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      {events.map((evt, i) => {
-        const meta = eventMeta(evt.event_type);
-        const isGoal = evt.event_type === "goal" || evt.event_type === "basket" || evt.event_type === "run";
+      <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+        <span className="text-[11px] font-bold text-accent-blue">
+          {homeStats?.team_name || "Home"}
+        </span>
+        <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+          Match Statistics
+        </h4>
+        <span className="text-[11px] font-bold text-accent-red">
+          {awayStats?.team_name || "Away"}
+        </span>
+      </div>
+      {statKeys.map((key, i) => {
+        const hRaw = homeStats?.stats?.[key];
+        const aRaw = awayStats?.stats?.[key];
+        const hStr = hRaw != null ? String(hRaw) : "—";
+        const aStr = aRaw != null ? String(aRaw) : "—";
+        const hNum = typeof hRaw === "number" ? hRaw : parseFloat(String(hRaw ?? "0")) || 0;
+        const aNum = typeof aRaw === "number" ? aRaw : parseFloat(String(aRaw ?? "0")) || 0;
+        const label = STAT_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const isPercentage = key.includes("pct") || key.includes("accuracy");
+
         return (
           <div
-            key={evt.id || i}
-            className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover/30 ${
-              i < events.length - 1 ? "border-b border-surface-border" : ""
-            } ${isGoal ? "bg-accent-green/[0.03]" : ""}`}
-            style={{ animation: `fadeIn 0.3s ease ${i * 0.05}s both` }}
+            key={key}
+            className={`px-4 py-2.5 ${i < statKeys.length - 1 ? "border-b border-surface-border" : ""}`}
+            style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both` }}
           >
-            <span className="min-w-[32px] font-mono text-[11px] font-bold text-accent-blue">
-              {evt.minute != null ? `${evt.minute}'` : "—"}
-            </span>
-            <span className="text-sm">{meta.icon}</span>
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-              style={{ color: meta.color, background: `${meta.color}12` }}
-            >
-              {meta.label}
-            </span>
-            <span className="flex-1 truncate text-xs text-text-secondary">
-              {evt.detail || ""}
-            </span>
-            {evt.score_home != null && evt.score_away != null && (
-              <span className="font-mono text-[11px] font-bold text-text-primary">
-                {evt.score_home}-{evt.score_away}
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="min-w-[48px] text-right font-mono text-sm font-bold text-text-primary">
+                {hStr}{isPercentage && hRaw != null ? "%" : ""}
               </span>
-            )}
-            {evt.synthetic && (
-              <span className="text-[9px] text-text-muted">synth</span>
-            )}
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                {label}
+              </span>
+              <span className="min-w-[48px] text-left font-mono text-sm font-bold text-text-primary">
+                {aStr}{isPercentage && aRaw != null ? "%" : ""}
+              </span>
+            </div>
+            <StatBar homeVal={hNum} awayVal={aNum} />
           </div>
         );
       })}
@@ -341,52 +563,78 @@ function TimelineTab({ events, live }: { events: MatchEvent[]; live: boolean }) 
   );
 }
 
-function StatsTab({ matchData }: { matchData: MatchDetailResponse }) {
-  const { state, recent_events } = matchData;
+const FEED_ICONS: Record<string, string> = {
+  snapshot: "📸",
+  delta: "⚡",
+  state: "🔄",
+  welcome: "👋",
+  error: "⚠️",
+};
 
-  const stats = [
-    { label: "Score", home: String(state?.score_home ?? 0), away: String(state?.score_away ?? 0) },
-    { label: "Period", home: state?.period || "—", away: state?.period || "—" },
-    { label: "Events", home: String(recent_events.filter((e) => e.detail?.toLowerCase().includes("home")).length), away: String(recent_events.filter((e) => e.detail?.toLowerCase().includes("away")).length) },
-  ];
+const FEED_COLORS: Record<string, string> = {
+  snapshot: "#448AFF",
+  delta: "#00E676",
+  state: "#FFB347",
+  welcome: "#5b9cf6",
+  error: "#FF1744",
+};
 
-  return (
-    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      <div className="border-b border-surface-border px-4 py-3">
-        <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
-          Match Statistics
-        </h4>
-      </div>
-      {stats.map((stat, i) => (
-        <div
-          key={stat.label}
-          className={`flex items-center justify-between px-4 py-3 ${
-            i < stats.length - 1 ? "border-b border-surface-border" : ""
-          }`}
-          style={{ animation: `fadeIn 0.3s ease ${i * 0.08}s both` }}
-        >
-          <span className="min-w-[60px] text-right font-mono text-sm font-bold text-text-primary">
-            {stat.home}
-          </span>
-          <span className="flex-1 text-center text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-            {stat.label}
-          </span>
-          <span className="min-w-[60px] text-left font-mono text-sm font-bold text-text-primary">
-            {stat.away}
-          </span>
-        </div>
-      ))}
+function parseFeedSummary(msg: WSMessage): string {
+  const d = msg.data as Record<string, unknown> | undefined;
+  if (!d) {
+    if (msg.type === "welcome") return `Connected · ${msg.connection_id ?? ""}`;
+    if (msg.type === "error") return msg.error ?? "Unknown error";
+    return msg.type;
+  }
 
-      {recent_events.length === 0 && (
-        <div className="px-4 py-6 text-center text-[12px] text-text-muted">
-          Detailed stats will populate as the match progresses
-        </div>
-      )}
-    </div>
-  );
+  if (msg.type === "snapshot") {
+    const score = d.score as Record<string, number> | undefined;
+    const phase = d.phase as string | undefined;
+    if (score) return `Snapshot · ${score.home ?? 0} - ${score.away ?? 0}${phase ? ` · ${phase}` : ""}`;
+    return "Match snapshot received";
+  }
+
+  if (msg.type === "delta") {
+    const eventType = d.event_type as string | undefined;
+    const detail = d.detail as string | undefined;
+    const scoreHome = d.score_home as number | undefined;
+    const scoreAway = d.score_away as number | undefined;
+    const parts: string[] = [];
+    if (eventType) parts.push(eventType.replace(/_/g, " "));
+    if (detail) parts.push(detail);
+    if (scoreHome != null && scoreAway != null) parts.push(`${scoreHome}-${scoreAway}`);
+    return parts.join(" · ") || "Match update";
+  }
+
+  if (msg.type === "state") {
+    const phase = d.phase as string | undefined;
+    const clock = d.clock as string | undefined;
+    const parts: string[] = ["State update"];
+    if (phase) parts.push(phase);
+    if (clock) parts.push(clock);
+    return parts.join(" · ");
+  }
+
+  return msg.type;
 }
 
-function FeedTab({ messages, connected }: { messages: unknown[]; connected: boolean }) {
+function formatFeedTime(ts: string | undefined): string {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function FeedTab({ messages, connected }: { messages: WSMessage[]; connected: boolean }) {
+  const feedEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
   return (
     <div>
       <div className="mb-3 flex items-center gap-1.5 text-[11px] text-text-tertiary">
@@ -405,12 +653,40 @@ function FeedTab({ messages, connected }: { messages: unknown[]; connected: bool
           </div>
         </div>
       ) : (
-        <div className="max-h-[300px] overflow-y-auto rounded-xl border border-surface-border bg-surface-card p-3 font-mono text-[11px] leading-relaxed text-accent-blue">
-          {messages.slice(-20).map((msg, i) => (
-            <div key={i} className="truncate border-b border-surface-border/50 py-1 last:border-0">
-              {JSON.stringify(msg).substring(0, 140)}
-            </div>
-          ))}
+        <div className="max-h-[350px] space-y-1.5 overflow-y-auto rounded-xl border border-surface-border bg-surface-card p-2">
+          {messages.slice(-30).map((msg, i) => {
+            const icon = FEED_ICONS[msg.type] ?? "•";
+            const color = FEED_COLORS[msg.type] ?? "#5b6b7b";
+            const summary = parseFeedSummary(msg);
+            const time = formatFeedTime(msg.ts);
+
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-surface-hover/30"
+                style={{ animation: `fadeIn 0.2s ease ${i * 0.03}s both` }}
+              >
+                <span className="mt-0.5 shrink-0 text-sm">{icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                      style={{ color, background: `${color}15` }}
+                    >
+                      {msg.type}
+                    </span>
+                    {time && (
+                      <span className="text-[10px] text-text-muted">{time}</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-text-secondary">
+                    {summary}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={feedEndRef} />
         </div>
       )}
     </div>

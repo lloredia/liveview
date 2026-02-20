@@ -1,6 +1,7 @@
 import type {
   LeagueGroup,
   MatchDetailResponse,
+  MatchStatsResponse,
   ScoreboardResponse,
   TimelineResponse,
   LiveTickerResponse,
@@ -69,6 +70,10 @@ export async function fetchMatch(matchId: string): Promise<MatchDetailResponse> 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchLiveCounts(): Promise<any> {
   return apiFetch("/v1/today");
+}
+
+export async function fetchStats(matchId: string): Promise<MatchStatsResponse> {
+  return apiFetch<MatchStatsResponse>(`/v1/matches/${matchId}/stats`);
 }
 
 export async function fetchTimeline(
