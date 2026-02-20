@@ -16,6 +16,11 @@ COPY . .
 
 RUN chmod +x entrypoint.sh
 
+# Default when no build target: run API (Railway often builds first stage only)
+ENV SERVICE_TYPE=api
+EXPOSE 8000
+CMD ["./entrypoint.sh"]
+
 FROM base AS ingest
 ENV SERVICE_TYPE=ingest
 EXPOSE 9091
