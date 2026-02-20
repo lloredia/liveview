@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
 import { fetchMatch, fetchStats, fetchTimeline } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { useESPNLive } from "@/hooks/use-espn-live";
-import { useWebSocket } from "@/hooks/use-websocket";
 import {
   eventMeta,
   formatDate,
@@ -21,10 +20,9 @@ import { AnimatedScore } from "./animated-score";
 import { MatchForm } from "./match-form";
 import { HeadToHead } from "./head-to-head";
 import { Lineup } from "./lineup";
-import { PlayerStats } from "./player-stats";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
-import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse, WSMessage } from "@/lib/types";
+import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse } from "@/lib/types";
 
 interface MatchDetailProps {
   matchId: string;
@@ -32,10 +30,314 @@ interface MatchDetailProps {
   leagueName?: string;
 }
 
-type Tab = "timeline" | "stats" | "feed";
+type Tab = "play_by_play" | "player_stats" | "team_stats";
+
+const TAB_LABELS: Record<Tab, string> = {
+  play_by_play: "Play-by-Play",
+  player_stats: "Player Stats",
+  team_stats: "Team Stats",
+};
+
+// ---------------------------------------------------------------------------
+// ESPN player stats helpers (absorbed from player-stats.tsx)
+// ---------------------------------------------------------------------------
+
+interface PlayerStatLine {
+  name: string;
+  jersey: string;
+  position: string;
+  stats: Record<string, string | number>;
+  starter: boolean;
+}
+
+interface TeamPlayerStats {
+  teamName: string;
+  players: PlayerStatLine[];
+  statColumns: string[];
+}
+
+interface InjuryEntry {
+  name: string;
+  position: string;
+  jersey: string;
+  type: string;
+  status: string;
+}
+
+interface PlayerStatsData {
+  home: TeamPlayerStats;
+  away: TeamPlayerStats;
+  sport: string;
+  injuries?: { home: InjuryEntry[]; away: InjuryEntry[] };
+}
+
+const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
+  "Premier League": { sport: "soccer", slug: "eng.1" },
+  "La Liga": { sport: "soccer", slug: "esp.1" },
+  Bundesliga: { sport: "soccer", slug: "ger.1" },
+  "Serie A": { sport: "soccer", slug: "ita.1" },
+  "Ligue 1": { sport: "soccer", slug: "fra.1" },
+  MLS: { sport: "soccer", slug: "usa.1" },
+  "Champions League": { sport: "soccer", slug: "uefa.champions" },
+  NBA: { sport: "basketball", slug: "nba" },
+  WNBA: { sport: "basketball", slug: "wnba" },
+  NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
+  NCAAW: { sport: "basketball", slug: "womens-college-basketball" },
+  NHL: { sport: "hockey", slug: "nhl" },
+  MLB: { sport: "baseball", slug: "mlb" },
+  NFL: { sport: "football", slug: "nfl" },
+};
+
+const STAT_DISPLAY: Record<string, Record<string, string>> = {
+  basketball: {
+    MIN: "MIN", FG: "FG", "3PT": "3PT", FT: "FT", OREB: "OR", DREB: "DR",
+    REB: "REB", AST: "AST", STL: "STL", BLK: "BLK", TO: "TO", PF: "PF", PTS: "PTS",
+  },
+  soccer: {
+    SH: "SH", ST: "ST", G: "G", A: "A", OF: "OF", FD: "FD", FC: "FC", SV: "SV", YC: "YC", RC: "RC",
+  },
+  hockey: {
+    G: "G", A: "A", PTS: "PTS", "+/-": "+/-", PIM: "PIM", SOG: "SOG",
+    HIT: "HIT", BLK: "BLK", FW: "FW", FL: "FL", TOI: "TOI",
+  },
+  baseball: {
+    AB: "AB", R: "R", H: "H", HR: "HR", RBI: "RBI", BB: "BB",
+    SO: "SO", AVG: "AVG", OBP: "OBP", SLG: "SLG",
+  },
+  football: {
+    "C/ATT": "C/ATT", YDS: "YDS", TD: "TD", INT: "INT", CAR: "CAR",
+    REC: "REC", TGTS: "TGTS", SACK: "SACK", TFL: "TFL",
+  },
+};
+
+const HIGHLIGHT_STATS: Record<string, string[]> = {
+  basketball: ["PTS", "REB", "AST"],
+  soccer: ["G", "A", "SH"],
+  hockey: ["G", "A", "PTS"],
+  baseball: ["H", "RBI", "HR"],
+  football: ["YDS", "TD", "REC"],
+};
+
+// ---------------------------------------------------------------------------
+// Team stats labels
+// ---------------------------------------------------------------------------
+
+const TEAM_STAT_LABELS: Record<string, string> = {
+  possession: "Possession",
+  shots: "Total Shots",
+  shots_on_target: "Shots on Target",
+  corners: "Corners",
+  fouls: "Fouls",
+  offsides: "Offsides",
+  passes: "Passes",
+  pass_accuracy: "Pass Accuracy",
+  yellow_cards: "Yellow Cards",
+  red_cards: "Red Cards",
+  field_goal_pct: "Field Goal %",
+  field_goals_made: "Field Goals",
+  field_goals_attempted: "FG Attempted",
+  three_point_pct: "3-Point %",
+  three_point_made: "3-Pointers",
+  three_point_attempted: "3PT Attempted",
+  free_throw_pct: "Free Throw %",
+  free_throws_made: "Free Throws",
+  free_throws_attempted: "FT Attempted",
+  rebounds: "Total Rebounds",
+  offensive_rebounds: "Offensive Rebounds",
+  defensive_rebounds: "Defensive Rebounds",
+  assists: "Assists",
+  turnovers: "Turnovers",
+  steals: "Steals",
+  blocks: "Blocks",
+  power_plays: "Power Plays",
+  penalty_minutes: "Penalty Minutes",
+  faceoff_wins: "Faceoff Wins",
+  hits: "Hits",
+  at_bats: "At Bats",
+  runs: "Runs",
+  home_runs: "Home Runs",
+  strikeouts: "Strikeouts",
+  walks: "Walks",
+  era: "ERA",
+  points_off_turnovers: "Points off Turnovers",
+  fast_break_points: "Fast Break Points",
+  points_in_paint: "Points in the Paint",
+  points_per_possession: "Points per Possession",
+  personal_fouls: "Personal Fouls",
+  largest_lead: "Largest Lead",
+};
+
+// ---------------------------------------------------------------------------
+// ESPN data fetchers
+// ---------------------------------------------------------------------------
+
+async function findEspnEventId(
+  homeTeamName: string,
+  awayTeamName: string,
+  sport: string,
+  slug: string,
+): Promise<string | null> {
+  try {
+    const prefix = sport === "soccer" ? `soccer/${slug}` : `${sport}/${slug}`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${prefix}/scoreboard`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const events: any[] = data.events || [];
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const homeLower = normalize(homeTeamName);
+    const awayLower = normalize(awayTeamName);
+
+    for (const evt of events) {
+      const comp = evt.competitions?.[0];
+      if (!comp) continue;
+
+      const competitors = comp.competitors || [];
+      const names = competitors.map((c: any) => normalize(c.team?.displayName || c.team?.name || ""));
+      const shortNames = competitors.map((c: any) => normalize(c.team?.shortDisplayName || c.team?.name || ""));
+
+      const matchesHome =
+        names.some((n: string) => n.includes(homeLower) || homeLower.includes(n)) ||
+        shortNames.some((n: string) => n.includes(homeLower) || homeLower.includes(n));
+      const matchesAway =
+        names.some((n: string) => n.includes(awayLower) || awayLower.includes(n)) ||
+        shortNames.some((n: string) => n.includes(awayLower) || awayLower.includes(n));
+
+      if (matchesHome && matchesAway) return evt.id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractPlayerStats(
+  competitor: any,
+): { players: PlayerStatLine[]; statColumns: string[] } {
+  const players: PlayerStatLine[] = [];
+  const statColumns: string[] = [];
+  const statGroups = competitor.statistics || [];
+  if (statGroups.length === 0) return { players, statColumns };
+
+  const primaryGroup = statGroups[0];
+  const labels: string[] = primaryGroup.labels || [];
+  const athletes: any[] = primaryGroup.athletes || [];
+
+  for (const label of labels) {
+    if (!statColumns.includes(label)) statColumns.push(label);
+  }
+
+  for (const athlete of athletes) {
+    const ath = athlete.athlete || {};
+    const statsArr: string[] = athlete.stats || [];
+    const statsMap: Record<string, string | number> = {};
+    labels.forEach((label: string, idx: number) => { statsMap[label] = statsArr[idx] ?? "-"; });
+    players.push({
+      name: ath.displayName || ath.shortName || "Unknown",
+      jersey: ath.jersey || "",
+      position: ath.position?.abbreviation || "",
+      stats: statsMap,
+      starter: athlete.starter ?? false,
+    });
+  }
+
+  for (let i = 1; i < statGroups.length; i++) {
+    const group = statGroups[i];
+    const groupLabels: string[] = group.labels || [];
+    const groupAthletes: any[] = group.athletes || [];
+    for (const label of groupLabels) {
+      if (!statColumns.includes(label)) statColumns.push(label);
+    }
+    for (const athlete of groupAthletes) {
+      const ath = athlete.athlete || {};
+      const name = ath.displayName || ath.shortName || "Unknown";
+      const existing = players.find((p) => p.name === name);
+      const statsArr: string[] = athlete.stats || [];
+      if (existing) {
+        groupLabels.forEach((label: string, idx: number) => { existing.stats[label] = statsArr[idx] ?? "-"; });
+      } else {
+        const statsMap: Record<string, string | number> = {};
+        groupLabels.forEach((label: string, idx: number) => { statsMap[label] = statsArr[idx] ?? "-"; });
+        players.push({ name, jersey: ath.jersey || "", position: ath.position?.abbreviation || "", stats: statsMap, starter: athlete.starter ?? false });
+      }
+    }
+  }
+
+  return { players, statColumns };
+}
+
+function extractInjuries(data: any): { home: InjuryEntry[]; away: InjuryEntry[] } {
+  const result = { home: [] as InjuryEntry[], away: [] as InjuryEntry[] };
+  const injuries = data.injuries || [];
+  for (const team of injuries) {
+    const side = team.homeAway === "home" ? "home" : "away";
+    const entries: any[] = team.injuries || [];
+    for (const inj of entries) {
+      const ath = inj.athlete || {};
+      result[side].push({
+        name: ath.displayName || ath.shortName || "Unknown",
+        position: ath.position?.abbreviation || "",
+        jersey: ath.jersey || "",
+        type: inj.type?.description || inj.type?.name || "",
+        status: inj.status || inj.longComment || "",
+      });
+    }
+  }
+  return result;
+}
+
+async function fetchPlayerStatsData(
+  homeTeamName: string,
+  awayTeamName: string,
+  sport: string,
+  slug: string,
+): Promise<PlayerStatsData | null> {
+  const eventId = await findEspnEventId(homeTeamName, awayTeamName, sport, slug);
+  if (!eventId) return null;
+
+  try {
+    const prefix = sport === "soccer" ? `soccer/${slug}` : `${sport}/${slug}`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${prefix}/summary?event=${eventId}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const boxscore = data.boxscore;
+    if (!boxscore) return null;
+
+    const playerGroups = boxscore.players || [];
+    if (playerGroups.length < 2) return null;
+
+    const homeComp = playerGroups.find((p: any) => p.homeAway === "home") || playerGroups[0];
+    const awayComp = playerGroups.find((p: any) => p.homeAway === "away") || playerGroups[1];
+
+    const homeExtracted = extractPlayerStats(homeComp);
+    const awayExtracted = extractPlayerStats(awayComp);
+
+    if (homeExtracted.players.length === 0 && awayExtracted.players.length === 0) return null;
+
+    const allColumns = Array.from(new Set([...homeExtracted.statColumns, ...awayExtracted.statColumns]));
+    const injuries = extractInjuries(data);
+
+    return {
+      home: { teamName: homeComp.team?.displayName || homeTeamName, players: homeExtracted.players, statColumns: allColumns },
+      away: { teamName: awayComp.team?.displayName || awayTeamName, players: awayExtracted.players, statColumns: allColumns },
+      sport,
+      injuries,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ===========================================================================
+// Main Component
+// ===========================================================================
 
 export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("timeline");
+  const [activeTab, setActiveTab] = useState<Tab>("play_by_play");
 
   const matchFetcher = useCallback(() => fetchMatch(matchId), [matchId]);
   const timelineFetcher = useCallback(() => fetchTimeline(matchId), [matchId]);
@@ -52,7 +354,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
     key: `tl-${matchId}`,
   });
 
-  const { messages: wsMessages, connected: wsConnected } = useWebSocket({ matchId });
   const { findMatch: findESPN } = useESPNLive(leagueName, 15000);
 
   if (matchLoading && !matchData) {
@@ -85,7 +386,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
-      {/* Score change sound */}
       <ScoreWatcher scoreHome={effectiveScoreHome} scoreAway={effectiveScoreAway} live={live} />
 
       {/* Back + Actions row */}
@@ -132,7 +432,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           <div className="absolute inset-x-0 top-0 h-[2px] animate-shimmer bg-gradient-to-r from-transparent via-red-500 to-transparent" />
         )}
 
-        {/* Phase badge */}
         <div
           className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1"
           style={{ background: live ? "rgba(239,68,68,0.1)" : `${color}15` }}
@@ -152,7 +451,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           </span>
         </div>
 
-        {/* Teams and score */}
         <div className="flex items-center justify-center gap-4 md:gap-8">
           <div className="flex-1 text-center">
             <div className="mb-2 flex justify-center">
@@ -227,15 +525,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
         leagueName={leagueName}
       />
 
-      {/* Player Stats */}
-      <PlayerStats
-        homeTeamName={match.home_team?.name || ""}
-        awayTeamName={match.away_team?.name || ""}
-        homeTeamLogo={match.home_team?.logo_url || null}
-        awayTeamLogo={match.away_team?.logo_url || null}
-        leagueName={leagueName}
-      />
-
       {/* Highlights & Recap */}
       <Highlights
         homeTeamName={match.home_team?.name || ""}
@@ -243,109 +532,116 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
         leagueName={leagueName}
         matchPhase={match.phase}
       />
+
       {/* Tabs */}
       <div className="mt-6 flex gap-1 rounded-xl border border-surface-border bg-surface-card p-1">
-        {(["timeline", "stats", "feed"] as Tab[]).map((tab) => (
+        {(["play_by_play", "player_stats", "team_stats"] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 rounded-lg py-2 text-[12px] font-semibold uppercase tracking-wider transition-all ${
+            className={`flex-1 rounded-lg py-2 text-[11px] font-semibold uppercase tracking-wider transition-all ${
               activeTab === tab
                 ? "bg-surface-hover text-text-primary shadow-sm"
                 : "text-text-tertiary hover:text-text-secondary"
             }`}
           >
-            {tab === "timeline" ? "⏱ Timeline" : tab === "stats" ? "📊 Stats" : "📡 Feed"}
-            {tab === "feed" && wsMessages.length > 0 && (
-              <span className="ml-1 rounded-full bg-accent-green/15 px-1.5 py-0.5 text-[9px] text-accent-green">
-                {wsMessages.length}
-              </span>
-            )}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
       <div className="mt-4 animate-fade-in">
-        {activeTab === "timeline" && (
-          <TimelineTab
+        {activeTab === "play_by_play" && (
+          <PlayByPlayTab
             events={timeline?.events || []}
             phase={match.phase}
             homeTeamId={match.home_team?.id}
             awayTeamId={match.away_team?.id}
-            homeTeamName={match.home_team?.short_name}
-            awayTeamName={match.away_team?.short_name}
+            homeTeamName={match.home_team?.short_name || "Home"}
+            awayTeamName={match.away_team?.short_name || "Away"}
           />
         )}
-        {activeTab === "stats" && (
-          <StatsTab matchId={matchId} live={live} />
+        {activeTab === "team_stats" && (
+          <TeamStatsTab
+            matchId={matchId}
+            live={live}
+            homeTeamLogo={match.home_team?.logo_url || null}
+            awayTeamLogo={match.away_team?.logo_url || null}
+            homeTeamName={match.home_team?.short_name || "Home"}
+            awayTeamName={match.away_team?.short_name || "Away"}
+          />
         )}
-        {activeTab === "feed" && (
-          <FeedTab messages={wsMessages} connected={wsConnected} />
+        {activeTab === "player_stats" && (
+          <PlayerStatsTab
+            homeTeamName={match.home_team?.name || ""}
+            awayTeamName={match.away_team?.name || ""}
+            homeTeamLogo={match.home_team?.logo_url || null}
+            awayTeamLogo={match.away_team?.logo_url || null}
+            leagueName={leagueName}
+          />
         )}
       </div>
     </div>
   );
 }
 
-/**
- * Invisible component that watches score changes and plays a sound.
- * Extracted to avoid hook ordering issues in the main component.
- */
+// ===========================================================================
+// ScoreWatcher
+// ===========================================================================
+
 function ScoreWatcher({ scoreHome, scoreAway, live }: { scoreHome: number; scoreAway: number; live: boolean }) {
   const prevRef = useRef({ home: -1, away: -1 });
 
   useEffect(() => {
     const prev = prevRef.current;
-
     if (prev.home === -1) {
       prevRef.current = { home: scoreHome, away: scoreAway };
       return;
     }
-
     if ((scoreHome !== prev.home || scoreAway !== prev.away) && live) {
-      if (isSoundEnabled()) {
-        playGoalSound();
-      }
+      if (isSoundEnabled()) playGoalSound();
     }
-
     prevRef.current = { home: scoreHome, away: scoreAway };
   }, [scoreHome, scoreAway, live]);
 
   return null;
 }
 
-interface TimelineTabProps {
+// ===========================================================================
+// Tab 1: Play-by-Play (ESPN style)
+// ===========================================================================
+
+interface PlayByPlayTabProps {
   events: MatchEvent[];
   phase: string;
   homeTeamId?: string;
   awayTeamId?: string;
-  homeTeamName?: string;
-  awayTeamName?: string;
+  homeTeamName: string;
+  awayTeamName: string;
 }
 
-function TimelineTab({ events, phase, homeTeamId, awayTeamId, homeTeamName, awayTeamName }: TimelineTabProps) {
+function PlayByPlayTab({ events, phase, homeTeamId, awayTeamId, homeTeamName, awayTeamName }: PlayByPlayTabProps) {
+  const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
   const live = isLive(phase);
 
   if (events.length === 0) {
     const isScheduled = phase === "scheduled" || phase === "pre_match";
     const isFinished = phase === "finished" || phase === "postponed" || phase === "cancelled";
     return (
-      <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
-        <div className="mb-2 text-2xl">{isScheduled ? "📅" : live ? "⏱" : "🏁"}</div>
-        <div className="text-[13px] text-text-tertiary">
-          {isScheduled
-            ? "Match hasn't started yet"
-            : live
-              ? "Waiting for events..."
-              : isFinished
-                ? "No events recorded for this match"
-                : "No events yet"}
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">{isScheduled ? "📅" : live ? "⏱" : "🏁"}</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">
+          {isScheduled ? "Match Hasn't Started" : live ? "Waiting for Plays..." : isFinished ? "No Play Data Available" : "No Plays Yet"}
+        </div>
+        <div className="text-[12px] text-text-muted">
+          {isScheduled ? "Play-by-play will appear once the game begins" : live ? "Events will stream in real time" : "Play-by-play data was not recorded for this match"}
         </div>
       </div>
     );
   }
 
+  // Group by period, then reverse the period order (latest first)
   const grouped: { period: string; events: MatchEvent[] }[] = [];
   let currentPeriod = "";
   for (const evt of events) {
@@ -356,264 +652,448 @@ function TimelineTab({ events, phase, homeTeamId, awayTeamId, homeTeamName, away
     }
     grouped[grouped.length - 1].events.push(evt);
   }
+  grouped.reverse();
+  for (const g of grouped) g.events.reverse();
+
+  const togglePeriod = (period: string) => {
+    setCollapsedPeriods((prev) => {
+      const next = new Set(prev);
+      if (next.has(period)) next.delete(period);
+      else next.add(period);
+      return next;
+    });
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      {grouped.map((group, gi) => (
-        <div key={`${group.period}-${gi}`}>
-          {group.period !== "—" && (
-            <div className="flex items-center gap-3 bg-surface-hover/40 px-4 py-1.5">
-              <div className="h-px flex-1 bg-surface-border" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                {group.period}
-              </span>
-              <div className="h-px flex-1 bg-surface-border" />
-            </div>
-          )}
-          {group.events.map((evt, i) => {
-            const meta = eventMeta(evt.event_type);
-            const isGoal = evt.event_type === "goal" || evt.event_type === "basket" || evt.event_type === "run";
-            const isHome = evt.team_id === homeTeamId;
-            const isAway = evt.team_id === awayTeamId;
-            const teamLabel = isHome ? homeTeamName : isAway ? awayTeamName : null;
+      {grouped.map((group, gi) => {
+        const isCollapsed = collapsedPeriods.has(group.period);
+        const periodEventCount = group.events.length;
 
-            return (
-              <div
-                key={evt.id || `${gi}-${i}`}
-                className={`flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover/30 ${
-                  i < group.events.length - 1 ? "border-b border-surface-border/50" : gi < grouped.length - 1 ? "border-b border-surface-border" : ""
-                } ${isGoal ? "bg-accent-green/[0.03]" : ""}`}
-                style={{ animation: `fadeIn 0.3s ease ${i * 0.05}s both` }}
+        return (
+          <div key={`${group.period}-${gi}`}>
+            {/* Period header (collapsible) */}
+            <button
+              onClick={() => togglePeriod(group.period)}
+              className={`flex w-full items-center justify-between px-4 py-2.5 transition-colors hover:bg-surface-hover/40 ${
+                gi > 0 ? "border-t border-surface-border" : ""
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-text-primary">
+                  {group.period !== "—" ? group.period : "Game"}
+                </span>
+                <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[9px] font-semibold text-text-muted">
+                  {periodEventCount} plays
+                </span>
+              </div>
+              <svg
+                className={`h-3.5 w-3.5 text-text-muted transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
               >
-                {/* Team side dot */}
-                <div
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    isHome ? "bg-accent-blue" : isAway ? "bg-accent-red/70" : "bg-surface-border"
-                  }`}
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-                <span className="min-w-[32px] font-mono text-[11px] font-bold text-accent-blue">
-                  {evt.minute != null ? `${evt.minute}'` : "—"}
-                </span>
-                <span className="text-sm">{meta.icon}</span>
-                <span
-                  className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                  style={{ color: meta.color, background: `${meta.color}12` }}
+            {/* Events */}
+            {!isCollapsed && group.events.map((evt, i) => {
+              const meta = eventMeta(evt.event_type);
+              const isScoring = evt.event_type === "goal" || evt.event_type === "basket" ||
+                                evt.event_type === "run" || evt.event_type === "touchdown" ||
+                                evt.event_type === "field_goal_made" || evt.event_type === "three_pointer";
+              const isHome = evt.team_id === homeTeamId;
+              const isAway = evt.team_id === awayTeamId;
+              const teamAbbr = isHome ? homeTeamName : isAway ? awayTeamName : null;
+
+              return (
+                <div
+                  key={evt.id || `${gi}-${i}`}
+                  className={`flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover/20 ${
+                    i < group.events.length - 1 ? "border-b border-surface-border/30" : ""
+                  } ${isScoring ? "bg-accent-green/[0.04]" : ""}`}
                 >
-                  {meta.label}
-                </span>
-                <div className="min-w-0 flex-1">
-                  {evt.player_name && (
-                    <span className="mr-1 text-xs font-semibold text-text-primary">
-                      {evt.player_name}
+                  {/* Left: team dot + clock */}
+                  <div className="flex w-[52px] shrink-0 items-center gap-2">
+                    <div
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        isHome ? "bg-accent-blue" : isAway ? "bg-accent-red/80" : "bg-surface-border"
+                      }`}
+                    />
+                    <span className="font-mono text-[11px] font-bold text-text-muted">
+                      {evt.minute != null ? `${evt.minute}'` : "—"}
                     </span>
-                  )}
-                  {teamLabel && !evt.player_name && (
-                    <span className="mr-1 text-[10px] font-medium text-text-muted">
-                      {teamLabel}
-                    </span>
-                  )}
-                  {evt.detail && (
-                    <span className="truncate text-xs text-text-secondary">
-                      {evt.player_name ? `— ${evt.detail}` : evt.detail}
-                    </span>
+                  </div>
+
+                  {/* Center: play description */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      {isScoring && (
+                        <span className="text-[10px]">{meta.icon}</span>
+                      )}
+                      {evt.player_name && (
+                        <span className={`text-[12px] font-bold ${isScoring ? "text-text-primary" : "text-text-primary"}`}>
+                          {evt.player_name}
+                        </span>
+                      )}
+                      {teamAbbr && !evt.player_name && (
+                        <span className="text-[11px] font-semibold text-text-secondary">{teamAbbr}</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
+                      {evt.detail || meta.label}
+                    </div>
+                  </div>
+
+                  {/* Right: running score */}
+                  {evt.score_home != null && evt.score_away != null && (
+                    <div className={`shrink-0 rounded-md px-2 py-1 font-mono text-[11px] font-bold ${
+                      isScoring ? "bg-surface-hover text-text-primary" : "text-text-muted"
+                    }`}>
+                      {homeTeamName} {evt.score_home} - {evt.score_away} {awayTeamName}
+                    </div>
                   )}
                 </div>
-                {evt.score_home != null && evt.score_away != null && (
-                  <span className="shrink-0 font-mono text-[11px] font-bold text-text-primary">
-                    {evt.score_home}-{evt.score_away}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {live && (
+        <div className="flex items-center justify-center gap-1.5 border-t border-surface-border py-2.5 text-[10px] text-text-dim">
+          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-green" />
+          Live — plays update in real time
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
-const STAT_LABELS: Record<string, string> = {
-  possession: "Possession",
-  shots: "Total Shots",
-  shots_on_target: "Shots on Target",
-  corners: "Corners",
-  fouls: "Fouls",
-  offsides: "Offsides",
-  passes: "Passes",
-  pass_accuracy: "Pass Accuracy",
-  yellow_cards: "Yellow Cards",
-  red_cards: "Red Cards",
-  field_goal_pct: "Field Goal %",
-  field_goals_made: "Field Goals Made",
-  field_goals_attempted: "Field Goals Attempted",
-  three_point_pct: "3-Point %",
-  three_point_made: "3-Pointers Made",
-  three_point_attempted: "3-Point Attempts",
-  free_throw_pct: "Free Throw %",
-  free_throws_made: "Free Throws Made",
-  free_throws_attempted: "Free Throws Attempted",
-  rebounds: "Rebounds",
-  assists: "Assists",
-  turnovers: "Turnovers",
-  steals: "Steals",
-  blocks: "Blocks",
-  power_plays: "Power Plays",
-  penalty_minutes: "Penalty Minutes",
-  faceoff_wins: "Faceoff Wins",
-  hits: "Hits",
-  at_bats: "At Bats",
-  runs: "Runs",
-  home_runs: "Home Runs",
-  strikeouts: "Strikeouts",
-  walks: "Walks",
-  era: "ERA",
-};
+// ===========================================================================
+// Tab 2: Player Stats (ESPN style — absorbed from player-stats.tsx)
+// ===========================================================================
 
-const HERO_STATS = new Set([
-  "possession", "shots", "shots_on_target",
-  "field_goal_pct", "rebounds", "three_point_pct",
-]);
-
-const STAT_GROUPS: { label: string; keys: string[] }[] = [
-  { label: "Shooting", keys: [
-    "field_goal_pct", "field_goals_made", "field_goals_attempted",
-    "three_point_pct", "three_point_made", "three_point_attempted",
-    "free_throw_pct", "free_throws_made", "free_throws_attempted",
-    "shots", "shots_on_target", "corners", "offsides",
-  ]},
-  { label: "Playmaking", keys: ["assists", "turnovers", "passes", "pass_accuracy"] },
-  { label: "Defense & Rebounding", keys: [
-    "rebounds", "steals", "blocks",
-    "fouls", "yellow_cards", "red_cards",
-    "hits", "strikeouts", "walks", "era",
-  ]},
-  { label: "Special Teams", keys: ["power_plays", "penalty_minutes", "faceoff_wins"] },
-  { label: "Batting", keys: ["at_bats", "runs", "home_runs"] },
-];
-
-function ComparisonBar({ homeVal, awayVal, homeLeads }: { homeVal: number; awayVal: number; homeLeads: boolean }) {
-  const total = homeVal + awayVal || 1;
-  const homePct = Math.round((homeVal / total) * 100);
-  return (
-    <div className="relative flex h-2.5 w-full overflow-hidden rounded-full bg-surface-hover/50">
-      <div
-        className="rounded-l-full transition-all duration-700 ease-out"
-        style={{
-          width: `${homePct}%`,
-          background: homeLeads
-            ? "linear-gradient(90deg, rgba(68,138,255,0.3), rgba(68,138,255,0.85))"
-            : "linear-gradient(90deg, rgba(68,138,255,0.15), rgba(68,138,255,0.45))",
-        }}
-      />
-      <div
-        className="flex-1 rounded-r-full transition-all duration-700 ease-out"
-        style={{
-          background: !homeLeads && (homePct < 50)
-            ? "linear-gradient(90deg, rgba(255,23,68,0.85), rgba(255,23,68,0.3))"
-            : "linear-gradient(90deg, rgba(255,23,68,0.45), rgba(255,23,68,0.15))",
-        }}
-      />
-      <div
-        className="absolute top-0 h-full w-px bg-surface-border-light/40"
-        style={{ left: "50%" }}
-      />
-    </div>
-  );
+interface PlayerStatsTabProps {
+  homeTeamName: string;
+  awayTeamName: string;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  leagueName: string;
 }
 
-function HeroStat({
-  label,
-  homeVal,
-  awayVal,
-  homeStr,
-  awayStr,
-  suffix,
-}: {
-  label: string;
-  homeVal: number;
-  awayVal: number;
-  homeStr: string;
-  awayStr: string;
-  suffix?: string;
-}) {
-  const homeLeads = homeVal > awayVal;
-  const awayLeads = awayVal > homeVal;
-  return (
-    <div className="rounded-xl bg-surface-hover/30 px-4 py-3.5">
-      <div className="mb-2 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-text-muted">
-        {label}
+function PlayerStatsTab({ homeTeamName, awayTeamName, homeTeamLogo, awayTeamLogo, leagueName }: PlayerStatsTabProps) {
+  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  const [activeSide, setActiveSide] = useState<"home" | "away">("home");
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const fetcher = useCallback(async (): Promise<PlayerStatsData | null> => {
+    if (!mapping) return null;
+    return fetchPlayerStatsData(homeTeamName, awayTeamName, mapping.sport, mapping.slug);
+  }, [homeTeamName, awayTeamName, mapping]);
+
+  const { data, loading } = usePolling<PlayerStatsData | null>({
+    fetcher,
+    interval: 60000,
+    enabled: !!mapping,
+    key: `pstats-${homeTeamName}-${awayTeamName}`,
+  });
+
+  if (!mapping) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">👤</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">Player Stats Unavailable</div>
+        <div className="text-[12px] text-text-muted">Not supported for this league</div>
       </div>
-      <div className="mb-2.5 flex items-end justify-between">
-        <span
-          className={`font-mono text-2xl font-black transition-colors ${
-            homeLeads ? "text-accent-blue" : "text-text-primary"
-          }`}
-        >
-          {homeStr}{suffix || ""}
-        </span>
-        <span
-          className={`font-mono text-2xl font-black transition-colors ${
-            awayLeads ? "text-accent-red" : "text-text-primary"
-          }`}
-        >
-          {awayStr}{suffix || ""}
-        </span>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+        <div className="flex border-b border-surface-border">
+          <div className="flex-1 py-3 text-center"><div className="mx-auto h-3 w-24 animate-pulse rounded bg-surface-hover" /></div>
+          <div className="w-px bg-surface-border" />
+          <div className="flex-1 py-3 text-center"><div className="mx-auto h-3 w-24 animate-pulse rounded bg-surface-hover" /></div>
+        </div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b border-surface-border/30 px-4 py-2.5">
+            <div className="h-3 w-24 animate-pulse rounded bg-surface-hover" />
+            <div className="flex-1" />
+            {Array.from({ length: 5 }).map((_, j) => (
+              <div key={j} className="h-3 w-8 animate-pulse rounded bg-surface-hover" />
+            ))}
+          </div>
+        ))}
       </div>
-      <ComparisonBar homeVal={homeVal} awayVal={awayVal} homeLeads={homeLeads} />
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">👤</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">No Player Stats</div>
+        <div className="text-[12px] text-text-muted">Player statistics are not yet available for this match</div>
+      </div>
+    );
+  }
+
+  const teamData = activeSide === "home" ? data.home : data.away;
+  const highlights = HIGHLIGHT_STATS[data.sport] || [];
+  const displayMap = STAT_DISPLAY[data.sport] || {};
+  const visibleColumns = teamData.statColumns.filter(
+    (col) => Object.keys(displayMap).length === 0 || displayMap[col],
+  );
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) setSortAsc(!sortAsc);
+    else { setSortCol(col); setSortAsc(false); }
+  };
+
+  const sortedPlayers = [...teamData.players];
+  if (sortCol) {
+    sortedPlayers.sort((a, b) => {
+      const aVal = a.stats[sortCol] ?? "";
+      const bVal = b.stats[sortCol] ?? "";
+      const aNum = parseFloat(String(aVal).replace(/[^0-9.\-]/g, ""));
+      const bNum = parseFloat(String(bVal).replace(/[^0-9.\-]/g, ""));
+      if (!isNaN(aNum) && !isNaN(bNum)) return sortAsc ? aNum - bNum : bNum - aNum;
+      return sortAsc ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+    });
+  } else {
+    sortedPlayers.sort((a, b) => (a.starter === b.starter ? 0 : a.starter ? -1 : 1));
+  }
+
+  const starters = sortedPlayers.filter((p) => p.starter);
+  const bench = sortedPlayers.filter((p) => !p.starter);
+  const injuries = activeSide === "home" ? data.injuries?.home : data.injuries?.away;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+      {/* Team toggle */}
+      <div className="flex border-b border-surface-border">
+        <button
+          onClick={() => { setActiveSide("home"); setSortCol(null); }}
+          className={`flex flex-1 items-center justify-center gap-2 py-3 text-[12px] font-semibold transition-all ${
+            activeSide === "home"
+              ? "border-b-2 border-accent-blue bg-accent-blue/5 text-accent-blue"
+              : "text-text-tertiary hover:bg-surface-hover/30 hover:text-text-secondary"
+          }`}
+        >
+          <TeamLogo url={homeTeamLogo} name={homeTeamName} size={18} />
+          <span className="truncate">{homeTeamName}</span>
+        </button>
+        <div className="w-px bg-surface-border" />
+        <button
+          onClick={() => { setActiveSide("away"); setSortCol(null); }}
+          className={`flex flex-1 items-center justify-center gap-2 py-3 text-[12px] font-semibold transition-all ${
+            activeSide === "away"
+              ? "border-b-2 border-accent-red bg-accent-red/5 text-accent-red"
+              : "text-text-tertiary hover:bg-surface-hover/30 hover:text-text-secondary"
+          }`}
+        >
+          <TeamLogo url={awayTeamLogo} name={awayTeamName} size={18} />
+          <span className="truncate">{awayTeamName}</span>
+        </button>
+      </div>
+
+      {/* Top performers */}
+      <TopPerformers players={teamData.players} highlights={highlights} />
+
+      {/* Stats table */}
+      {teamData.players.length === 0 ? (
+        <div className="py-8 text-center text-[12px] text-text-muted">
+          Player statistics not yet available
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          {starters.length > 0 && (
+            <PlayerTable label="Starters" players={starters} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+          )}
+          {bench.length > 0 && (
+            <PlayerTable label="Bench" players={bench} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+          )}
+          {starters.length === 0 && bench.length === 0 && (
+            <PlayerTable players={sortedPlayers} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />
+          )}
+        </div>
+      )}
+
+      {/* Injuries */}
+      {injuries && injuries.length > 0 && (
+        <div className="border-t border-surface-border">
+          <div className="bg-surface-hover/30 px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-text-dim">
+            Injuries
+          </div>
+          {injuries.map((inj, i) => (
+            <div
+              key={`${inj.name}-${i}`}
+              className={`flex items-center gap-3 px-4 py-2.5 ${
+                i < injuries.length - 1 ? "border-b border-surface-border/30" : ""
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {inj.jersey && <span className="font-mono text-[9px] font-bold text-text-dim">#{inj.jersey}</span>}
+                  <span className="text-[12px] font-semibold text-text-primary">{inj.name}</span>
+                  {inj.position && <span className="text-[9px] font-semibold text-text-dim">{inj.position}</span>}
+                </div>
+                {inj.type && <div className="mt-0.5 text-[10px] text-text-muted">{inj.type}</div>}
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+                inj.status.toLowerCase().includes("out")
+                  ? "bg-accent-red/10 text-accent-red"
+                  : inj.status.toLowerCase().includes("day-to-day") || inj.status.toLowerCase().includes("questionable")
+                    ? "bg-accent-amber/10 text-accent-amber"
+                    : "bg-surface-hover text-text-muted"
+              }`}>
+                {inj.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function StatRow({
-  label,
-  homeStr,
-  awayStr,
-  homeVal,
-  awayVal,
-  suffix,
-  index,
-}: {
-  label: string;
-  homeStr: string;
-  awayStr: string;
-  homeVal: number;
-  awayVal: number;
-  suffix?: string;
-  index: number;
-}) {
-  const homeLeads = homeVal > awayVal;
-  const awayLeads = awayVal > homeVal;
+function TopPerformers({ players, highlights }: { players: PlayerStatLine[]; highlights: string[] }) {
+  const topPlayers: { player: PlayerStatLine; stat: string; value: string }[] = [];
+
+  for (const stat of highlights) {
+    let best: PlayerStatLine | null = null;
+    let bestVal = -Infinity;
+    for (const p of players) {
+      const raw = p.stats[stat];
+      if (raw == null || raw === "-" || raw === "") continue;
+      const num = parseFloat(String(raw).replace(/[^0-9.\-]/g, ""));
+      if (!isNaN(num) && num > bestVal) { bestVal = num; best = p; }
+    }
+    if (best && bestVal > 0) topPlayers.push({ player: best, stat, value: String(best.stats[stat]) });
+  }
+
+  if (topPlayers.length === 0) return null;
+
   return (
-    <div
-      className="group px-4 py-3 transition-colors hover:bg-surface-hover/20"
-      style={{ animation: `fadeIn 0.3s ease ${index * 0.04}s both` }}
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <span
-          className={`min-w-[52px] text-right font-mono text-[15px] font-bold transition-colors ${
-            homeLeads ? "text-accent-blue" : "text-text-primary"
-          }`}
-        >
-          {homeStr}{suffix || ""}
-        </span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+    <div className="border-b border-surface-border bg-surface-hover/15 px-4 py-3">
+      <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-text-dim">
+        Top Performers
+      </div>
+      <div className="flex gap-2.5 overflow-x-auto">
+        {topPlayers.map(({ player, stat, value }) => (
+          <div
+            key={`${player.name}-${stat}`}
+            className="flex min-w-[110px] items-center gap-2 rounded-lg border border-surface-border/50 bg-surface-card px-3 py-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[11px] font-semibold text-text-primary">{player.name}</div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-base font-black text-accent-green">{value}</span>
+                <span className="text-[9px] font-bold uppercase text-text-dim">{stat}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlayerTable({
+  label, players, columns, displayMap, highlights, sortCol, sortAsc, onSort,
+}: {
+  label?: string;
+  players: PlayerStatLine[];
+  columns: string[];
+  displayMap: Record<string, string>;
+  highlights: string[];
+  sortCol: string | null;
+  sortAsc: boolean;
+  onSort: (col: string) => void;
+}) {
+  return (
+    <div>
+      {label && (
+        <div className="bg-surface-hover/30 px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-text-dim">
           {label}
-        </span>
-        <span
-          className={`min-w-[52px] text-left font-mono text-[15px] font-bold transition-colors ${
-            awayLeads ? "text-accent-red" : "text-text-primary"
-          }`}
-        >
-          {awayStr}{suffix || ""}
-        </span>
-      </div>
-      <ComparisonBar homeVal={homeVal} awayVal={awayVal} homeLeads={homeLeads} />
+        </div>
+      )}
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="border-b border-surface-border text-[9px] font-bold uppercase tracking-wider text-text-dim">
+            <th className="sticky left-0 z-10 bg-surface-card px-3 py-2 text-left">Player</th>
+            {columns.map((col) => (
+              <th
+                key={col}
+                onClick={() => onSort(col)}
+                className={`cursor-pointer whitespace-nowrap px-2 py-2 text-center transition-colors hover:text-text-secondary ${
+                  sortCol === col ? "text-accent-blue" : ""
+                } ${highlights.includes(col) ? "text-text-muted" : ""}`}
+              >
+                {displayMap[col] || col}
+                {sortCol === col && <span className="ml-0.5">{sortAsc ? "↑" : "↓"}</span>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player, i) => (
+            <tr
+              key={`${player.name}-${i}`}
+              className={`transition-colors hover:bg-surface-hover/30 ${
+                i < players.length - 1 ? "border-b border-surface-border/50" : ""
+              }`}
+            >
+              <td className="sticky left-0 z-10 bg-surface-card px-3 py-2">
+                <div className="flex items-center gap-1.5">
+                  {player.jersey && (
+                    <span className="font-mono text-[9px] font-bold text-text-dim">#{player.jersey}</span>
+                  )}
+                  <span className="truncate font-medium text-text-primary">{player.name}</span>
+                  <span className="text-[8px] font-semibold text-text-dim">{player.position}</span>
+                </div>
+              </td>
+              {columns.map((col) => {
+                const val = player.stats[col] ?? "-";
+                const isHighlight = highlights.includes(col);
+                const numVal = parseFloat(String(val).replace(/[^0-9.\-]/g, ""));
+                const isGood = isHighlight && !isNaN(numVal) && numVal > 0;
+
+                return (
+                  <td
+                    key={col}
+                    className={`whitespace-nowrap px-2 py-2 text-center font-mono ${
+                      isGood ? "font-bold text-text-primary" : val === "-" || val === "0" ? "text-text-dim" : "text-text-secondary"
+                    }`}
+                  >
+                    {val}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
+// ===========================================================================
+// Tab 3: Team Stats (ESPN style — pill highlights for leading values)
+// ===========================================================================
+
+interface TeamStatsTabProps {
+  matchId: string;
+  live: boolean;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  homeTeamName: string;
+  awayTeamName: string;
+}
+
+function TeamStatsTab({ matchId, live, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName }: TeamStatsTabProps) {
   const statsFetcher = useCallback(() => fetchStats(matchId), [matchId]);
   const { data, loading } = usePolling<MatchStatsResponse>({
     fetcher: statsFetcher,
@@ -624,38 +1104,33 @@ function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
   const homeStats = data?.teams?.find((t) => t.side === "home");
   const awayStats = data?.teams?.find((t) => t.side === "away");
 
-  const allKeys = homeStats?.stats || awayStats?.stats
-    ? Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter((k) => {
-        if (k === "period_scores") return false;
-        const h = homeStats?.stats?.[k];
-        const a = awayStats?.stats?.[k];
-        if (h != null && typeof h === "object") return false;
-        if (a != null && typeof a === "object") return false;
-        return h != null || a != null;
-      })
-    : [];
+  const allKeys = useMemo(() => {
+    if (!homeStats?.stats && !awayStats?.stats) return [];
+    return Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter((k) => {
+      if (k === "period_scores") return false;
+      const h = homeStats?.stats?.[k];
+      const a = awayStats?.stats?.[k];
+      if (h != null && typeof h === "object") return false;
+      if (a != null && typeof a === "object") return false;
+      return h != null || a != null;
+    });
+  }, [homeStats, awayStats]);
 
   if (loading && !data) {
     return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          {[0, 1].map((i) => (
-            <div key={i} className="rounded-xl border border-surface-border bg-surface-card p-4">
-              <div className="mb-2 h-2 w-16 animate-pulse rounded bg-surface-hover" />
-              <div className="mb-3 h-7 w-12 animate-pulse rounded bg-surface-hover" />
-              <div className="h-2.5 w-full animate-pulse rounded-full bg-surface-hover" />
-            </div>
-          ))}
+      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+        <div className="flex items-center justify-between border-b border-surface-border px-6 py-3">
+          <div className="h-6 w-6 animate-pulse rounded-full bg-surface-hover" />
+          <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
+          <div className="h-6 w-6 animate-pulse rounded-full bg-surface-hover" />
         </div>
-        <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between border-b border-surface-border/50 px-4 py-3.5 last:border-0">
-              <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
-              <div className="h-2 w-16 animate-pulse rounded bg-surface-hover" />
-              <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
-            </div>
-          ))}
-        </div>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between border-b border-surface-border/30 px-6 py-3.5">
+            <div className="h-3 w-12 animate-pulse rounded bg-surface-hover" />
+            <div className="h-2.5 w-24 animate-pulse rounded bg-surface-hover" />
+            <div className="h-3 w-12 animate-pulse rounded bg-surface-hover" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -668,251 +1143,81 @@ function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
           {live ? "Waiting for Statistics" : "No Statistics Available"}
         </div>
         <div className="text-[12px] text-text-muted">
-          {live
-            ? "Stats will populate as the match progresses"
-            : "Match stats were not recorded for this game"}
+          {live ? "Stats will populate as the match progresses" : "Match stats were not recorded for this game"}
         </div>
       </div>
     );
   }
 
-  const heroKeys = allKeys.filter((k) => HERO_STATS.has(k));
-  const remainingKeys = allKeys.filter((k) => !HERO_STATS.has(k));
-
-  const getStatData = (key: string) => {
-    const hRaw = homeStats?.stats?.[key];
-    const aRaw = awayStats?.stats?.[key];
-    const hStr = hRaw != null ? String(hRaw) : "—";
-    const aStr = aRaw != null ? String(aRaw) : "—";
-    const hNum = typeof hRaw === "number" ? hRaw : parseFloat(String(hRaw ?? "0")) || 0;
-    const aNum = typeof aRaw === "number" ? aRaw : parseFloat(String(aRaw ?? "0")) || 0;
-    const label = STAT_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const isPercentage = key.includes("pct") || key.includes("accuracy");
-    return { hStr, aStr, hNum, aNum, label, suffix: isPercentage ? "%" : undefined };
-  };
-
-  const groupedSections: { label: string; keys: string[] }[] = [];
-  const usedKeys = new Set<string>();
-  for (const group of STAT_GROUPS) {
-    const matchedKeys = group.keys.filter((k) => remainingKeys.includes(k));
-    if (matchedKeys.length > 0) {
-      groupedSections.push({ label: group.label, keys: matchedKeys });
-      matchedKeys.forEach((k) => usedKeys.add(k));
-    }
-  }
-  const ungrouped = remainingKeys.filter((k) => !usedKeys.has(k));
-  if (ungrouped.length > 0) {
-    groupedSections.push({ label: "Other", keys: ungrouped });
-  }
-
-  let rowIdx = 0;
-
   return (
-    <div className="space-y-3">
-      {/* Team header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-accent-blue" />
-          <span className="text-[12px] font-bold text-text-primary">
-            {homeStats?.team_name || "Home"}
-          </span>
-        </div>
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-dim">
-          Match Stats
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-bold text-text-primary">
-            {awayStats?.team_name || "Away"}
-          </span>
-          <div className="h-3 w-3 rounded-full bg-accent-red/70" />
-        </div>
+    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+      {/* Team logo header */}
+      <div className="flex items-center justify-between border-b border-surface-border px-6 py-3">
+        <TeamLogo url={homeTeamLogo} name={homeTeamName} size={28} />
+        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim">Team Stats</span>
+        <TeamLogo url={awayTeamLogo} name={awayTeamName} size={28} />
       </div>
 
-      {/* Hero stats */}
-      {heroKeys.length > 0 && (
-        <div className={`grid gap-2.5 ${heroKeys.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-          {heroKeys.map((key) => {
-            const s = getStatData(key);
-            return (
-              <HeroStat
-                key={key}
-                label={s.label}
-                homeVal={s.hNum}
-                awayVal={s.aNum}
-                homeStr={s.hStr}
-                awayStr={s.aStr}
-                suffix={s.suffix}
-              />
-            );
-          })}
-        </div>
-      )}
+      {/* Stat rows */}
+      {allKeys.map((key, i) => {
+        const hRaw = homeStats?.stats?.[key];
+        const aRaw = awayStats?.stats?.[key];
+        const hStr = hRaw != null ? String(hRaw) : "—";
+        const aStr = aRaw != null ? String(aRaw) : "—";
+        const hNum = typeof hRaw === "number" ? hRaw : parseFloat(String(hRaw ?? "0")) || 0;
+        const aNum = typeof aRaw === "number" ? aRaw : parseFloat(String(aRaw ?? "0")) || 0;
+        const label = TEAM_STAT_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const isPercentage = key.includes("pct") || key.includes("accuracy");
+        const suffix = isPercentage ? "" : "";
 
-      {/* Grouped stats */}
-      {groupedSections.map((section) => (
-        <div key={section.label} className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-          <div className="border-b border-surface-border bg-surface-hover/25 px-4 py-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
-              {section.label}
+        const homeLeads = hNum > aNum;
+        const awayLeads = aNum > hNum;
+
+        return (
+          <div
+            key={key}
+            className={`flex items-center justify-between px-5 py-3 transition-colors hover:bg-surface-hover/15 ${
+              i < allKeys.length - 1 ? "border-b border-surface-border/30" : ""
+            }`}
+          >
+            {/* Home value */}
+            <div className="w-[72px]">
+              {homeLeads ? (
+                <span className="inline-flex min-w-[40px] items-center justify-center rounded-full bg-accent-blue px-2.5 py-0.5 font-mono text-[13px] font-bold text-white">
+                  {hStr}{suffix}
+                </span>
+              ) : (
+                <span className="font-mono text-[13px] font-semibold text-text-primary">
+                  {hStr}{suffix}
+                </span>
+              )}
+            </div>
+
+            {/* Stat name */}
+            <span className="flex-1 text-center text-[11px] font-medium text-text-secondary">
+              {label}
             </span>
+
+            {/* Away value */}
+            <div className="flex w-[72px] justify-end">
+              {awayLeads ? (
+                <span className="inline-flex min-w-[40px] items-center justify-center rounded-full bg-accent-red px-2.5 py-0.5 font-mono text-[13px] font-bold text-white">
+                  {aStr}{suffix}
+                </span>
+              ) : (
+                <span className="font-mono text-[13px] font-semibold text-text-primary">
+                  {aStr}{suffix}
+                </span>
+              )}
+            </div>
           </div>
-          {section.keys.map((key, i) => {
-            const s = getStatData(key);
-            const idx = rowIdx++;
-            return (
-              <div
-                key={key}
-                className={i < section.keys.length - 1 ? "border-b border-surface-border/40" : ""}
-              >
-                <StatRow
-                  label={s.label}
-                  homeStr={s.hStr}
-                  awayStr={s.aStr}
-                  homeVal={s.hNum}
-                  awayVal={s.aNum}
-                  suffix={s.suffix}
-                  index={idx}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ))}
+        );
+      })}
 
       {live && (
-        <div className="flex items-center justify-center gap-1.5 py-2 text-[10px] text-text-dim">
-          <div className="h-1 w-1 animate-pulse rounded-full bg-accent-green" />
+        <div className="flex items-center justify-center gap-1.5 border-t border-surface-border py-2.5 text-[10px] text-text-dim">
+          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-green" />
           Stats update live
-        </div>
-      )}
-    </div>
-  );
-}
-
-const FEED_ICONS: Record<string, string> = {
-  snapshot: "📸",
-  delta: "⚡",
-  state: "🔄",
-  welcome: "👋",
-  error: "⚠️",
-};
-
-const FEED_COLORS: Record<string, string> = {
-  snapshot: "#448AFF",
-  delta: "#00E676",
-  state: "#FFB347",
-  welcome: "#5b9cf6",
-  error: "#FF1744",
-};
-
-function parseFeedSummary(msg: WSMessage): string {
-  const d = msg.data as Record<string, unknown> | undefined;
-  if (!d) {
-    if (msg.type === "welcome") return `Connected · ${msg.connection_id ?? ""}`;
-    if (msg.type === "error") return msg.error ?? "Unknown error";
-    return msg.type;
-  }
-
-  if (msg.type === "snapshot") {
-    const score = d.score as Record<string, number> | undefined;
-    const phase = d.phase as string | undefined;
-    if (score) return `Snapshot · ${score.home ?? 0} - ${score.away ?? 0}${phase ? ` · ${phase}` : ""}`;
-    return "Match snapshot received";
-  }
-
-  if (msg.type === "delta") {
-    const eventType = d.event_type as string | undefined;
-    const detail = d.detail as string | undefined;
-    const scoreHome = d.score_home as number | undefined;
-    const scoreAway = d.score_away as number | undefined;
-    const parts: string[] = [];
-    if (eventType) parts.push(eventType.replace(/_/g, " "));
-    if (detail) parts.push(detail);
-    if (scoreHome != null && scoreAway != null) parts.push(`${scoreHome}-${scoreAway}`);
-    return parts.join(" · ") || "Match update";
-  }
-
-  if (msg.type === "state") {
-    const phase = d.phase as string | undefined;
-    const clock = d.clock as string | undefined;
-    const parts: string[] = ["State update"];
-    if (phase) parts.push(phase);
-    if (clock) parts.push(clock);
-    return parts.join(" · ");
-  }
-
-  return msg.type;
-}
-
-function formatFeedTime(ts: string | undefined): string {
-  if (!ts) return "";
-  try {
-    const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  } catch {
-    return "";
-  }
-}
-
-function FeedTab({ messages, connected }: { messages: WSMessage[]; connected: boolean }) {
-  const feedEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center gap-1.5 text-[11px] text-text-tertiary">
-        <div
-          className={`h-1.5 w-1.5 rounded-full ${
-            connected ? "animate-pulse bg-accent-green" : "bg-accent-red"
-          }`}
-        />
-        {connected ? "Connected" : "Disconnected"} · {messages.length} messages
-      </div>
-      {messages.length === 0 ? (
-        <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
-          <div className="mb-2 text-2xl">📡</div>
-          <div className="text-[13px] text-text-tertiary">
-            {connected ? "Listening for live updates..." : "Not connected"}
-          </div>
-        </div>
-      ) : (
-        <div className="max-h-[350px] space-y-1.5 overflow-y-auto rounded-xl border border-surface-border bg-surface-card p-2">
-          {messages.slice(-30).map((msg, i) => {
-            const icon = FEED_ICONS[msg.type] ?? "•";
-            const color = FEED_COLORS[msg.type] ?? "#5b6b7b";
-            const summary = parseFeedSummary(msg);
-            const time = formatFeedTime(msg.ts);
-
-            return (
-              <div
-                key={i}
-                className="flex items-start gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-surface-hover/30"
-                style={{ animation: `fadeIn 0.2s ease ${i * 0.03}s both` }}
-              >
-                <span className="mt-0.5 shrink-0 text-sm">{icon}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide"
-                      style={{ color, background: `${color}15` }}
-                    >
-                      {msg.type}
-                    </span>
-                    {time && (
-                      <span className="text-[10px] text-text-muted">{time}</span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-text-secondary">
-                    {summary}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={feedEndRef} />
         </div>
       )}
     </div>
