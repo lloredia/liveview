@@ -211,6 +211,7 @@ function HomeContent() {
                   onLeagueSelect={handleLeagueSelect}
                   pinnedIds={pinnedIds}
                   onTogglePin={handleTogglePin}
+                  headerLiveCount={totalLive}
                 />
               )}
             </div>

@@ -83,6 +83,8 @@ interface TodayViewProps {
   onLeagueSelect: (leagueId: string) => void;
   pinnedIds?: string[];
   onTogglePin?: (matchId: string) => void;
+  /** When viewing today, use this for the Live tab count so it matches the header. */
+  headerLiveCount?: number;
 }
 
 export function TodayView({
@@ -90,6 +92,7 @@ export function TodayView({
   onLeagueSelect,
   pinnedIds = [],
   onTogglePin,
+  headerLiveCount,
 }: TodayViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [filter, setFilter] = useState<MatchFilter>("all");
@@ -236,12 +239,12 @@ export function TodayView({
         })}
       </div>
 
-      {/* Filter tabs */}
+      {/* Filter tabs: when viewing today, use header live count so it matches the header */}
       <div className="mb-4 flex border-b border-surface-border">
         {(
           [
             { key: "all", label: "All", count: data?.total_matches },
-            { key: "live", label: "Live", count: data?.live },
+            { key: "live", label: "Live", count: (dateStr === formatDateISO(new Date()) && headerLiveCount !== undefined) ? headerLiveCount : data?.live },
             { key: "scheduled", label: "Upcoming", count: data?.scheduled },
             { key: "finished", label: "Finished", count: data?.finished },
           ] as const
