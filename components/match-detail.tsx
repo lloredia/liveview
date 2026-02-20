@@ -367,6 +367,14 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
     key: `timeline-${matchId}`,
   });
 
+  const playsForTab = useMemo(() => {
+    if (espnData?.plays?.length) return espnData.plays;
+    if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
+    return backendEventsToPlays(matchData?.recent_events || []);
+  }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
+
+  const playByPlayLoading = espnLoading && !espnData && playsForTab.length === 0;
+
   if (matchLoading && !matchData) {
     return (
       <div className="flex justify-center py-16">
@@ -392,14 +400,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   const effectiveScoreAway = espnLive ? espnLive.awayScore : state?.score_away ?? 0;
   const live = isLive(effectivePhase);
   const color = phaseColor(effectivePhase);
-
-  const playsForTab = useMemo(() => {
-    if (espnData?.plays?.length) return espnData.plays;
-    if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
-    return backendEventsToPlays(matchData?.recent_events || []);
-  }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
-
-  const playByPlayLoading = espnLoading && !espnData && playsForTab.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
