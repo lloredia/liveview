@@ -7,7 +7,8 @@ and registers provider mappings so the scheduler can start polling.
 
 Usage:
     python seed.py                    # Seed today only
-    python seed.py --days-ahead 3     # Seed today + next 3 days
+    python seed.py --days-ahead 3      # Seed today + next 3 days
+    python seed.py --days-back 7      # Seed last 7 days (backfill past games)
     python seed.py --date 2026-02-20  # Seed a specific date
 """
 from __future__ import annotations
@@ -167,6 +168,8 @@ async def seed() -> None:
     parser = argparse.ArgumentParser(description="Seed LiveView database from ESPN")
     parser.add_argument("--days-ahead", type=int, default=0,
                         help="Number of days ahead to seed (0 = today only)")
+    parser.add_argument("--days-back", type=int, default=0,
+                        help="Number of days back to seed for backfilling past games")
     parser.add_argument("--date", type=str, default=None,
                         help="Specific date to seed (YYYY-MM-DD)")
     args = parser.parse_args()
@@ -195,7 +198,9 @@ async def seed() -> None:
             dates = [date.fromisoformat(args.date)]
         else:
             today = datetime.now(timezone.utc).date()
-            dates = [today + timedelta(days=d) for d in range(args.days_ahead + 1)]
+            start = today - timedelta(days=args.days_back)
+            end = today + timedelta(days=args.days_ahead)
+            dates = [start + timedelta(days=d) for d in range((end - start).days + 1)]
 
         for target_date in dates:
             print(f"  --- {target_date.isoformat()} ---")
