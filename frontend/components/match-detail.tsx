@@ -629,6 +629,8 @@ function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
         if (k === "period_scores") return false;
         const h = homeStats?.stats?.[k];
         const a = awayStats?.stats?.[k];
+        if (h != null && typeof h === "object") return false;
+        if (a != null && typeof a === "object") return false;
         return h != null || a != null;
       })
     : [];
