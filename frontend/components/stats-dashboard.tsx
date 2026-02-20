@@ -14,7 +14,8 @@ interface LeaderEntry {
   team: string;
   teamLogo: string;
   value: string;
-  highlight?: boolean;
+  category: string;
+  headshot?: string;
 }
 
 interface TeamFormEntry {
@@ -22,21 +23,26 @@ interface TeamFormEntry {
   name: string;
   logo: string;
   form: string[];
-  points: number;
-  gf: number;
-  ga: number;
-  gd: number;
+  wins: number;
+  losses: number;
+  pct: string;
+  pointsFor: number;
+  pointsAgainst: number;
+  diff: number;
+  record: string;
 }
 
 interface LeagueStats {
   leaders: LeaderEntry[];
+  leaderCategories: string[];
   teamForm: TeamFormEntry[];
-  avgGoals: number;
-  totalGoals: number;
+  totalPoints: number;
   totalMatches: number;
+  avgPointsPerGame: number;
   homeWinPct: number;
   awayWinPct: number;
   drawPct: number;
+  sport: string;
 }
 
 const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
@@ -44,7 +50,6 @@ const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
   WNBA: { sport: "basketball", slug: "wnba" },
   NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
   NCAAW: { sport: "basketball", slug: "womens-college-basketball" },
-  NFL: { sport: "football", slug: "nfl" },
   NHL: { sport: "hockey", slug: "nhl" },
   MLB: { sport: "baseball", slug: "mlb" },
   MLS: { sport: "soccer", slug: "usa.1" },
@@ -56,16 +61,31 @@ const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
   "Champions League": { sport: "soccer", slug: "uefa.champions" },
 };
 
-function formBadge(result: string): string {
-  if (result === "W") return "bg-accent-green/20 text-accent-green";
-  if (result === "L") return "bg-accent-red/20 text-accent-red";
-  return "bg-accent-amber/20 text-accent-amber";
+function sportLabel(sport: string, key: "points" | "ppg" | "matches") {
+  if (key === "points") {
+    if (sport === "soccer") return "Total Goals";
+    if (sport === "baseball") return "Total Runs";
+    return "Total Points";
+  }
+  if (key === "ppg") {
+    if (sport === "soccer") return "Goals / Game";
+    if (sport === "baseball") return "Runs / Game";
+    return "Points / Game";
+  }
+  return "Completed";
+}
+
+function sportIcon(sport: string) {
+  if (sport === "basketball") return "🏀";
+  if (sport === "hockey") return "🏒";
+  if (sport === "baseball") return "⚾";
+  return "⚽";
 }
 
 export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardProps) {
   const [stats, setStats] = useState<LeagueStats | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeView, setActiveView] = useState<"leaders" | "form" | "overview">("leaders");
+  const [activeLeaderCat, setActiveLeaderCat] = useState(0);
 
   useEffect(() => {
     const info = LEAGUE_ESPN[leagueName] || LEAGUE_ESPN[leagueShortName];
@@ -73,24 +93,19 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
 
     setLoading(true);
     setStats(null);
+    setActiveLeaderCat(0);
 
     (async () => {
       try {
         const { sport, slug } = info;
-        const prefix =
-          sport === "soccer" ? "soccer/" + slug : sport + "/" + slug;
+        const prefix = sport === "soccer" ? "soccer/" + slug : sport + "/" + slug;
 
-        // Fetch scoreboard for match stats
-        const sbUrl =
-          "https://site.api.espn.com/apis/site/v2/sports/" +
-          prefix +
-          "/scoreboard";
+        const sbUrl = "https://site.api.espn.com/apis/site/v2/sports/" + prefix + "/scoreboard";
         const sbRes = await fetch(sbUrl);
         const sbData = sbRes.ok ? await sbRes.json() : { events: [] };
         const events: any[] = sbData.events || [];
 
-        // Calculate overview stats from events
-        let totalGoals = 0;
+        let totalPoints = 0;
         let totalMatches = 0;
         let homeWins = 0;
         let awayWins = 0;
@@ -99,8 +114,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
         for (const evt of events) {
           const comp = evt.competitions?.[0];
           if (!comp) continue;
-          const status = comp.status?.type?.completed;
-          if (!status) continue;
+          if (!comp.status?.type?.completed) continue;
 
           totalMatches++;
           const competitors = comp.competitors || [];
@@ -110,165 +124,137 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
           if (home && away) {
             const hs = parseInt(home.score || "0", 10);
             const as_ = parseInt(away.score || "0", 10);
-            totalGoals += hs + as_;
-
+            totalPoints += hs + as_;
             if (hs > as_) homeWins++;
             else if (as_ > hs) awayWins++;
             else draws++;
           }
         }
 
-        const avgGoals = totalMatches > 0 ? totalGoals / totalMatches : 0;
-        const homeWinPct =
-          totalMatches > 0 ? (homeWins / totalMatches) * 100 : 0;
-        const awayWinPct =
-          totalMatches > 0 ? (awayWins / totalMatches) * 100 : 0;
-        const drawPct =
-          totalMatches > 0 ? (draws / totalMatches) * 100 : 0;
+        const avgPointsPerGame = totalMatches > 0 ? totalPoints / totalMatches : 0;
+        const homeWinPct = totalMatches > 0 ? (homeWins / totalMatches) * 100 : 0;
+        const awayWinPct = totalMatches > 0 ? (awayWins / totalMatches) * 100 : 0;
+        const drawPct = totalMatches > 0 ? (draws / totalMatches) * 100 : 0;
 
-        // Fetch standings for form data
-        const standUrl =
-          "https://site.api.espn.com/apis/v2/sports/" +
-          prefix +
-          "/standings";
+        // Leaders from scoreboard
+        const leaders: LeaderEntry[] = [];
+        const leaderCategories: string[] = [];
+
+        // For all sports, try to get leaders from completed games
+        for (const evt of events) {
+          const comp = evt.competitions?.[0];
+          if (!comp) continue;
+          const competitors = comp.competitors || [];
+          for (const c of competitors) {
+            const teamLeaders = c.leaders || [];
+            for (const cat of teamLeaders) {
+              const catName = cat.displayName || cat.name || "";
+              if (!catName || catName === "Rating") continue;
+              if (!leaderCategories.includes(catName)) leaderCategories.push(catName);
+
+              for (const l of cat.leaders || []) {
+                const ath = l.athlete || {};
+                leaders.push({
+                  rank: 0,
+                  name: ath.displayName || ath.fullName || "Unknown",
+                  team: ath.team?.abbreviation || c.team?.abbreviation || "",
+                  teamLogo: c.team?.logo || ath.team?.logos?.[0]?.href || "",
+                  value: l.displayValue || String(l.value || ""),
+                  category: catName,
+                  headshot: ath.headshot || "",
+                });
+              }
+            }
+          }
+        }
+
+        // Deduplicate and rank by value within each category
+        const seenLeaders = new Map<string, LeaderEntry>();
+        for (const l of leaders) {
+          const key = `${l.category}:${l.name}`;
+          const existing = seenLeaders.get(key);
+          if (!existing || parseFloat(l.value) > parseFloat(existing.value)) {
+            seenLeaders.set(key, l);
+          }
+        }
+
+        const uniqueLeaders = Array.from(seenLeaders.values());
+        for (const cat of leaderCategories) {
+          const catLeaders = uniqueLeaders
+            .filter((l) => l.category === cat)
+            .sort((a, b) => parseFloat(b.value) - parseFloat(a.value));
+          catLeaders.forEach((l, i) => (l.rank = i + 1));
+        }
+
+        // Team form from standings
+        const standUrl = "https://site.api.espn.com/apis/v2/sports/" + prefix + "/standings";
         const standRes = await fetch(standUrl);
         const standData = standRes.ok ? await standRes.json() : null;
 
         const teamForm: TeamFormEntry[] = [];
         if (standData?.children) {
           for (const group of standData.children) {
-            const entries = group.standings?.entries || [];
-            for (const entry of entries) {
+            for (const entry of group.standings?.entries || []) {
               const team = entry.team || {};
-              const entryStats = entry.stats || [];
+              const entryStats: Record<string, number> = {};
+              for (const s of entry.stats || []) {
+                entryStats[s.name] = Number(s.value) || 0;
+              }
+              const streakStr = (entry.stats || []).find(
+                (s: any) => s.name === "streak" || s.abbreviation === "STRK"
+              )?.displayValue || "";
 
-              const getStat = (abbr: string): number => {
-                const s = entryStats.find(
-                  (st: any) => st.abbreviation === abbr || st.name === abbr
-                );
-                return s ? parseFloat(s.value || "0") : 0;
-              };
+              const wins = entryStats["wins"] || entryStats["W"] || 0;
+              const losses = entryStats["losses"] || entryStats["L"] || 0;
+              const d = entryStats["ties"] || entryStats["draws"] || entryStats["D"] || 0;
+              const gp = entryStats["gamesPlayed"] || entryStats["GP"] || wins + losses + d;
+              const pf = entryStats["pointsFor"] || entryStats["PF"] || entryStats["goalsFor"] || 0;
+              const pa = entryStats["pointsAgainst"] || entryStats["PA"] || entryStats["goalsAgainst"] || 0;
+              const pct = gp > 0 ? (wins / gp) : 0;
 
-              // Extract form/streak
-              const formStr =
-                entryStats.find(
-                  (s: any) => s.name === "streak" || s.abbreviation === "STRK"
-                )?.displayValue || "";
-
-              // Build W/L form from record
-              const wins = getStat("W") || getStat("wins");
-              const losses = getStat("L") || getStat("losses");
-              const pts = getStat("PTS") || getStat("points") || wins * 3;
-              const gf =
-                getStat("GF") ||
-                getStat("pointsFor") ||
-                getStat("F") ||
-                0;
-              const ga =
-                getStat("GA") ||
-                getStat("pointsAgainst") ||
-                getStat("A") ||
-                0;
-
-              // Try to get recent form
-              const recentForm: string[] = [];
-              if (formStr) {
-                for (const ch of formStr.slice(0, 5)) {
-                  if (ch === "W" || ch === "w") recentForm.push("W");
-                  else if (ch === "L" || ch === "l") recentForm.push("L");
-                  else if (ch === "D" || ch === "d" || ch === "T" || ch === "t")
-                    recentForm.push("D");
-                }
+              const form: string[] = [];
+              for (const ch of (streakStr || "").slice(0, 5)) {
+                if ("Ww".includes(ch)) form.push("W");
+                else if ("Ll".includes(ch)) form.push("L");
+                else if ("DdTt".includes(ch)) form.push("D");
               }
 
               teamForm.push({
-                rank: teamForm.length + 1,
+                rank: 0,
                 name: team.displayName || team.name || "",
                 logo: team.logos?.[0]?.href || "",
-                form: recentForm,
-                points: pts,
-                gf: gf,
-                ga: ga,
-                gd: gf - ga,
+                form,
+                wins,
+                losses,
+                pct: pct.toFixed(3).replace(/^0/, ""),
+                pointsFor: pf,
+                pointsAgainst: pa,
+                diff: pf - pa,
+                record: sport === "soccer"
+                  ? `${wins}-${d}-${losses}`
+                  : `${wins}-${losses}`,
               });
             }
           }
         }
 
-        // Sort by points descending
-        teamForm.sort((a, b) => b.points - a.points);
+        teamForm.sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct) || b.diff - a.diff);
         teamForm.forEach((t, i) => (t.rank = i + 1));
 
-        // Fetch leaders
-        const leaders: LeaderEntry[] = [];
-
-        // Try athlete leaders endpoint
-        const isSoccer = sport === "soccer";
-        if (!isSoccer) {
-          // For US sports, get leaders from scoreboard data
-          if (sbData.leagues?.[0]?.leaders) {
-            for (const cat of sbData.leagues[0].leaders) {
-              const catLeaders = cat.leaders || [];
-              for (let i = 0; i < Math.min(catLeaders.length, 5); i++) {
-                const l = catLeaders[i];
-                const athlete = l.athlete || {};
-                leaders.push({
-                  rank: i + 1,
-                  name: athlete.displayName || athlete.fullName || "Unknown",
-                  team: athlete.team?.abbreviation || "",
-                  teamLogo: athlete.team?.logos?.[0]?.href || "",
-                  value: l.displayValue || l.value || "",
-                  highlight: i === 0,
-                });
-              }
-              if (leaders.length >= 10) break;
-            }
-          }
-        } else {
-          // For soccer, try season leaders
-          const leadUrl =
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/" +
-            slug +
-            "/leaders";
-          try {
-            const leadRes = await fetch(leadUrl);
-            if (leadRes.ok) {
-              const leadData = await leadRes.json();
-              const cats = leadData.leaders || leadData.categories || [];
-              for (const cat of cats) {
-                const entries = cat.leaders || cat.entries || [];
-                for (let i = 0; i < Math.min(entries.length, 10); i++) {
-                  const e = entries[i];
-                  const ath = e.athlete || e.player || {};
-                  leaders.push({
-                    rank: i + 1,
-                    name: ath.displayName || ath.fullName || "Unknown",
-                    team: ath.team?.abbreviation || ath.teamName || "",
-                    teamLogo: ath.team?.logos?.[0]?.href || "",
-                    value: e.displayValue || String(e.value || ""),
-                    highlight: i === 0,
-                  });
-                }
-                break; // Just top scorers
-              }
-            }
-          } catch {
-            // Leaders optional
-          }
-        }
-
         setStats({
-          leaders,
+          leaders: uniqueLeaders,
+          leaderCategories,
           teamForm: teamForm.slice(0, 20),
-          avgGoals,
-          totalGoals,
+          totalPoints,
           totalMatches,
+          avgPointsPerGame,
           homeWinPct,
           awayWinPct,
           drawPct,
+          sport,
         });
       } catch {
-        // Stats are optional
+        // Stats optional
       }
       setLoading(false);
     })();
@@ -276,335 +262,331 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-xl border border-surface-border bg-surface-card p-4">
+              <div className="mb-3 h-2 w-14 animate-pulse rounded bg-surface-hover" />
+              <div className="h-6 w-16 animate-pulse rounded bg-surface-hover" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+          <div className="mb-3 h-3 w-32 animate-pulse rounded bg-surface-hover" />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="mb-3 flex items-center gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-full bg-surface-hover" />
+              <div className="flex-1">
+                <div className="mb-1 h-3 w-24 animate-pulse rounded bg-surface-hover" />
+                <div className="h-2 w-16 animate-pulse rounded bg-surface-hover" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!stats) {
     return (
-      <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
-        <div className="mb-2 text-2xl">📊</div>
-        <div className="text-[13px] text-text-tertiary">
-          Stats not available for this league
-        </div>
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">📊</div>
+        <div className="text-[14px] font-semibold text-text-secondary">No Stats Available</div>
+        <div className="mt-1 text-[12px] text-text-muted">Check back when games are in progress</div>
       </div>
     );
   }
 
+  const hasDraw = stats.sport === "soccer";
+  const catLeaders = stats.leaderCategories.length > 0
+    ? stats.leaders.filter((l) => l.category === stats.leaderCategories[activeLeaderCat]).slice(0, 10)
+    : [];
+
   return (
-    <div className="animate-fade-in">
-      {/* Overview cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Matches" value={String(stats.totalMatches)} icon="🏟" />
-        <StatCard label="Total Goals" value={String(stats.totalGoals)} icon="⚽" />
-        <StatCard
-          label="Goals/Match"
-          value={stats.avgGoals.toFixed(1)}
-          icon="📈"
+    <div className="animate-fade-in space-y-4">
+      {/* Hero stats row */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <HeroCard
+          label={sportLabel(stats.sport, "matches")}
+          value={String(stats.totalMatches)}
+          accent="blue"
         />
-        <StatCard
+        <HeroCard
+          label={sportLabel(stats.sport, "ppg")}
+          value={stats.avgPointsPerGame.toFixed(1)}
+          accent="green"
+        />
+        <HeroCard
           label="Home Win %"
           value={stats.homeWinPct.toFixed(0) + "%"}
-          icon="🏠"
+          accent="amber"
         />
       </div>
 
-      {/* Win distribution bar */}
+      {/* Result distribution */}
       {stats.totalMatches > 0 && (
-        <div className="mb-6 overflow-hidden rounded-xl border border-surface-border bg-surface-card p-4">
-          <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-            Result Distribution
-          </div>
-          <div className="flex h-6 overflow-hidden rounded-full">
-            <div
-              className="flex items-center justify-center bg-accent-green/80 text-[9px] font-bold text-white transition-all"
-              style={{ width: stats.homeWinPct + "%" }}
-              title={"Home wins: " + stats.homeWinPct.toFixed(1) + "%"}
-            >
-              {stats.homeWinPct > 10 ? "H " + stats.homeWinPct.toFixed(0) + "%" : ""}
-            </div>
-            <div
-              className="flex items-center justify-center bg-accent-amber/80 text-[9px] font-bold text-white transition-all"
-              style={{ width: stats.drawPct + "%" }}
-              title={"Draws: " + stats.drawPct.toFixed(1) + "%"}
-            >
-              {stats.drawPct > 10 ? "D " + stats.drawPct.toFixed(0) + "%" : ""}
-            </div>
-            <div
-              className="flex items-center justify-center bg-accent-blue/80 text-[9px] font-bold text-white transition-all"
-              style={{ width: stats.awayWinPct + "%" }}
-              title={"Away wins: " + stats.awayWinPct.toFixed(1) + "%"}
-            >
-              {stats.awayWinPct > 10 ? "A " + stats.awayWinPct.toFixed(0) + "%" : ""}
-            </div>
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-text-muted">
-            <span>🟢 Home</span>
-            <span>🟡 Draw</span>
-            <span>🔵 Away</span>
-          </div>
-        </div>
-      )}
-
-      {/* Sub-tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl border border-surface-border bg-surface-card p-1">
-        {(["leaders", "form", "overview"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setActiveView(v)}
-            className={
-              "flex-1 rounded-lg py-2 text-[12px] font-semibold uppercase tracking-wider transition-all " +
-              (activeView === v
-                ? "bg-surface-hover text-text-primary shadow-sm"
-                : "text-text-tertiary hover:text-text-secondary")
-            }
-          >
-            {v === "leaders"
-              ? "🏆 Leaders"
-              : v === "form"
-                ? "📋 Form"
-                : "📊 Overview"}
-          </button>
-        ))}
-      </div>
-
-      {/* Leaders */}
-      {activeView === "leaders" && (
         <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-          {stats.leaders.length === 0 ? (
-            <div className="py-8 text-center text-[12px] text-text-muted">
-              Leader data not available for this league
+          <div className="px-4 py-3">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+              Result Distribution
             </div>
-          ) : (
-            stats.leaders.map((l, i) => (
+            <div className="flex h-3 overflow-hidden rounded-full bg-surface-hover/50">
               <div
-                key={l.name + i}
-                className={
-                  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover/30 " +
-                  (i < stats.leaders.length - 1
-                    ? "border-b border-surface-border"
-                    : "") +
-                  (l.highlight ? " bg-accent-amber/[0.03]" : "")
-                }
-              >
-                <span
-                  className={
-                    "min-w-[24px] text-center font-mono text-[12px] font-bold " +
-                    (l.rank <= 3 ? "text-accent-amber" : "text-text-dim")
-                  }
-                >
-                  {l.rank}
-                </span>
-                {l.teamLogo && (
-                  <TeamLogo url={l.teamLogo} name={l.team} size={20} />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-text-primary">
-                    {l.name}
-                  </div>
-                  <div className="text-[10px] text-text-muted">{l.team}</div>
+                className="rounded-l-full transition-all duration-500"
+                style={{
+                  width: `${stats.homeWinPct}%`,
+                  background: "linear-gradient(90deg, #059669, #00E676)",
+                }}
+              />
+              {hasDraw && (
+                <div
+                  className="transition-all duration-500"
+                  style={{
+                    width: `${stats.drawPct}%`,
+                    background: "linear-gradient(90deg, #d97706, #FFD740)",
+                  }}
+                />
+              )}
+              <div
+                className="rounded-r-full transition-all duration-500"
+                style={{
+                  width: `${stats.awayWinPct}%`,
+                  background: "linear-gradient(90deg, #3b82f6, #448AFF)",
+                }}
+              />
+            </div>
+            <div className="mt-2.5 flex items-center justify-between text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-accent-green" />
+                <span className="font-semibold text-text-secondary">Home</span>
+                <span className="font-mono font-bold text-text-primary">{stats.homeWinPct.toFixed(0)}%</span>
+              </div>
+              {hasDraw && (
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-accent-amber" />
+                  <span className="font-semibold text-text-secondary">Draw</span>
+                  <span className="font-mono font-bold text-text-primary">{stats.drawPct.toFixed(0)}%</span>
                 </div>
-                <span className="font-mono text-sm font-bold text-accent-green">
-                  {l.value}
-                </span>
+              )}
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-accent-blue" />
+                <span className="font-semibold text-text-secondary">Away</span>
+                <span className="font-mono font-bold text-text-primary">{stats.awayWinPct.toFixed(0)}%</span>
               </div>
-            ))
-          )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Form table */}
-      {activeView === "form" && (
+      {/* Leaders section */}
+      {stats.leaderCategories.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-          {stats.teamForm.length === 0 ? (
-            <div className="py-8 text-center text-[12px] text-text-muted">
-              Form data not available
+          <div className="border-b border-surface-border px-4 py-3">
+            <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+              Game Leaders
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="border-b border-surface-border text-[10px] font-bold uppercase tracking-wider text-text-dim">
-                    <th className="px-3 py-2.5 text-left">#</th>
-                    <th className="px-3 py-2.5 text-left">Team</th>
-                    <th className="px-3 py-2.5 text-center">Pts</th>
-                    <th className="px-3 py-2.5 text-center">GF</th>
-                    <th className="px-3 py-2.5 text-center">GA</th>
-                    <th className="px-3 py-2.5 text-center">GD</th>
-                    <th className="px-3 py-2.5 text-center">Form</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.teamForm.map((t, i) => (
-                    <tr
-                      key={t.name}
-                      className={
-                        "transition-colors hover:bg-surface-hover/30 " +
-                        (i < stats.teamForm.length - 1
-                          ? "border-b border-surface-border"
-                          : "")
-                      }
-                    >
-                      <td className="px-3 py-2.5 font-mono font-bold text-text-dim">
-                        {t.rank}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <TeamLogo url={t.logo} name={t.name} size={18} />
-                          <span className="truncate font-medium text-text-primary">
-                            {t.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-center font-mono font-bold text-text-primary">
-                        {t.points}
-                      </td>
-                      <td className="px-3 py-2.5 text-center font-mono text-text-secondary">
-                        {t.gf}
-                      </td>
-                      <td className="px-3 py-2.5 text-center font-mono text-text-secondary">
-                        {t.ga}
-                      </td>
-                      <td
-                        className={
-                          "px-3 py-2.5 text-center font-mono font-bold " +
-                          (t.gd > 0
-                            ? "text-accent-green"
-                            : t.gd < 0
-                              ? "text-accent-red"
-                              : "text-text-muted")
-                        }
-                      >
-                        {t.gd > 0 ? "+" : ""}
-                        {t.gd}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center justify-center gap-0.5">
-                          {t.form.length > 0
-                            ? t.form.map((f, fi) => (
-                                <span
-                                  key={fi}
-                                  className={
-                                    "flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold " +
-                                    formBadge(f)
-                                  }
-                                >
-                                  {f}
-                                </span>
-                              ))
-                            : <span className="text-text-dim">—</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {stats.leaderCategories.map((cat, i) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveLeaderCat(i)}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                    i === activeLeaderCat
+                      ? "bg-accent-blue/10 text-accent-blue ring-1 ring-accent-blue/20"
+                      : "bg-surface-hover/40 text-text-muted hover:text-text-secondary"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Top leader highlight */}
+          {catLeaders[0] && (
+            <div className="flex items-center gap-4 border-b border-surface-border bg-gradient-to-r from-accent-blue/[0.04] to-transparent px-4 py-4">
+              {catLeaders[0].headshot ? (
+                <img
+                  src={catLeaders[0].headshot}
+                  alt={catLeaders[0].name}
+                  className="h-14 w-14 rounded-full border-2 border-accent-blue/20 object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover text-xl">
+                  {sportIcon(stats.sport)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-bold text-text-primary">
+                  {catLeaders[0].name}
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                  {catLeaders[0].teamLogo && (
+                    <TeamLogo url={catLeaders[0].teamLogo} name={catLeaders[0].team} size={14} />
+                  )}
+                  {catLeaders[0].team}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-mono text-2xl font-black text-accent-blue">
+                  {catLeaders[0].value}
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                  {stats.leaderCategories[activeLeaderCat]}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Remaining leaders */}
+          {catLeaders.slice(1).map((l, i) => (
+            <div
+              key={`${l.name}-${i}`}
+              className={`flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover/30 ${
+                i < catLeaders.length - 2 ? "border-b border-surface-border/40" : ""
+              }`}
+            >
+              <span className={`min-w-[20px] text-center font-mono text-[11px] font-bold ${
+                l.rank <= 3 ? "text-accent-amber" : "text-text-dim"
+              }`}>
+                {l.rank}
+              </span>
+              {l.headshot ? (
+                <img
+                  src={l.headshot}
+                  alt={l.name}
+                  className="h-8 w-8 rounded-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : l.teamLogo ? (
+                <TeamLogo url={l.teamLogo} name={l.team} size={24} />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-semibold text-text-primary">{l.name}</div>
+                <div className="text-[10px] text-text-muted">{l.team}</div>
+              </div>
+              <span className="font-mono text-[14px] font-bold text-text-primary">
+                {l.value}
+              </span>
+            </div>
+          ))}
+
+          {catLeaders.length === 0 && (
+            <div className="py-6 text-center text-[12px] text-text-muted">
+              No leader data for today&apos;s games
             </div>
           )}
         </div>
       )}
 
-      {/* Overview — goals per matchday chart */}
-      {activeView === "overview" && (
-        <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card p-4">
-          <div className="mb-4 text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
-            Season Summary
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <MiniStat label="Avg Goals/Match" value={stats.avgGoals.toFixed(2)} />
-            <MiniStat label="Total Goals" value={String(stats.totalGoals)} />
-            <MiniStat label="Matches Played" value={String(stats.totalMatches)} />
-            <MiniStat
-              label="Most Common Result"
-              value={
-                stats.homeWinPct >= stats.awayWinPct && stats.homeWinPct >= stats.drawPct
-                  ? "Home Win"
-                  : stats.awayWinPct >= stats.drawPct
-                    ? "Away Win"
-                    : "Draw"
-              }
-            />
-          </div>
-
-          {stats.teamForm.length > 0 && (
-            <div className="mt-5">
-              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-dim">
-                Top Scoring Teams
-              </div>
-              {stats.teamForm
-                .sort((a, b) => b.gf - a.gf)
-                .slice(0, 5)
-                .map((t, i) => (
-                  <div
-                    key={t.name}
-                    className="mb-2 flex items-center gap-2"
-                  >
-                    <TeamLogo url={t.logo} name={t.name} size={16} />
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-text-secondary">
-                      {t.name}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="h-2 rounded-full bg-accent-green/60"
-                        style={{
-                          width:
-                            Math.max(
-                              (t.gf /
-                                Math.max(
-                                  ...stats.teamForm.map((x) => x.gf),
-                                  1
-                                )) *
-                                100,
-                              8
-                            ) + "px",
-                        }}
-                      />
-                      <span className="font-mono text-[11px] font-bold text-accent-green">
-                        {t.gf}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+      {/* Team rankings */}
+      {stats.teamForm.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+          <div className="border-b border-surface-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+              Team Rankings
             </div>
-          )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-surface-border text-[9px] font-bold uppercase tracking-wider text-text-dim">
+                  <th className="w-[32px] px-2 py-2.5 text-center">#</th>
+                  <th className="min-w-[140px] px-3 py-2.5 text-left">Team</th>
+                  <th className="px-2 py-2.5 text-center">Record</th>
+                  <th className="px-2 py-2.5 text-center">Win%</th>
+                  <th className="px-2 py-2.5 text-center">{stats.sport === "soccer" ? "GD" : "Diff"}</th>
+                  {stats.teamForm[0]?.form.length > 0 && (
+                    <th className="px-2 py-2.5 text-center">Form</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {stats.teamForm.map((t, i) => (
+                  <tr
+                    key={t.name}
+                    className={`transition-colors hover:bg-surface-hover/30 ${
+                      i < stats.teamForm.length - 1 ? "border-b border-surface-border/40" : ""
+                    }`}
+                  >
+                    <td className="px-2 py-2.5 text-center">
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${
+                        t.rank <= 3 ? "text-accent-green" : "text-text-dim"
+                      }`}>
+                        {t.rank}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <TeamLogo url={t.logo} name={t.name} size={18} />
+                        <span className="truncate font-medium text-text-primary">{t.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2.5 text-center font-mono text-text-secondary">
+                      {t.record}
+                    </td>
+                    <td className="px-2 py-2.5 text-center font-mono font-bold text-text-primary">
+                      {t.pct}
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <span className={`font-mono font-semibold ${
+                        t.diff > 0 ? "text-accent-green" : t.diff < 0 ? "text-accent-red" : "text-text-muted"
+                      }`}>
+                        {t.diff > 0 ? "+" : ""}{t.diff}
+                      </span>
+                    </td>
+                    {t.form.length > 0 && (
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center justify-center gap-0.5">
+                          {t.form.map((f, fi) => (
+                            <span
+                              key={fi}
+                              className={`flex h-[18px] w-[18px] items-center justify-center rounded text-[8px] font-bold ${
+                                f === "W"
+                                  ? "bg-accent-green/15 text-accent-green"
+                                  : f === "L"
+                                    ? "bg-accent-red/15 text-accent-red"
+                                    : "bg-accent-amber/15 text-accent-amber"
+                              }`}
+                            >
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-}) {
+function HeroCard({ label, value, accent }: { label: string; value: string; accent: "blue" | "green" | "amber" }) {
+  const colors = {
+    blue: "from-accent-blue/8 to-transparent border-accent-blue/15",
+    green: "from-accent-green/8 to-transparent border-accent-green/15",
+    amber: "from-accent-amber/8 to-transparent border-accent-amber/15",
+  };
+  const valueColors = {
+    blue: "text-accent-blue",
+    green: "text-accent-green",
+    amber: "text-accent-amber",
+  };
+
   return (
-    <div className="rounded-xl border border-surface-border bg-surface-card p-3.5 text-center transition-colors hover:bg-surface-hover/30">
-      <div className="mb-1 text-lg">{icon}</div>
-      <div className="font-mono text-xl font-black text-text-primary">
-        {value}
-      </div>
-      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+    <div className={`rounded-xl border bg-gradient-to-br p-4 ${colors[accent]}`}>
+      <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.12em] text-text-muted">
         {label}
       </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-hover/30 p-3">
-      <div className="font-mono text-lg font-bold text-text-primary">
+      <div className={`font-mono text-2xl font-black ${valueColors[accent]}`}>
         {value}
       </div>
-      <div className="text-[10px] text-text-muted">{label}</div>
     </div>
   );
 }
