@@ -22,6 +22,7 @@ from shared.utils.metrics import (
     start_metrics_server,
 )
 from shared.utils.redis_manager import RedisManager
+from shared.utils.health_server import start_health_server
 
 from ingest.normalization.normalizer import NormalizationService
 from ingest.providers.base import BaseProvider
@@ -237,6 +238,7 @@ async def main() -> None:
     settings = get_settings()
     setup_logging("ingest")
     start_metrics_server(9091)
+    start_health_server("ingest")  # GET /health on PORT for Railway healthcheck
 
     redis = RedisManager(settings)
     db = DatabaseManager(settings)

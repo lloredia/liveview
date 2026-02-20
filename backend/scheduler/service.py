@@ -29,6 +29,7 @@ from shared.models.orm import (
     TeamORM,
 )
 from shared.utils.database import DatabaseManager
+from shared.utils.health_server import start_health_server
 from shared.utils.logging import get_logger, setup_logging
 from shared.utils.metrics import (
     LIVE_MATCHES,
@@ -722,6 +723,7 @@ async def main() -> None:
     settings = get_settings()
     setup_logging("scheduler")
     start_metrics_server(9092)
+    start_health_server("scheduler")
 
     redis = RedisManager(settings)
     db = DatabaseManager(settings)

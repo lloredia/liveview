@@ -29,6 +29,7 @@ from shared.models.orm import (
 )
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
+from shared.utils.health_server import start_health_server
 from shared.utils.metrics import SYNTHETIC_EVENTS, start_metrics_server
 from shared.utils.redis_manager import RedisManager
 
@@ -513,6 +514,7 @@ async def main() -> None:
     settings = get_settings()
     setup_logging("builder")
     start_metrics_server(9093)
+    start_health_server("builder")
 
     redis = RedisManager(settings)
     db = DatabaseManager(settings)
