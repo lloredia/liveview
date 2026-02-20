@@ -454,20 +454,132 @@ const STAT_LABELS: Record<string, string> = {
   era: "ERA",
 };
 
-function StatBar({ homeVal, awayVal }: { homeVal: number; awayVal: number }) {
+const HERO_STATS = new Set(["possession", "shots", "shots_on_target", "field_goal_pct", "rebounds"]);
+
+const STAT_GROUPS: { label: string; keys: string[] }[] = [
+  { label: "Attacking", keys: ["shots", "shots_on_target", "corners", "offsides", "passes", "pass_accuracy", "at_bats", "runs", "home_runs"] },
+  { label: "Shooting", keys: ["field_goal_pct", "three_point_pct", "free_throw_pct"] },
+  { label: "Defense & Discipline", keys: ["fouls", "yellow_cards", "red_cards", "steals", "blocks", "rebounds", "turnovers", "assists", "hits", "strikeouts", "walks", "era"] },
+  { label: "Special Teams", keys: ["power_plays", "penalty_minutes", "faceoff_wins"] },
+];
+
+function ComparisonBar({ homeVal, awayVal, homeLeads }: { homeVal: number; awayVal: number; homeLeads: boolean }) {
   const total = homeVal + awayVal || 1;
   const homePct = Math.round((homeVal / total) * 100);
-  const awayPct = 100 - homePct;
   return (
-    <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full">
+    <div className="relative flex h-2.5 w-full overflow-hidden rounded-full bg-surface-hover/50">
       <div
-        className="rounded-l-full bg-accent-blue transition-all duration-500"
-        style={{ width: `${homePct}%` }}
+        className="rounded-l-full transition-all duration-700 ease-out"
+        style={{
+          width: `${homePct}%`,
+          background: homeLeads
+            ? "linear-gradient(90deg, rgba(68,138,255,0.3), rgba(68,138,255,0.85))"
+            : "linear-gradient(90deg, rgba(68,138,255,0.15), rgba(68,138,255,0.45))",
+        }}
       />
       <div
-        className="rounded-r-full bg-accent-red/70 transition-all duration-500"
-        style={{ width: `${awayPct}%` }}
+        className="flex-1 rounded-r-full transition-all duration-700 ease-out"
+        style={{
+          background: !homeLeads && (homePct < 50)
+            ? "linear-gradient(90deg, rgba(255,23,68,0.85), rgba(255,23,68,0.3))"
+            : "linear-gradient(90deg, rgba(255,23,68,0.45), rgba(255,23,68,0.15))",
+        }}
       />
+      <div
+        className="absolute top-0 h-full w-px bg-surface-border-light/40"
+        style={{ left: "50%" }}
+      />
+    </div>
+  );
+}
+
+function HeroStat({
+  label,
+  homeVal,
+  awayVal,
+  homeStr,
+  awayStr,
+  suffix,
+}: {
+  label: string;
+  homeVal: number;
+  awayVal: number;
+  homeStr: string;
+  awayStr: string;
+  suffix?: string;
+}) {
+  const homeLeads = homeVal > awayVal;
+  const awayLeads = awayVal > homeVal;
+  return (
+    <div className="rounded-xl bg-surface-hover/30 px-4 py-3.5">
+      <div className="mb-2 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-text-muted">
+        {label}
+      </div>
+      <div className="mb-2.5 flex items-end justify-between">
+        <span
+          className={`font-mono text-2xl font-black transition-colors ${
+            homeLeads ? "text-accent-blue" : "text-text-primary"
+          }`}
+        >
+          {homeStr}{suffix || ""}
+        </span>
+        <span
+          className={`font-mono text-2xl font-black transition-colors ${
+            awayLeads ? "text-accent-red" : "text-text-primary"
+          }`}
+        >
+          {awayStr}{suffix || ""}
+        </span>
+      </div>
+      <ComparisonBar homeVal={homeVal} awayVal={awayVal} homeLeads={homeLeads} />
+    </div>
+  );
+}
+
+function StatRow({
+  label,
+  homeStr,
+  awayStr,
+  homeVal,
+  awayVal,
+  suffix,
+  index,
+}: {
+  label: string;
+  homeStr: string;
+  awayStr: string;
+  homeVal: number;
+  awayVal: number;
+  suffix?: string;
+  index: number;
+}) {
+  const homeLeads = homeVal > awayVal;
+  const awayLeads = awayVal > homeVal;
+  return (
+    <div
+      className="group px-4 py-3 transition-colors hover:bg-surface-hover/20"
+      style={{ animation: `fadeIn 0.3s ease ${index * 0.04}s both` }}
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <span
+          className={`min-w-[52px] text-right font-mono text-[15px] font-bold transition-colors ${
+            homeLeads ? "text-accent-blue" : "text-text-primary"
+          }`}
+        >
+          {homeStr}{suffix || ""}
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+          {label}
+        </span>
+        <span
+          className={`min-w-[52px] text-left font-mono text-[15px] font-bold transition-colors ${
+            awayLeads ? "text-accent-red" : "text-text-primary"
+          }`}
+        >
+          {awayStr}{suffix || ""}
+        </span>
+      </div>
+      <ComparisonBar homeVal={homeVal} awayVal={awayVal} homeLeads={homeLeads} />
     </div>
   );
 }
@@ -483,92 +595,164 @@ function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
   const homeStats = data?.teams?.find((t) => t.side === "home");
   const awayStats = data?.teams?.find((t) => t.side === "away");
 
-  const statKeys =
-    homeStats?.stats || awayStats?.stats
-      ? Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter(
-          (k) => {
-            const h = homeStats?.stats?.[k];
-            const a = awayStats?.stats?.[k];
-            return h != null || a != null;
-          },
-        )
-      : [];
+  const allKeys = homeStats?.stats || awayStats?.stats
+    ? Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter((k) => {
+        const h = homeStats?.stats?.[k];
+        const a = awayStats?.stats?.[k];
+        return h != null || a != null;
+      })
+    : [];
 
   if (loading && !data) {
     return (
-      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-        <div className="border-b border-surface-border px-4 py-3">
-          <div className="h-3 w-28 animate-pulse rounded bg-surface-hover" />
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          {[0, 1].map((i) => (
+            <div key={i} className="rounded-xl border border-surface-border bg-surface-card p-4">
+              <div className="mb-2 h-2 w-16 animate-pulse rounded bg-surface-hover" />
+              <div className="mb-3 h-7 w-12 animate-pulse rounded bg-surface-hover" />
+              <div className="h-2.5 w-full animate-pulse rounded-full bg-surface-hover" />
+            </div>
+          ))}
         </div>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between border-b border-surface-border px-4 py-3 last:border-0"
-          >
-            <div className="h-3 w-8 animate-pulse rounded bg-surface-hover" />
-            <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
-            <div className="h-3 w-8 animate-pulse rounded bg-surface-hover" />
-          </div>
-        ))}
+        <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between border-b border-surface-border/50 px-4 py-3.5 last:border-0">
+              <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
+              <div className="h-2 w-16 animate-pulse rounded bg-surface-hover" />
+              <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (statKeys.length === 0) {
+  if (allKeys.length === 0) {
     return (
-      <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
-        <div className="mb-2 text-2xl">📊</div>
-        <div className="text-[13px] text-text-tertiary">
-          {live ? "Stats will appear as the match progresses" : "No statistics available"}
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">📊</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">
+          {live ? "Waiting for Statistics" : "No Statistics Available"}
+        </div>
+        <div className="text-[12px] text-text-muted">
+          {live
+            ? "Stats will populate as the match progresses"
+            : "Match stats were not recorded for this game"}
         </div>
       </div>
     );
   }
+
+  const heroKeys = allKeys.filter((k) => HERO_STATS.has(k));
+  const remainingKeys = allKeys.filter((k) => !HERO_STATS.has(k));
+
+  const getStatData = (key: string) => {
+    const hRaw = homeStats?.stats?.[key];
+    const aRaw = awayStats?.stats?.[key];
+    const hStr = hRaw != null ? String(hRaw) : "—";
+    const aStr = aRaw != null ? String(aRaw) : "—";
+    const hNum = typeof hRaw === "number" ? hRaw : parseFloat(String(hRaw ?? "0")) || 0;
+    const aNum = typeof aRaw === "number" ? aRaw : parseFloat(String(aRaw ?? "0")) || 0;
+    const label = STAT_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const isPercentage = key.includes("pct") || key.includes("accuracy");
+    return { hStr, aStr, hNum, aNum, label, suffix: isPercentage ? "%" : undefined };
+  };
+
+  const groupedSections: { label: string; keys: string[] }[] = [];
+  const usedKeys = new Set<string>();
+  for (const group of STAT_GROUPS) {
+    const matchedKeys = group.keys.filter((k) => remainingKeys.includes(k));
+    if (matchedKeys.length > 0) {
+      groupedSections.push({ label: group.label, keys: matchedKeys });
+      matchedKeys.forEach((k) => usedKeys.add(k));
+    }
+  }
+  const ungrouped = remainingKeys.filter((k) => !usedKeys.has(k));
+  if (ungrouped.length > 0) {
+    groupedSections.push({ label: "Other", keys: ungrouped });
+  }
+
+  let rowIdx = 0;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-        <span className="text-[11px] font-bold text-accent-blue">
-          {homeStats?.team_name || "Home"}
+    <div className="space-y-3">
+      {/* Team header */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-accent-blue" />
+          <span className="text-[12px] font-bold text-text-primary">
+            {homeStats?.team_name || "Home"}
+          </span>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-dim">
+          Match Stats
         </span>
-        <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
-          Match Statistics
-        </h4>
-        <span className="text-[11px] font-bold text-accent-red">
-          {awayStats?.team_name || "Away"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-bold text-text-primary">
+            {awayStats?.team_name || "Away"}
+          </span>
+          <div className="h-3 w-3 rounded-full bg-accent-red/70" />
+        </div>
       </div>
-      {statKeys.map((key, i) => {
-        const hRaw = homeStats?.stats?.[key];
-        const aRaw = awayStats?.stats?.[key];
-        const hStr = hRaw != null ? String(hRaw) : "—";
-        const aStr = aRaw != null ? String(aRaw) : "—";
-        const hNum = typeof hRaw === "number" ? hRaw : parseFloat(String(hRaw ?? "0")) || 0;
-        const aNum = typeof aRaw === "number" ? aRaw : parseFloat(String(aRaw ?? "0")) || 0;
-        const label = STAT_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-        const isPercentage = key.includes("pct") || key.includes("accuracy");
 
-        return (
-          <div
-            key={key}
-            className={`px-4 py-2.5 ${i < statKeys.length - 1 ? "border-b border-surface-border" : ""}`}
-            style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both` }}
-          >
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="min-w-[48px] text-right font-mono text-sm font-bold text-text-primary">
-                {hStr}{isPercentage && hRaw != null ? "%" : ""}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                {label}
-              </span>
-              <span className="min-w-[48px] text-left font-mono text-sm font-bold text-text-primary">
-                {aStr}{isPercentage && aRaw != null ? "%" : ""}
-              </span>
-            </div>
-            <StatBar homeVal={hNum} awayVal={aNum} />
+      {/* Hero stats */}
+      {heroKeys.length > 0 && (
+        <div className={`grid gap-2.5 ${heroKeys.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+          {heroKeys.map((key) => {
+            const s = getStatData(key);
+            return (
+              <HeroStat
+                key={key}
+                label={s.label}
+                homeVal={s.hNum}
+                awayVal={s.aNum}
+                homeStr={s.hStr}
+                awayStr={s.aStr}
+                suffix={s.suffix}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Grouped stats */}
+      {groupedSections.map((section) => (
+        <div key={section.label} className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+          <div className="border-b border-surface-border bg-surface-hover/25 px-4 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+              {section.label}
+            </span>
           </div>
-        );
-      })}
+          {section.keys.map((key, i) => {
+            const s = getStatData(key);
+            const idx = rowIdx++;
+            return (
+              <div
+                key={key}
+                className={i < section.keys.length - 1 ? "border-b border-surface-border/40" : ""}
+              >
+                <StatRow
+                  label={s.label}
+                  homeStr={s.hStr}
+                  awayStr={s.aStr}
+                  homeVal={s.hNum}
+                  awayVal={s.aNum}
+                  suffix={s.suffix}
+                  index={idx}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {live && (
+        <div className="flex items-center justify-center gap-1.5 py-2 text-[10px] text-text-dim">
+          <div className="h-1 w-1 animate-pulse rounded-full bg-accent-green" />
+          Stats update live
+        </div>
+      )}
     </div>
   );
 }
