@@ -48,6 +48,35 @@ PREV_SNAP_PREFIX = "builder:prev_snap:"
 # with matching type/team/score, the synthetic event is superseded.
 RECONCILIATION_WINDOW_S = 120.0
 
+# Retry connection on startup (e.g. Redis/DB not ready yet in Docker)
+CONNECT_RETRY_ATTEMPTS = 10
+CONNECT_RETRY_BASE_DELAY_S = 2.0
+
+
+async def _connect_with_retry(connect_fn, name: str) -> None:
+    """Call async connect_fn(); retry with exponential backoff on failure."""
+    last_exc: Exception | None = None
+    for attempt in range(1, CONNECT_RETRY_ATTEMPTS + 1):
+        try:
+            await connect_fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt == CONNECT_RETRY_ATTEMPTS:
+                raise
+            delay = CONNECT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+            logger.warning(
+                "connect_retry",
+                name=name,
+                attempt=attempt,
+                max_attempts=CONNECT_RETRY_ATTEMPTS,
+                delay_s=delay,
+                error=str(exc),
+            )
+            await asyncio.sleep(delay)
+    if last_exc:
+        raise last_exc
+
 
 class ReconciliationEngine:
     """
@@ -488,14 +517,17 @@ async def main() -> None:
     redis = RedisManager(settings)
     db = DatabaseManager(settings)
 
-    await redis.connect()
-    await db.connect()
+    await _connect_with_retry(redis.connect, "Redis")
+    await _connect_with_retry(db.connect, "Database")
 
     service = BuilderService(redis, db, settings)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, service.request_shutdown)
+        try:
+            loop.add_signal_handler(sig, service.request_shutdown)
+        except (ValueError, OSError, RuntimeError) as exc:
+            logger.warning("signal_handler_unavailable", signal=sig, error=str(exc))
 
     try:
         await service.run()

@@ -16,7 +16,23 @@ COPY . .
 
 RUN chmod +x entrypoint.sh
 
+FROM base AS ingest
+ENV SERVICE_TYPE=ingest
+EXPOSE 9091
+CMD ["./entrypoint.sh"]
+
+FROM base AS scheduler
+ENV SERVICE_TYPE=scheduler
+EXPOSE 9092
+CMD ["./entrypoint.sh"]
+
+FROM base AS builder
+ENV SERVICE_TYPE=builder
+EXPOSE 9093
+CMD ["./entrypoint.sh"]
+
+# Default target for Railway / single-service deploy (must be last)
+FROM base AS api
 ENV SERVICE_TYPE=api
 EXPOSE 8000
-
 CMD ["./entrypoint.sh"]
