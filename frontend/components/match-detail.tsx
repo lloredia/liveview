@@ -445,8 +445,14 @@ const STAT_LABELS: Record<string, string> = {
   yellow_cards: "Yellow Cards",
   red_cards: "Red Cards",
   field_goal_pct: "Field Goal %",
+  field_goals_made: "Field Goals Made",
+  field_goals_attempted: "Field Goals Attempted",
   three_point_pct: "3-Point %",
+  three_point_made: "3-Pointers Made",
+  three_point_attempted: "3-Point Attempts",
   free_throw_pct: "Free Throw %",
+  free_throws_made: "Free Throws Made",
+  free_throws_attempted: "Free Throws Attempted",
   rebounds: "Rebounds",
   assists: "Assists",
   turnovers: "Turnovers",
@@ -464,13 +470,26 @@ const STAT_LABELS: Record<string, string> = {
   era: "ERA",
 };
 
-const HERO_STATS = new Set(["possession", "shots", "shots_on_target", "field_goal_pct", "rebounds"]);
+const HERO_STATS = new Set([
+  "possession", "shots", "shots_on_target",
+  "field_goal_pct", "rebounds", "three_point_pct",
+]);
 
 const STAT_GROUPS: { label: string; keys: string[] }[] = [
-  { label: "Attacking", keys: ["shots", "shots_on_target", "corners", "offsides", "passes", "pass_accuracy", "at_bats", "runs", "home_runs"] },
-  { label: "Shooting", keys: ["field_goal_pct", "three_point_pct", "free_throw_pct"] },
-  { label: "Defense & Discipline", keys: ["fouls", "yellow_cards", "red_cards", "steals", "blocks", "rebounds", "turnovers", "assists", "hits", "strikeouts", "walks", "era"] },
+  { label: "Shooting", keys: [
+    "field_goal_pct", "field_goals_made", "field_goals_attempted",
+    "three_point_pct", "three_point_made", "three_point_attempted",
+    "free_throw_pct", "free_throws_made", "free_throws_attempted",
+    "shots", "shots_on_target", "corners", "offsides",
+  ]},
+  { label: "Playmaking", keys: ["assists", "turnovers", "passes", "pass_accuracy"] },
+  { label: "Defense & Rebounding", keys: [
+    "rebounds", "steals", "blocks",
+    "fouls", "yellow_cards", "red_cards",
+    "hits", "strikeouts", "walks", "era",
+  ]},
   { label: "Special Teams", keys: ["power_plays", "penalty_minutes", "faceoff_wins"] },
+  { label: "Batting", keys: ["at_bats", "runs", "home_runs"] },
 ];
 
 function ComparisonBar({ homeVal, awayVal, homeLeads }: { homeVal: number; awayVal: number; homeLeads: boolean }) {
@@ -607,6 +626,7 @@ function StatsTab({ matchId, live }: { matchId: string; live: boolean }) {
 
   const allKeys = homeStats?.stats || awayStats?.stats
     ? Object.keys({ ...homeStats?.stats, ...awayStats?.stats }).filter((k) => {
+        if (k === "period_scores") return false;
         const h = homeStats?.stats?.[k];
         const a = awayStats?.stats?.[k];
         return h != null || a != null;

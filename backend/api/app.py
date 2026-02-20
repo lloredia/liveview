@@ -27,6 +27,7 @@ from shared.models.orm import (
     LeagueORM,
     MatchORM,
     MatchStateORM,
+    MatchStatsORM,
     ProviderMappingORM,
     SportORM,
 )
@@ -59,6 +60,39 @@ ESPN_STATUS_TO_PHASE: dict[str, MatchPhase] = {
     "STATUS_CANCELED": MatchPhase.CANCELLED,
     "STATUS_DELAYED": MatchPhase.SUSPENDED,
     "STATUS_RAIN_DELAY": MatchPhase.SUSPENDED,
+}
+
+BASKETBALL_QUARTER_PHASE = {
+    1: MatchPhase.LIVE_Q1, 2: MatchPhase.LIVE_Q2,
+    3: MatchPhase.LIVE_Q3, 4: MatchPhase.LIVE_Q4,
+}
+HOCKEY_PERIOD_PHASE = {
+    1: MatchPhase.LIVE_P1, 2: MatchPhase.LIVE_P2, 3: MatchPhase.LIVE_P3,
+}
+
+ESPN_LEAGUE_SPORT: dict[str, str] = {
+    "eng.1": "soccer", "eng.2": "soccer", "eng.fa": "soccer",
+    "eng.league_cup": "soccer", "usa.1": "soccer", "esp.1": "soccer",
+    "ger.1": "soccer", "ita.1": "soccer", "fra.1": "soccer",
+    "ned.1": "soccer", "por.1": "soccer", "tur.1": "soccer",
+    "sco.1": "soccer", "sau.1": "soccer",
+    "uefa.champions": "soccer", "uefa.europa": "soccer",
+    "uefa.europa.conf": "soccer",
+    "nba": "basketball", "wnba": "basketball",
+    "mens-college-basketball": "basketball",
+    "womens-college-basketball": "basketball",
+    "nhl": "hockey", "mlb": "baseball",
+}
+
+ESPN_STAT_NAME_MAP: dict[str, str] = {
+    "rebounds": "rebounds", "assists": "assists",
+    "fieldGoalPct": "field_goal_pct", "threePointFieldGoalPct": "three_point_pct",
+    "freeThrowPct": "free_throw_pct",
+    "fieldGoalsMade": "field_goals_made", "fieldGoalsAttempted": "field_goals_attempted",
+    "threePointFieldGoalsMade": "three_point_made",
+    "threePointFieldGoalsAttempted": "three_point_attempted",
+    "freeThrowsMade": "free_throws_made", "freeThrowsAttempted": "free_throws_attempted",
+    "turnovers": "turnovers", "steals": "steals", "blocks": "blocks",
 }
 
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
@@ -167,7 +201,8 @@ async def _refresh_live_scores(
             resp.raise_for_status()
             data = resp.json()
             events = data.get("events", [])
-            updated += await _apply_espn_events(db, events)
+            sport = ESPN_LEAGUE_SPORT.get(espn_league_id, "soccer")
+            updated += await _apply_espn_events(db, events, sport)
         except Exception as exc:
             logger.debug("live_refresh_league_error", league=espn_league_id, error=str(exc))
 
@@ -181,7 +216,69 @@ async def _refresh_live_scores(
             pass
 
 
-async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) -> int:
+def _resolve_phase(espn_status: str, period_num: int, sport: str) -> MatchPhase:
+    """Map ESPN status + period + sport to the correct MatchPhase."""
+    if espn_status in ("STATUS_FINAL", "STATUS_FULL_TIME"):
+        return MatchPhase.FINISHED
+    if espn_status == "STATUS_SCHEDULED":
+        return MatchPhase.SCHEDULED
+    if espn_status in ("STATUS_POSTPONED",):
+        return MatchPhase.POSTPONED
+    if espn_status in ("STATUS_CANCELED",):
+        return MatchPhase.CANCELLED
+    if espn_status in ("STATUS_DELAYED", "STATUS_RAIN_DELAY"):
+        return MatchPhase.SUSPENDED
+    if espn_status == "STATUS_HALFTIME":
+        return MatchPhase.LIVE_HALFTIME
+    if espn_status == "STATUS_END_PERIOD":
+        return MatchPhase.BREAK
+
+    # STATUS_IN_PROGRESS — use sport + period for specificity
+    if sport == "basketball":
+        if period_num > 4:
+            return MatchPhase.LIVE_OT
+        return BASKETBALL_QUARTER_PHASE.get(period_num, MatchPhase.LIVE_Q1)
+    if sport == "hockey":
+        if period_num > 3:
+            return MatchPhase.LIVE_OT
+        return HOCKEY_PERIOD_PHASE.get(period_num, MatchPhase.LIVE_P1)
+    if sport == "baseball":
+        return MatchPhase.LIVE_INNING
+    # Soccer
+    if period_num == 1:
+        return MatchPhase.LIVE_FIRST_HALF
+    if period_num == 2:
+        return MatchPhase.LIVE_SECOND_HALF
+    if period_num == 3:
+        return MatchPhase.LIVE_EXTRA_TIME
+    return MatchPhase.LIVE_FIRST_HALF
+
+
+def _extract_team_stats(competitor: dict[str, Any]) -> dict[str, Any]:
+    """Extract team stats from an ESPN competitor object into a flat dict."""
+    raw_stats = competitor.get("statistics", [])
+    stats: dict[str, Any] = {}
+    for stat in raw_stats:
+        name = stat.get("name", "")
+        mapped = ESPN_STAT_NAME_MAP.get(name)
+        if mapped:
+            val = stat.get("displayValue", stat.get("value"))
+            try:
+                stats[mapped] = float(val) if val is not None else None
+            except (ValueError, TypeError):
+                stats[mapped] = val
+
+    linescores = competitor.get("linescores", [])
+    if linescores:
+        stats["period_scores"] = [
+            {"period": ls.get("period"), "score": ls.get("displayValue")}
+            for ls in linescores
+        ]
+
+    return stats
+
+
+async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer") -> int:
     """Apply ESPN scoreboard events to our database. Returns count of updated matches."""
     if not events:
         return 0
@@ -193,7 +290,6 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) 
             if not espn_id:
                 continue
 
-            # Look up our match by ESPN provider mapping
             mapping_stmt = select(ProviderMappingORM.canonical_id).where(
                 ProviderMappingORM.entity_type == "match",
                 ProviderMappingORM.provider == "espn",
@@ -208,6 +304,9 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) 
 
             score_home = 0
             score_away = 0
+            home_stats: dict[str, Any] = {}
+            away_stats: dict[str, Any] = {}
+
             for c in competitors:
                 try:
                     sc = int(c.get("score", "0"))
@@ -215,14 +314,16 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) 
                     sc = 0
                 if c.get("homeAway") == "home":
                     score_home = sc
+                    home_stats = _extract_team_stats(c)
                 else:
                     score_away = sc
+                    away_stats = _extract_team_stats(c)
 
             status_obj = comp.get("status", event.get("status", {}))
             espn_status = status_obj.get("type", {}).get("name", "STATUS_SCHEDULED")
-            phase = ESPN_STATUS_TO_PHASE.get(espn_status, MatchPhase.SCHEDULED)
-            clock = status_obj.get("displayClock")
             period_num = status_obj.get("period", 0)
+            phase = _resolve_phase(espn_status, period_num, sport)
+            clock = status_obj.get("displayClock")
 
             # Update match phase
             match_obj = (await session.execute(
@@ -231,7 +332,7 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) 
             if match_obj:
                 match_obj.phase = phase.value
 
-            # Update match state
+            # Update match state (scores, clock, period)
             state_obj = (await session.execute(
                 select(MatchStateORM).where(MatchStateORM.match_id == match_id)
             )).scalar_one_or_none()
@@ -250,6 +351,27 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]]) 
                     state_obj.period = str(period_num) if period_num else state_obj.period
                     state_obj.version = (state_obj.version or 0) + 1
                     count += 1
+
+            # Upsert team statistics
+            if home_stats or away_stats:
+                stats_obj = (await session.execute(
+                    select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
+                )).scalar_one_or_none()
+
+                if stats_obj:
+                    stats_obj.home_stats = home_stats
+                    stats_obj.away_stats = away_stats
+                    stats_obj.version = (stats_obj.version or 0) + 1
+                else:
+                    import uuid as _uuid
+                    session.add(MatchStatsORM(
+                        id=_uuid.uuid4(),
+                        match_id=match_id,
+                        home_stats=home_stats,
+                        away_stats=away_stats,
+                        version=1,
+                        seq=0,
+                    ))
 
     return count
 
