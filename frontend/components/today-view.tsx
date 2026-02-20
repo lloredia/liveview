@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
+import { useESPNLiveMulti } from "@/hooks/use-espn-live";
 import { getLeagueLogo } from "@/lib/league-logos";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
@@ -106,6 +107,12 @@ export function TodayView({
     key: dateStr,
   });
 
+  const leagueNames = useMemo(
+    () => (data?.leagues || []).map((l) => l.league_name),
+    [data],
+  );
+  const { patchMatch } = useESPNLiveMulti(leagueNames, hasLive ? 10000 : 30000);
+
   useEffect(() => {
     setHasLive((data?.live ?? 0) > 0);
   }, [data]);
@@ -144,7 +151,8 @@ export function TodayView({
     if (!data?.leagues) return [];
     return data.leagues
       .map((league) => {
-        const filtered = league.matches.filter((m) => {
+        const patched = league.matches.map((m) => patchMatch(m));
+        const filtered = patched.filter((m) => {
           if (filter === "all") return true;
           if (filter === "live")
             return m.phase.startsWith("live") || m.phase === "break";
@@ -161,7 +169,7 @@ export function TodayView({
         return { ...league, matches: filtered };
       })
       .filter((league) => league.matches.length > 0);
-  }, [data, filter]);
+  }, [data, filter, patchMatch]);
 
   const groupedBySport = useMemo(() => {
     const groups: { sport: string; sportType: string; leagues: typeof filteredLeagues }[] = [];

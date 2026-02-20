@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Highlights } from "./highlights";
 import { fetchMatch, fetchStats, fetchTimeline } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
+import { useESPNLive } from "@/hooks/use-espn-live";
 import { useWebSocket } from "@/hooks/use-websocket";
 import {
   eventMeta,
@@ -52,6 +53,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   });
 
   const { messages: wsMessages, connected: wsConnected } = useWebSocket({ matchId });
+  const { findMatch: findESPN } = useESPNLive(leagueName, 15000);
 
   if (matchLoading && !matchData) {
     return (
@@ -70,13 +72,21 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   }
 
   const { match, state } = matchData;
-  const live = isLive(match.phase);
-  const color = phaseColor(match.phase);
+
+  const espnLive = findESPN(match.home_team?.name || "", match.away_team?.name || "");
+  const effectivePhase = espnLive ? espnLive.phase : match.phase;
+  const effectiveClock = espnLive ? espnLive.clock : state?.clock ?? null;
+  const effectivePeriod = espnLive ? espnLive.period : state?.period ?? null;
+  const effectiveScoreHome = espnLive ? espnLive.homeScore : state?.score_home ?? 0;
+  const effectiveScoreAway = espnLive ? espnLive.awayScore : state?.score_away ?? 0;
+
+  const live = isLive(effectivePhase);
+  const color = phaseColor(effectivePhase);
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
       {/* Score change sound */}
-      <ScoreWatcher scoreHome={state?.score_home ?? 0} scoreAway={state?.score_away ?? 0} live={live} />
+      <ScoreWatcher scoreHome={effectiveScoreHome} scoreAway={effectiveScoreAway} live={live} />
 
       {/* Back + Actions row */}
       <div className="mb-4 flex items-center justify-between">
@@ -90,12 +100,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           <CalendarButton
             match={{
               id: matchId,
-              phase: match.phase,
+              phase: effectivePhase,
               start_time: match.start_time,
               venue: match.venue,
-              score: { home: state?.score_home ?? 0, away: state?.score_away ?? 0 },
-              clock: state?.clock ?? null,
-              period: state?.period ?? null,
+              score: { home: effectiveScoreHome, away: effectiveScoreAway },
+              clock: effectiveClock,
+              period: effectivePeriod,
               version: 0,
               home_team: match.home_team as any,
               away_team: match.away_team as any,
@@ -104,7 +114,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           />
           <ShareButton
             title={`${match.home_team?.name} vs ${match.away_team?.name}`}
-            text={`${match.home_team?.short_name} ${state?.score_home ?? 0} - ${state?.score_away ?? 0} ${match.away_team?.short_name}`}
+            text={`${match.home_team?.short_name} ${effectiveScoreHome} - ${effectiveScoreAway} ${match.away_team?.short_name}`}
             url={`/match/${matchId}`}
           />
         </div>
@@ -137,8 +147,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             className="text-[11px] font-bold uppercase tracking-[0.1em]"
             style={{ color: live ? "#f87171" : color }}
           >
-            {phaseLabel(match.phase)}
-            {state?.clock ? ` · ${state.clock}` : ""}
+            {phaseLabel(effectivePhase)}
+            {effectiveClock ? ` · ${effectiveClock}` : ""}
           </span>
         </div>
 
@@ -158,14 +168,14 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
 
           <div className="flex items-center gap-2 md:gap-3">
             <AnimatedScore
-              value={state?.score_home ?? 0}
+              value={effectiveScoreHome}
               className={`font-mono text-4xl font-black text-text-primary md:text-5xl ${
                 live ? "drop-shadow-[0_0_20px_rgba(239,68,68,0.2)]" : ""
               }`}
             />
             <span className="text-2xl font-light text-surface-border-light">:</span>
             <AnimatedScore
-              value={state?.score_away ?? 0}
+              value={effectiveScoreAway}
               className={`font-mono text-4xl font-black text-text-primary md:text-5xl ${
                 live ? "drop-shadow-[0_0_20px_rgba(239,68,68,0.2)]" : ""
               }`}
