@@ -458,6 +458,36 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             await asyncio.sleep(10)
 
 
+# Retry connection on startup (e.g. Redis/DB not ready yet on Railway)
+_CONNECT_RETRY_ATTEMPTS = 10
+_CONNECT_RETRY_BASE_DELAY_S = 2.0
+
+
+async def _connect_with_retry(connect_fn, name: str) -> None:
+    """Call async connect_fn(); retry with exponential backoff on failure."""
+    last_exc: Exception | None = None
+    for attempt in range(1, _CONNECT_RETRY_ATTEMPTS + 1):
+        try:
+            await connect_fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt == _CONNECT_RETRY_ATTEMPTS:
+                raise
+            delay = _CONNECT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+            logger.warning(
+                "connect_retry",
+                name=name,
+                attempt=attempt,
+                max_attempts=_CONNECT_RETRY_ATTEMPTS,
+                delay_s=delay,
+                error=str(exc),
+            )
+            await asyncio.sleep(delay)
+    if last_exc:
+        raise last_exc
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -471,12 +501,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging("api")
     start_metrics_server(9090)
 
-    # Initialize infrastructure
+    # Initialize infrastructure (retry so healthcheck can pass once ready)
     redis = RedisManager(settings)
     db = DatabaseManager(settings)
 
-    await redis.connect()
-    await db.connect()
+    await _connect_with_retry(redis.connect, "Redis")
+    await _connect_with_retry(db.connect, "Database")
 
     # Initialize dependency injection
     init_dependencies(redis, db)
