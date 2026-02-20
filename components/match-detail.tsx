@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { fetchMatch } from "@/lib/api";
+import { fetchMatch, fetchTimeline } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { useESPNLive } from "@/hooks/use-espn-live";
 import {
@@ -21,7 +21,7 @@ import { HeadToHead } from "./head-to-head";
 import { Lineup } from "./lineup";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
-import type { MatchDetailResponse } from "@/lib/types";
+import type { MatchDetailResponse, MatchEvent, TimelineResponse } from "@/lib/types";
 
 // ===========================================================================
 // Types
@@ -95,6 +95,29 @@ interface ESPNSummaryData {
   awayPlayers: TeamPlayerStats;
   injuries: { home: InjuryEntry[]; away: InjuryEntry[] };
   sport: string;
+}
+
+/** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
+function backendEventsToPlays(events: MatchEvent[]): ESPNPlay[] {
+  const periodLabel = (p: string | null) => (p === "HT" || p === "1" ? "1st" : p === "2" ? "2nd" : p || "1");
+  return events.map((e, i) => ({
+    id: e.id,
+    text: e.detail || e.event_type || "—",
+    homeScore: e.score_home ?? 0,
+    awayScore: e.score_away ?? 0,
+    period: {
+      number: typeof e.period === "string" ? (e.period === "HT" ? 1 : parseInt(e.period, 10) || 1) : (e.period ?? 1),
+      displayValue: periodLabel(e.period),
+    },
+    clock: {
+      displayValue: e.minute != null ? (e.second != null ? `${e.minute}'${String(e.second).padStart(2, "0")}` : `${e.minute}'`) : "—",
+    },
+    scoringPlay: /goal|score|gól/i.test(e.event_type || ""),
+    scoreValue: 0,
+    team: undefined,
+    participants: e.player_name ? [{ athlete: { displayName: e.player_name } }] : [],
+    type: { id: "", text: e.event_type || "" },
+  }));
 }
 
 // ===========================================================================
@@ -239,10 +262,11 @@ async function fetchESPNSummary(
     if (!res.ok) return null;
     const data = await res.json();
 
-    // Plays
-    const plays: ESPNPlay[] = (data.plays || []).map((p: any) => ({
+    // Plays — ESPN sometimes returns keyEvents instead of plays (e.g. soccer)
+    const rawPlays = data.plays || data.keyEvents || [];
+    const plays: ESPNPlay[] = rawPlays.map((p: any) => ({
       id: p.id || "",
-      text: p.text || p.shortDescription || "",
+      text: p.text || p.shortDescription || p.description || "",
       homeScore: p.homeScore ?? 0,
       awayScore: p.awayScore ?? 0,
       period: p.period || { number: 0, displayValue: "" },
@@ -335,6 +359,14 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
     fetcher: espnFetcher, interval: 60000, enabled: !!matchData, key: `espn-${matchId}`,
   });
 
+  const timelineFetcher = useCallback(() => fetchTimeline(matchId), [matchId]);
+  const { data: timelineData } = usePolling<TimelineResponse>({
+    fetcher: timelineFetcher,
+    interval: 15000,
+    enabled: !!matchData && (!espnData || (espnData.plays || []).length === 0),
+    key: `timeline-${matchId}`,
+  });
+
   if (matchLoading && !matchData) {
     return (
       <div className="flex justify-center py-16">
@@ -360,6 +392,14 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   const effectiveScoreAway = espnLive ? espnLive.awayScore : state?.score_away ?? 0;
   const live = isLive(effectivePhase);
   const color = phaseColor(effectivePhase);
+
+  const playsForTab = useMemo(() => {
+    if (espnData?.plays?.length) return espnData.plays;
+    if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
+    return backendEventsToPlays(matchData?.recent_events || []);
+  }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
+
+  const playByPlayLoading = espnLoading && !espnData && playsForTab.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
@@ -423,12 +463,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
       <div className="mt-4 animate-fade-in">
         {activeTab === "play_by_play" && (
           <PlayByPlayTab
-            plays={espnData?.plays || []}
+            plays={playsForTab}
             homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
             awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
             homeTeamId={espnData?.homeTeamId || ""}
             awayTeamId={espnData?.awayTeamId || ""}
-            loading={espnLoading && !espnData}
+            loading={playByPlayLoading}
             live={live}
             phase={effectivePhase}
           />
