@@ -289,7 +289,7 @@ async function fetchPlayerStatsData(
       return null;
     }
 
-    const allColumns = [...new Set([...homeExtracted.statColumns, ...awayExtracted.statColumns])];
+    const allColumns = Array.from(new Set([...homeExtracted.statColumns, ...awayExtracted.statColumns]));
 
     return {
       home: {
