@@ -40,6 +40,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="safe-top safe-bottom">
+        <a
+          href="#main-content"
+          className="fixed left-2 top-2 z-[200] -translate-y-16 rounded-lg bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0"
+        >
+          Skip to content
+        </a>
         <ErrorBoundary>
           <AuthProvider>
             <ThemeProvider>{children}</ThemeProvider>

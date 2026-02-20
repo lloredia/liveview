@@ -14,6 +14,7 @@ import { MultiTracker } from "@/components/multi-tracker";
 import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { useScoreAlerts } from "@/hooks/use-score-alerts";
 import { requestPushPermission, getPushPermission } from "@/lib/push-notifications";
+import { getFavoriteLeagues } from "@/lib/favorites";
 
 function HomeContent() {
   const router = useRouter();
@@ -99,14 +100,7 @@ function HomeContent() {
 
   const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
   useEffect(() => {
-    try {
-      const favs = JSON.parse(localStorage.getItem("lv_favorites") || "{}");
-      if (Array.isArray(favs.leagues)) {
-        setFavLeagueIds(favs.leagues);
-      }
-    } catch {
-      // ignore
-    }
+    setFavLeagueIds(getFavoriteLeagues());
   }, []);
 
   const favoriteLeagueIds = useMemo(
@@ -191,10 +185,14 @@ function HomeContent() {
         />
 
         <PullToRefresh onRefresh={handleRefresh}>
-          <main className="min-w-0 flex-1 px-0 py-3 md:px-4">
+          <main id="main-content" className="min-w-0 flex-1 px-0 py-3 md:px-4" role="main" aria-label="Match results">
             <div className="mx-auto max-w-[900px]">
+              <div aria-live="polite" aria-atomic="true" className="sr-only">
+                {totalLive > 0 ? `${totalLive} live matches in progress` : ""}
+              </div>
+
               {error && (
-                <div className="mx-3 mb-3 rounded border border-accent-red/20 bg-accent-red/5 px-3 py-2 text-[12px] text-accent-red md:mx-0">
+                <div role="alert" className="mx-3 mb-3 rounded border border-accent-red/20 bg-accent-red/5 px-3 py-2 text-[12px] text-accent-red md:mx-0">
                   Cannot connect to API
                   <span className="block text-[10px] opacity-60">{error}</span>
                 </div>

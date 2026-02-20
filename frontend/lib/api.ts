@@ -117,6 +117,16 @@ export function getHealthUrl(): string {
   return `${API_BASE}/health`;
 }
 
+export interface SystemStatus {
+  status: "ok" | "degraded";
+  services: { redis: boolean; database: boolean };
+  providers: { espn: { state: string; failure_count: number } };
+}
+
+export async function fetchStatus(): Promise<SystemStatus> {
+  return apiFetch<SystemStatus>("/v1/status");
+}
+
 export function getWsUrl(): string {
   return process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/v1/ws";
 }

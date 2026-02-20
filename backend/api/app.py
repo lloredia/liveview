@@ -38,6 +38,7 @@ from shared.utils.redis_manager import RedisManager
 from api.dependencies import get_db, get_redis, init_dependencies
 from api.middleware import setup_middleware
 from api.routes.leagues import router as leagues_router
+from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.routes.matches import router as matches_router
 from api.routes.today import router as today_router
 from api.ws.manager import WebSocketManager
@@ -89,12 +90,20 @@ SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
 # Module-level reference for the WS manager (accessed by the ws endpoint)
 _ws_manager: WebSocketManager | None = None
 
+espn_circuit_breaker = CircuitBreaker(
+    name="espn_api",
+    failure_threshold=5,
+    recovery_timeout_s=120.0,
+    half_open_max=1,
+)
+
 
 async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> None:
     """
     Background task that fetches live scores from ESPN every 30s.
     Discovers which leagues have live/recently-started matches,
     hits ESPN's scoreboard API, and updates scores + clock + phase in the DB.
+    Uses a circuit breaker to avoid hammering ESPN when it's unresponsive.
     """
     await asyncio.sleep(5)  # let startup settle
     logger.info("live_score_refresh_started")
@@ -103,10 +112,13 @@ async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> N
         while True:
             try:
                 await asyncio.sleep(LIVE_REFRESH_INTERVAL_S)
-                await _refresh_live_scores(db, redis, client)
+                await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
             except asyncio.CancelledError:
                 logger.info("live_score_refresh_stopped")
                 break
+            except CircuitBreakerOpen as exc:
+                logger.warning("espn_circuit_open", retry_after=exc.retry_after)
+                await asyncio.sleep(min(exc.retry_after, 30))
             except Exception as exc:
                 logger.error("live_score_refresh_error", error=str(exc), exc_info=True)
                 await asyncio.sleep(10)
@@ -437,6 +449,37 @@ def create_app() -> FastAPI:
             "status": status,
             "redis": redis_ok,
             "database": db_ok,
+        }
+
+    @app.get("/v1/status", tags=["system"])
+    async def system_status() -> dict[str, Any]:
+        """Public status endpoint showing service health and provider status."""
+        redis = get_redis()
+        db = get_db()
+
+        redis_ok = False
+        db_ok = False
+        try:
+            await redis.client.ping()
+            redis_ok = True
+        except Exception:
+            pass
+        try:
+            async with db.read_session() as session:
+                await session.execute(text("SELECT 1"))
+                db_ok = True
+        except Exception:
+            pass
+
+        return {
+            "status": "ok" if (redis_ok and db_ok) else "degraded",
+            "services": {
+                "redis": redis_ok,
+                "database": db_ok,
+            },
+            "providers": {
+                "espn": espn_circuit_breaker.stats,
+            },
         }
 
     # WebSocket endpoint

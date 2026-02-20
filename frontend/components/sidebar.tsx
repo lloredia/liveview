@@ -61,6 +61,8 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
       )}
 
       <aside
+        role="navigation"
+        aria-label="League navigation"
         className={`
           fixed inset-y-[44px] left-0 z-50 w-[260px] overflow-y-auto border-r border-surface-border bg-surface-raised
           transition-transform duration-200 ease-out
@@ -176,6 +178,8 @@ function LeagueButton({
 
       <button
         onClick={(e) => onFavToggle(e, league.id)}
+        aria-label={isFav ? `Remove ${league.name} from favorites` : `Add ${league.name} to favorites`}
+        aria-pressed={isFav}
         className={`text-[10px] opacity-0 transition-opacity group-hover:opacity-100 ${
           isFav ? "!opacity-100 text-accent-amber" : "text-text-dim hover:text-accent-amber"
         }`}

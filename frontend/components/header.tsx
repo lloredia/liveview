@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Search } from "./search";
+import { useTheme } from "@/lib/theme";
 
 interface HeaderProps {
   connected: boolean;
@@ -13,17 +13,41 @@ interface HeaderProps {
   onPushToggle?: () => void;
 }
 
+function ThemeIcon({ mode }: { mode: "dark" | "light" | "auto" }) {
+  if (mode === "light")
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="12" cy="12" r="5" />
+        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+      </svg>
+    );
+  if (mode === "dark")
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      </svg>
+    );
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+      <path d="M16 12a4 4 0 0 1-4 4V8a4 4 0 0 1 4 4z" fill="currentColor" opacity="0.3" />
+    </svg>
+  );
+}
+
 export function Header({
   connected,
   onToggleSidebar,
   onLeagueSelect,
   onMatchSelect,
+  pushEnabled,
+  onPushToggle,
 }: HeaderProps) {
-  const [searchOpen, setSearchOpen] = useState(false);
+  const { mode, toggle } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-surface-border bg-surface-raised px-3 md:px-4">
-      {/* Left: hamburger + logo */}
+    <header role="banner" className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-surface-border bg-surface-raised px-3 md:px-4">
       <div className="flex items-center gap-2">
         <button
           onClick={onToggleSidebar}
@@ -40,11 +64,36 @@ export function Header({
         </span>
       </div>
 
-      {/* Right: search + connection */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {onLeagueSelect && onMatchSelect && (
           <Search onLeagueSelect={onLeagueSelect} onMatchSelect={onMatchSelect} />
         )}
+
+        {onPushToggle && (
+          <button
+            onClick={onPushToggle}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover ${
+              pushEnabled ? "text-accent-amber" : "text-text-muted hover:text-text-primary"
+            }`}
+            aria-label={pushEnabled ? "Notifications enabled" : "Enable notifications"}
+            title={pushEnabled ? "Score alerts on" : "Enable score alerts"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              {pushEnabled && <circle cx="18" cy="4" r="3" fill="currentColor" stroke="none" />}
+            </svg>
+          </button>
+        )}
+
+        <button
+          onClick={toggle}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+          aria-label={`Theme: ${mode}. Click to switch.`}
+          title={`Theme: ${mode}`}
+        >
+          <ThemeIcon mode={mode} />
+        </button>
 
         <div
           className={`h-[6px] w-[6px] rounded-full ${

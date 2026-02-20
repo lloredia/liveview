@@ -20,6 +20,7 @@ import { AnimatedScore } from "./animated-score";
 import { MatchForm } from "./match-form";
 import { HeadToHead } from "./head-to-head";
 import { Lineup } from "./lineup";
+import { PlayerStats } from "./player-stats";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
 import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse, WSMessage } from "@/lib/types";
@@ -215,7 +216,16 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
         awayTeamLogo={match.away_team?.logo_url || null}
         leagueName={leagueName}
       />
-      
+
+      {/* Player Stats */}
+      <PlayerStats
+        homeTeamName={match.home_team?.name || ""}
+        awayTeamName={match.away_team?.name || ""}
+        homeTeamLogo={match.home_team?.logo_url || null}
+        awayTeamLogo={match.away_team?.logo_url || null}
+        leagueName={leagueName}
+      />
+
       {/* Highlights & Recap */}
       <Highlights
         homeTeamName={match.home_team?.name || ""}
