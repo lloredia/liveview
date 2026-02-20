@@ -1,5 +1,0 @@
-# https://www.liveview-tracker.com
-User-agent: *
-Allow: /
-
-Sitemap: https://www.liveview-tracker.com/sitemap.xml
