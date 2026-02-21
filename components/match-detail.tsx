@@ -399,11 +399,13 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
 
   const { match, state } = matchData;
   const espnLive = findESPN(match.home_team?.name || "", match.away_team?.name || "");
-  const effectivePhase = espnLive ? espnLive.phase : match.phase;
-  const effectiveClock = espnLive ? espnLive.clock : state?.clock ?? null;
-  const effectivePeriod = espnLive ? espnLive.period : state?.period ?? null;
-  const effectiveScoreHome = espnLive ? espnLive.homeScore : state?.score_home ?? 0;
-  const effectiveScoreAway = espnLive ? espnLive.awayScore : state?.score_away ?? 0;
+  const backendIsLive = isLive(match.phase);
+  const useEspn = espnLive && (!backendIsLive || espnLive.isLive || espnLive.isFinished);
+  const effectivePhase = useEspn ? espnLive.phase : match.phase;
+  const effectiveClock = useEspn ? espnLive.clock : state?.clock ?? null;
+  const effectivePeriod = useEspn ? espnLive.period : state?.period ?? null;
+  const effectiveScoreHome = useEspn ? espnLive.homeScore : state?.score_home ?? 0;
+  const effectiveScoreAway = useEspn ? espnLive.awayScore : state?.score_away ?? 0;
   const live = isLive(effectivePhase);
   const color = phaseColor(effectivePhase);
 
