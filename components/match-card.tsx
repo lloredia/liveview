@@ -2,8 +2,36 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import type { MatchSummary } from "@/lib/types";
-import { formatTime, isLive, phaseLabel } from "@/lib/utils";
+import { formatTime, isLive, phaseLabel, phaseShortLabel } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
+
+/* ── Animated score digit ─────────────────────────────────────────── */
+
+function AnimatedScore({ value, live }: { value: number; live: boolean }) {
+  const prevRef = useRef(value);
+  const [pop, setPop] = useState(false);
+
+  useEffect(() => {
+    if (value !== prevRef.current) {
+      prevRef.current = value;
+      setPop(true);
+      const id = setTimeout(() => setPop(false), 650);
+      return () => clearTimeout(id);
+    }
+  }, [value]);
+
+  return (
+    <span
+      className={`inline-block font-mono text-base font-bold tabular-nums md:text-lg ${
+        live ? "text-text-primary" : "text-text-secondary"
+      } ${pop ? "score-pop" : ""}`}
+    >
+      {value}
+    </span>
+  );
+}
+
+/* ── Live clock with countdown ────────────────────────────────────── */
 
 function LiveClock({
   serverClock,
@@ -15,21 +43,13 @@ function LiveClock({
   phase: string;
 }) {
   const [display, setDisplay] = useState(serverClock || phaseLabel(phase));
-  const serverRef = useRef(serverClock);
-
-  // Re-sync when server sends a new clock value
-  useEffect(() => {
-    serverRef.current = serverClock;
-  }, [serverClock]);
 
   useEffect(() => {
-    // If we have a server clock in mm:ss format, use it as a base and tick
     if (serverClock && /^\d+:\d{2}$/.test(serverClock)) {
       const [m, s] = serverClock.split(":").map(Number);
       const baseSecs = m * 60 + s;
       const capturedAt = Date.now();
 
-      // Detect sport from phase: soccer phases use "half"/"extra"/"penalties"
       const isSoccer =
         phase.includes("half") ||
         phase.includes("extra") ||
@@ -39,7 +59,6 @@ function LiveClock({
 
       const tick = () => {
         const elapsed = Math.floor((Date.now() - capturedAt) / 1000);
-        // Soccer: count up; Basketball/Hockey: count down
         const current = isSoccer
           ? baseSecs + elapsed
           : Math.max(0, baseSecs - elapsed);
@@ -53,17 +72,14 @@ function LiveClock({
       return () => clearInterval(id);
     }
 
-    // No clock from server but match is live — compute from start_time (soccer-style)
     if (!serverClock && startTime) {
       const startMs = new Date(startTime).getTime();
-
       const tick = () => {
         const elapsed = Math.max(0, Date.now() - startMs);
         const mm = Math.floor(elapsed / 60000);
         const ss = Math.floor((elapsed % 60000) / 1000);
         setDisplay(`${mm}:${ss.toString().padStart(2, "0")}`);
       };
-
       tick();
       const id = setInterval(tick, 1000);
       return () => clearInterval(id);
@@ -75,6 +91,8 @@ function LiveClock({
   return <>{display}</>;
 }
 
+/* ── Match card ───────────────────────────────────────────────────── */
+
 interface MatchCardProps {
   match: MatchSummary;
   onClick: () => void;
@@ -83,10 +101,28 @@ interface MatchCardProps {
   onTogglePin?: (matchId: string) => void;
 }
 
-export const MatchCard = memo(function MatchCard({ match, onClick, pinned = false, onTogglePin }: MatchCardProps) {
+export const MatchCard = memo(function MatchCard({
+  match,
+  onClick,
+  pinned = false,
+  onTogglePin,
+}: MatchCardProps) {
   const live = isLive(match.phase);
   const finished = match.phase === "finished";
   const scheduled = match.phase === "scheduled" || match.phase === "pre_match";
+
+  const prevScoreRef = useRef({ home: match.score.home, away: match.score.away });
+  const [flash, setFlash] = useState(false);
+
+  useEffect(() => {
+    const prev = prevScoreRef.current;
+    if (live && (match.score.home !== prev.home || match.score.away !== prev.away)) {
+      prevScoreRef.current = { home: match.score.home, away: match.score.away };
+      setFlash(true);
+      const id = setTimeout(() => setFlash(false), 1200);
+      return () => clearTimeout(id);
+    }
+  }, [live, match.score.home, match.score.away]);
 
   return (
     <div
@@ -95,24 +131,24 @@ export const MatchCard = memo(function MatchCard({ match, onClick, pinned = fals
         group relative flex h-12 cursor-pointer items-center border-b border-surface-border
         transition-colors duration-150 hover:bg-surface-hover
         ${live ? "bg-accent-red/[0.04]" : ""}
+        ${flash ? "score-flash" : ""}
       `}
     >
       {/* Status column */}
-      <div className="flex w-[60px] shrink-0 items-center justify-center px-2">
+      <div className="flex w-[60px] shrink-0 flex-col items-center justify-center px-1">
         {live ? (
-          <div className="flex items-center gap-1">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+          <>
+            <span className="rounded bg-accent-red/15 px-1.5 py-px text-[9px] font-extrabold leading-tight text-accent-red">
+              {phaseShortLabel(match.phase)}
             </span>
-            <span className="font-mono text-[11px] font-bold text-accent-green">
+            <span className="mt-0.5 font-mono text-[10px] font-bold leading-tight text-accent-green tabular-nums">
               <LiveClock
                 serverClock={match.clock}
                 startTime={match.start_time}
                 phase={match.phase}
               />
             </span>
-          </div>
+          </>
         ) : finished ? (
           <span className="text-[11px] font-semibold text-text-muted">FT</span>
         ) : scheduled && match.start_time ? (
@@ -137,37 +173,41 @@ export const MatchCard = memo(function MatchCard({ match, onClick, pinned = fals
         >
           {match.home_team.name}
         </span>
-        <TeamLogo url={match.home_team.logo_url} name={match.home_team.short_name} size={20} className="shrink-0 md:h-5 md:w-5 h-4 w-4" />
+        <TeamLogo
+          url={match.home_team.logo_url}
+          name={match.home_team.short_name}
+          size={20}
+          className="shrink-0 md:h-5 md:w-5 h-4 w-4"
+        />
       </div>
 
       {/* Score */}
-      <div className="flex w-[52px] shrink-0 items-center justify-center gap-1">
+      <div className="flex w-[56px] shrink-0 items-center justify-center gap-1">
         {scheduled ? (
           <span className="text-[11px] text-text-muted">vs</span>
         ) : (
           <>
-            <span
-              className={`font-mono text-base font-bold md:text-lg ${
-                live ? "text-text-primary" : finished && match.score.home > match.score.away ? "text-text-primary" : "text-text-secondary"
-              }`}
-            >
-              {match.score.home}
-            </span>
+            <AnimatedScore
+              value={match.score.home}
+              live={live || (finished && match.score.home > match.score.away)}
+            />
             <span className="text-[10px] text-text-dim">-</span>
-            <span
-              className={`font-mono text-base font-bold md:text-lg ${
-                live ? "text-text-primary" : finished && match.score.away > match.score.home ? "text-text-primary" : "text-text-secondary"
-              }`}
-            >
-              {match.score.away}
-            </span>
+            <AnimatedScore
+              value={match.score.away}
+              live={live || (finished && match.score.away > match.score.home)}
+            />
           </>
         )}
       </div>
 
       {/* Away team */}
       <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-2">
-        <TeamLogo url={match.away_team.logo_url} name={match.away_team.short_name} size={20} className="shrink-0 md:h-5 md:w-5 h-4 w-4" />
+        <TeamLogo
+          url={match.away_team.logo_url}
+          name={match.away_team.short_name}
+          size={20}
+          className="shrink-0 md:h-5 md:w-5 h-4 w-4"
+        />
         <span
           className={`truncate text-[13px] md:text-sm ${
             !finished || match.score.away > match.score.home

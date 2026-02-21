@@ -3,11 +3,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
+import { phaseShortLabel } from "@/lib/utils";
 import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
 interface LiveTickerProps {
   leagues: LeagueGroup[];
   onMatchSelect: (matchId: string) => void;
+}
+
+function TickerScore({ value }: { value: number }) {
+  const prevRef = useRef(value);
+  const [pop, setPop] = useState(false);
+
+  useEffect(() => {
+    if (value !== prevRef.current) {
+      prevRef.current = value;
+      setPop(true);
+      const id = setTimeout(() => setPop(false), 650);
+      return () => clearTimeout(id);
+    }
+  }, [value]);
+
+  return (
+    <span className={`inline-block tabular-nums ${pop ? "score-pop" : ""}`}>
+      {value}
+    </span>
+  );
 }
 
 function TickerItem({
@@ -24,11 +45,16 @@ function TickerItem({
     >
       <span className="font-medium">{match.home_team.short_name}</span>
       <span className="font-mono font-bold text-text-primary">
-        {match.score.home}-{match.score.away}
+        <TickerScore value={match.score.home} />
+        <span className="text-text-dim">-</span>
+        <TickerScore value={match.score.away} />
       </span>
       <span className="font-medium">{match.away_team.short_name}</span>
+      <span className="rounded bg-accent-red/15 px-1 py-px text-[8px] font-bold text-accent-red">
+        {phaseShortLabel(match.phase)}
+      </span>
       {match.clock && (
-        <span className="text-[9px] font-semibold text-accent-green">{match.clock}</span>
+        <span className="text-[9px] font-semibold tabular-nums text-accent-green">{match.clock}</span>
       )}
     </button>
   );

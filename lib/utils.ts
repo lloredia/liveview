@@ -32,6 +32,28 @@ export function isLive(phase: string | undefined | null): boolean {
   return phase.startsWith("live_") || phase === "break";
 }
 
+/** Short period label for live badges (Q1, Q2, HT, P1, 1H, etc.) */
+export function phaseShortLabel(phase: string): string {
+  const map: Record<string, string> = {
+    live_q1: "Q1",
+    live_q2: "Q2",
+    live_q3: "Q3",
+    live_q4: "Q4",
+    live_ot: "OT",
+    live_first_half: "1H",
+    live_second_half: "2H",
+    live_halftime: "HT",
+    live_extra_time: "ET",
+    live_penalties: "PEN",
+    live_p1: "P1",
+    live_p2: "P2",
+    live_p3: "P3",
+    live_inning: "LIVE",
+    break: "HT",
+  };
+  return map[phase] || "LIVE";
+}
+
 /** Returns a Tailwind-friendly CSS class for the phase color. */
 export function phaseColorClass(phase: string): string {
   if (isLive(phase)) return "text-accent-green";
