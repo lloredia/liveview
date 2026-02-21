@@ -162,6 +162,12 @@ export function TodayView({
     return p.startsWith("live") || p === "break";
   };
 
+  const countLiveInResponse = (res: TodayResponse) =>
+    (res.leagues ?? []).reduce(
+      (sum, lg) => sum + (lg.matches ?? []).filter(isLivePhase).length,
+      0,
+    );
+
   const filteredLeagues = useMemo(() => {
     if (!data?.leagues) return [];
     return data.leagues
@@ -185,16 +191,24 @@ export function TodayView({
       .filter((league) => league.matches.length > 0);
   }, [data, filter, patchMatch]);
 
+  const liveCountForTab = useMemo(() => {
+    if (isUserToday && headerTodayData != null) return countLiveInResponse(headerTodayData);
+    return headerLiveCount ?? data?.live ?? 0;
+  }, [isUserToday, headerTodayData, headerLiveCount, data?.live]);
+
   const effectiveLeagues = useMemo(() => {
-    if (filter !== "live" || !isUserToday || filteredLeagues.length > 0) return filteredLeagues;
-    if (!headerTodayData?.leagues?.length) return filteredLeagues;
-    return headerTodayData.leagues
-      .map((league) => {
-        const patched = league.matches.map((m) => patchMatch(m));
-        const liveOnly = patched.filter((m) => isLivePhase(m));
-        return { ...league, matches: liveOnly };
-      })
-      .filter((league) => league.matches.length > 0);
+    if (filter !== "live") return filteredLeagues;
+    if (isUserToday && headerTodayData?.leagues?.length) {
+      const fromHeader = headerTodayData.leagues
+        .map((league) => {
+          const patched = league.matches.map((m) => patchMatch(m));
+          const liveOnly = patched.filter((m) => isLivePhase(m));
+          return { ...league, matches: liveOnly };
+        })
+        .filter((league) => league.matches.length > 0);
+      return fromHeader;
+    }
+    return filteredLeagues;
   }, [filter, isUserToday, filteredLeagues, headerTodayData, patchMatch]);
 
   const groupedBySport = useMemo(() => {
@@ -267,7 +281,7 @@ export function TodayView({
         {(
           [
             { key: "all", label: "All", count: data?.total_matches },
-            { key: "live", label: "Live", count: (dateStr === formatDateISO(new Date()) && headerLiveCount !== undefined) ? headerLiveCount : data?.live },
+            { key: "live", label: "Live", count: liveCountForTab },
             { key: "scheduled", label: "Upcoming", count: data?.scheduled },
             { key: "finished", label: "Finished", count: data?.finished },
           ] as const
