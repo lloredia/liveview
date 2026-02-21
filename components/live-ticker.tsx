@@ -44,9 +44,9 @@ function TickerItem({
       className="flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
     >
       <span className="font-medium">{match.home_team.short_name}</span>
-      <span className="font-mono font-bold text-text-primary">
+      <span className="font-mono font-extrabold text-white">
         <TickerScore value={match.score.home} />
-        <span className="text-text-dim">-</span>
+        <span className="text-text-dim/50">-</span>
         <TickerScore value={match.score.away} />
       </span>
       <span className="font-medium">{match.away_team.short_name}</span>

@@ -439,10 +439,24 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             <div className="text-sm font-semibold text-text-primary md:text-base">{match.home_team?.name}</div>
             <div className="mt-0.5 text-[11px] text-text-muted">{match.home_team?.short_name}</div>
           </div>
-          <div className="flex items-center gap-2 md:gap-3">
-            <AnimatedScore value={effectiveScoreHome} className={`font-mono text-4xl font-black text-text-primary md:text-5xl ${live ? "drop-shadow-[0_0_20px_rgba(239,68,68,0.2)]" : ""}`} />
-            <span className="text-2xl font-light text-surface-border-light">:</span>
-            <AnimatedScore value={effectiveScoreAway} className={`font-mono text-4xl font-black text-text-primary md:text-5xl ${live ? "drop-shadow-[0_0_20px_rgba(239,68,68,0.2)]" : ""}`} />
+          <div className="flex items-center gap-3 md:gap-4">
+            <AnimatedScore
+              value={effectiveScoreHome}
+              className={`font-mono text-5xl font-black text-white md:text-6xl ${
+                live
+                  ? "drop-shadow-[0_0_24px_rgba(255,255,255,0.25)] [text-shadow:0_0_30px_rgba(239,68,68,0.35)]"
+                  : "[text-shadow:0_1px_8px_rgba(0,0,0,0.3)]"
+              }`}
+            />
+            <span className="text-2xl font-light text-text-muted/40 md:text-3xl">:</span>
+            <AnimatedScore
+              value={effectiveScoreAway}
+              className={`font-mono text-5xl font-black text-white md:text-6xl ${
+                live
+                  ? "drop-shadow-[0_0_24px_rgba(255,255,255,0.25)] [text-shadow:0_0_30px_rgba(239,68,68,0.35)]"
+                  : "[text-shadow:0_1px_8px_rgba(0,0,0,0.3)]"
+              }`}
+            />
           </div>
           <div className="flex-1 text-center">
             <div className="mb-2 flex justify-center"><TeamLogo url={match.away_team?.logo_url} name={match.away_team?.short_name} size={56} /></div>

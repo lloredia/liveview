@@ -22,8 +22,8 @@ function AnimatedScore({ value, live }: { value: number; live: boolean }) {
 
   return (
     <span
-      className={`inline-block font-mono text-base font-bold tabular-nums md:text-lg ${
-        live ? "text-text-primary" : "text-text-secondary"
+      className={`inline-block font-mono text-[17px] font-extrabold tabular-nums md:text-xl ${
+        live ? "text-white [text-shadow:0_0_10px_rgba(0,230,118,0.3)]" : "text-text-primary"
       } ${pop ? "score-pop" : ""}`}
     >
       {value}
