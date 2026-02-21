@@ -7,7 +7,13 @@ import {
   getLeagueESPNKey,
   type ESPNLiveMatch,
 } from "@/lib/espn-live";
+import { isLive } from "@/lib/utils";
 import type { MatchSummary } from "@/lib/types";
+
+function shouldPatch(backendPhase: string, espn: ESPNLiveMatch): boolean {
+  if (!isLive(backendPhase)) return true;
+  return espn.isLive || espn.isFinished;
+}
 
 /**
  * Hook that fetches live ESPN data for a single league and patches MatchSummary
@@ -44,7 +50,7 @@ export function useESPNLive(leagueName: string, interval = 15000) {
           m.home_team.name,
           m.away_team.name,
         );
-        if (!espn) return m;
+        if (!espn || !shouldPatch(m.phase, espn)) return m;
 
         return {
           ...m,
@@ -136,7 +142,7 @@ export function useESPNLiveMulti(leagueNames: string[], interval = 15000) {
       m: T,
     ): T => {
       const espn = findMatch(m.home_team.name, m.away_team.name);
-      if (!espn) return m;
+      if (!espn || !shouldPatch(m.phase, espn)) return m;
 
       return {
         ...m,
