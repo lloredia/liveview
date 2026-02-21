@@ -15,6 +15,7 @@ import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { useScoreAlerts } from "@/hooks/use-score-alerts";
 import { requestPushPermission, getPushPermission } from "@/lib/push-notifications";
 import { getFavoriteLeagues } from "@/lib/favorites";
+import type { TodayResponse } from "@/components/today-view";
 
 function HomeContent() {
   const router = useRouter();
@@ -30,7 +31,7 @@ function HomeContent() {
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
-  const [todaySnapshot, setTodaySnapshot] = useState<{ leagues?: Array<{ league_id: string; matches: Array<{ phase?: string }> }> } | null>(null);
+  const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
 
   useEffect(() => {
     setPinnedIds(getPinnedMatches());

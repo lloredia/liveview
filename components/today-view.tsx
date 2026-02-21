@@ -27,7 +27,7 @@ interface TodayMatch {
   away_team: TodayTeam;
 }
 
-interface TodayLeagueGroup {
+export interface TodayLeagueGroup {
   league_id: string;
   league_name: string;
   league_short_name: string | null;
@@ -38,7 +38,7 @@ interface TodayLeagueGroup {
   matches: TodayMatch[];
 }
 
-interface TodayResponse {
+export interface TodayResponse {
   date: string;
   total_matches: number;
   live: number;
@@ -85,7 +85,7 @@ interface TodayViewProps {
   /** When viewing today, use this for the Live tab count so it matches the header. */
   headerLiveCount?: number;
   /** Same data the header count came from; use for Live list when our fetch has 0 live so count and list match. */
-  headerTodayData?: { leagues?: TodayLeagueGroup[] } | null;
+  headerTodayData?: TodayResponse | null;
 }
 
 export function TodayView({
