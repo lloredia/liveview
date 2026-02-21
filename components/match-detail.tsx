@@ -487,7 +487,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
-            leagueName={leagueName}
+            leagueName={leagueForESPN}
           />
         )}
         {activeTab === "team_stats" && (

@@ -52,10 +52,9 @@ type MatchFilter = "all" | "live" | "scheduled" | "finished";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function fetchToday(dateStr: string): Promise<TodayResponse> {
-  const res = await fetch(`${API_BASE}/v1/today?date=${dateStr}`, {
-    headers: { Accept: "application/json" },
-  });
+async function fetchToday(dateStr: string | undefined): Promise<TodayResponse> {
+  const url = dateStr ? `${API_BASE}/v1/today?date=${dateStr}` : `${API_BASE}/v1/today`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -99,15 +98,20 @@ export function TodayView({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const dateStr = formatDateISO(selectedDate);
+  const isUserToday =
+    selectedDate.getFullYear() === new Date().getFullYear() &&
+    selectedDate.getMonth() === new Date().getMonth() &&
+    selectedDate.getDate() === new Date().getDate();
+  const apiDateStr = isUserToday ? undefined : dateStr;
 
-  const fetcher = useCallback(() => fetchToday(dateStr), [dateStr]);
+  const fetcher = useCallback(() => fetchToday(apiDateStr), [apiDateStr]);
 
   const [hasLive, setHasLive] = useState(false);
   const { data, loading, error } = usePolling({
     fetcher,
     interval: hasLive ? 10000 : 20000,
     enabled: true,
-    key: dateStr,
+    key: apiDateStr ?? "today",
   });
 
   const leagueNames = useMemo(
