@@ -172,8 +172,7 @@ export function TodayView({
     if (!data?.leagues) return [];
     return data.leagues
       .map((league) => {
-        const patched = league.matches.map((m) => patchMatch(m));
-        const filtered = patched.filter((m) => {
+        const filtered = league.matches.filter((m) => {
           if (filter === "all") return true;
           if (filter === "live") return isLivePhase(m);
           if (filter === "scheduled")
@@ -186,7 +185,8 @@ export function TodayView({
             );
           return true;
         });
-        return { ...league, matches: filtered };
+        const patched = filtered.map((m) => patchMatch(m));
+        return { ...league, matches: patched };
       })
       .filter((league) => league.matches.length > 0);
   }, [data, filter, patchMatch]);
@@ -201,9 +201,9 @@ export function TodayView({
     if (isUserToday && headerTodayData?.leagues?.length) {
       const fromHeader = headerTodayData.leagues
         .map((league) => {
-          const patched = league.matches.map((m) => patchMatch(m));
-          const liveOnly = patched.filter((m) => isLivePhase(m));
-          return { ...league, matches: liveOnly };
+          const liveOnly = league.matches.filter((m) => isLivePhase(m));
+          const patched = liveOnly.map((m) => patchMatch(m));
+          return { ...league, matches: patched };
         })
         .filter((league) => league.matches.length > 0);
       return fromHeader;

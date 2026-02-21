@@ -44,15 +44,21 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
     key: "live-ticker",
   });
 
-  // Keep the last non-empty match list so the ticker never flickers away
-  const stableMatchesRef = useRef<MatchSummaryWithLeague[]>([]);
+  const emptyStreakRef = useRef(0);
   const [stableMatches, setStableMatches] = useState<MatchSummaryWithLeague[]>([]);
 
   useEffect(() => {
-    const fresh = data?.matches || [];
+    if (!data) return;
+    const fresh = data.matches || [];
     if (fresh.length > 0) {
-      stableMatchesRef.current = fresh;
+      emptyStreakRef.current = 0;
       setStableMatches(fresh);
+    } else {
+      emptyStreakRef.current += 1;
+      // Clear after 2 consecutive empty polls to avoid flicker from a single transient blip
+      if (emptyStreakRef.current >= 2) {
+        setStableMatches([]);
+      }
     }
   }, [data]);
 
