@@ -85,6 +85,7 @@ export interface MatchDetailResponse {
   };
   state: MatchState | null;
   recent_events: MatchEvent[];
+  league?: { id: string; name: string } | null;
   generated_at: string;
 }
 

@@ -262,8 +262,13 @@ async function fetchESPNSummary(
     if (!res.ok) return null;
     const data = await res.json();
 
-    // Plays — ESPN sometimes returns keyEvents instead of plays (e.g. soccer)
-    const rawPlays = data.plays || data.keyEvents || [];
+    // Plays — ESPN uses different keys by sport: plays, keyEvents, or nested under header.competitions
+    const fromHeader = data.header?.competitions?.[0];
+    const rawPlays =
+      data.plays
+      || data.keyEvents
+      || (Array.isArray(fromHeader?.plays) ? fromHeader.plays : [])
+      || [];
     const plays: ESPNPlay[] = rawPlays.map((p: any) => ({
       id: p.id || "",
       text: p.text || p.shortDescription || p.description || "",
@@ -348,12 +353,13 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
 
   const { findMatch: findESPN } = useESPNLive(leagueName, 15000);
 
-  // ESPN summary — fetched once, shared across all 3 tabs
+  // ESPN summary — use league from URL or from match API so play-by-play works without ?league=
+  const leagueForESPN = leagueName || matchData?.league?.name || "";
   const espnFetcher = useCallback(async (): Promise<ESPNSummaryData | null> => {
     if (!matchData) return null;
     const { match } = matchData;
-    return fetchESPNSummary(match.home_team?.name || "", match.away_team?.name || "", leagueName);
-  }, [matchData, leagueName]);
+    return fetchESPNSummary(match.home_team?.name || "", match.away_team?.name || "", leagueForESPN);
+  }, [matchData, leagueForESPN]);
 
   const { data: espnData, loading: espnLoading } = usePolling<ESPNSummaryData | null>({
     fetcher: espnFetcher, interval: 60000, enabled: !!matchData, key: `espn-${matchId}`,
