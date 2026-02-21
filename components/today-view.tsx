@@ -84,6 +84,8 @@ interface TodayViewProps {
   onTogglePin?: (matchId: string) => void;
   /** When viewing today, use this for the Live tab count so it matches the header. */
   headerLiveCount?: number;
+  /** Same data the header count came from; use for Live list when our fetch has 0 live so count and list match. */
+  headerTodayData?: TodayResponse | null;
 }
 
 export function TodayView({
@@ -92,6 +94,7 @@ export function TodayView({
   pinnedIds = [],
   onTogglePin,
   headerLiveCount,
+  headerTodayData,
 }: TodayViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [filter, setFilter] = useState<MatchFilter>("all");
@@ -154,6 +157,11 @@ export function TodayView({
     });
   }, []);
 
+  const isLivePhase = (m: { phase?: string }) => {
+    const p = (m.phase || "").toLowerCase();
+    return p.startsWith("live") || p === "break";
+  };
+
   const filteredLeagues = useMemo(() => {
     if (!data?.leagues) return [];
     return data.leagues
@@ -161,10 +169,7 @@ export function TodayView({
         const patched = league.matches.map((m) => patchMatch(m));
         const filtered = patched.filter((m) => {
           if (filter === "all") return true;
-          if (filter === "live") {
-            const p = (m.phase || "").toLowerCase();
-            return p.startsWith("live") || p === "break";
-          }
+          if (filter === "live") return isLivePhase(m);
           if (filter === "scheduled")
             return m.phase === "scheduled" || m.phase === "pre_match";
           if (filter === "finished")
@@ -180,10 +185,22 @@ export function TodayView({
       .filter((league) => league.matches.length > 0);
   }, [data, filter, patchMatch]);
 
+  const effectiveLeagues = useMemo(() => {
+    if (filter !== "live" || !isUserToday || filteredLeagues.length > 0) return filteredLeagues;
+    if (!headerTodayData?.leagues?.length) return filteredLeagues;
+    return headerTodayData.leagues
+      .map((league) => {
+        const patched = league.matches.map((m) => patchMatch(m));
+        const liveOnly = patched.filter((m) => isLivePhase(m));
+        return { ...league, matches: liveOnly };
+      })
+      .filter((league) => league.matches.length > 0);
+  }, [filter, isUserToday, filteredLeagues, headerTodayData, patchMatch]);
+
   const groupedBySport = useMemo(() => {
-    const groups: { sport: string; sportType: string; leagues: typeof filteredLeagues }[] = [];
-    const map = new Map<string, typeof filteredLeagues>();
-    for (const league of filteredLeagues) {
+    const groups: { sport: string; sportType: string; leagues: typeof effectiveLeagues }[] = [];
+    const map = new Map<string, typeof effectiveLeagues>();
+    for (const league of effectiveLeagues) {
       const key = league.sport_type;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(league);
@@ -192,7 +209,7 @@ export function TodayView({
       groups.push({ sport: leagues[0].sport, sportType, leagues });
     });
     return groups;
-  }, [filteredLeagues]);
+  }, [effectiveLeagues]);
 
   const SPORT_ICONS: Record<string, string> = {
     soccer: "⚽",
@@ -350,7 +367,7 @@ export function TodayView({
       ))}
 
       {/* Empty state */}
-      {data && filteredLeagues.length === 0 && (
+      {data && effectiveLeagues.length === 0 && (
         <div className="py-16 text-center text-sm text-text-muted">
           {filter === "all"
             ? "No matches on this date"

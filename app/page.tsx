@@ -30,6 +30,7 @@ function HomeContent() {
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+  const [todaySnapshot, setTodaySnapshot] = useState<{ leagues?: Array<{ league_id: string; matches: Array<{ phase?: string }> }> } | null>(null);
 
   useEffect(() => {
     setPinnedIds(getPinnedMatches());
@@ -61,12 +62,15 @@ function HomeContent() {
     const pollCounts = async () => {
       try {
         const data = await fetchLiveCounts();
+        setTodaySnapshot(data);
         const counts: Record<string, number> = {};
         let total = 0;
+        const isLive = (m: { phase?: string }) => {
+          const p = (m.phase || "").toLowerCase();
+          return p.startsWith("live") || p === "break";
+        };
         for (const lg of data.leagues ?? []) {
-          const liveCount = (lg.matches ?? []).filter(
-            (m: { phase: string }) => m.phase.startsWith("live_") || m.phase === "break",
-          ).length;
+          const liveCount = (lg.matches ?? []).filter(isLive).length;
           if (liveCount > 0) {
             counts[lg.league_id] = liveCount;
             total += liveCount;
@@ -212,6 +216,7 @@ function HomeContent() {
                   pinnedIds={pinnedIds}
                   onTogglePin={handleTogglePin}
                   headerLiveCount={totalLive}
+                  headerTodayData={todaySnapshot}
                 />
               )}
             </div>
