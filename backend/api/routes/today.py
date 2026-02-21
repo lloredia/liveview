@@ -97,7 +97,8 @@ async def get_today(
         else:
             where_clause = date_condition
 
-        # Fetch all matches for the date with their state, teams, and league info
+        # Fetch all matches for the date with their state, teams, and league info.
+        # Use outerjoin for MatchStateORM so live matches without a state row yet still appear.
         stmt = (
             select(
                 MatchORM.id,
@@ -119,7 +120,7 @@ async def get_today(
                 SportORM.name.label("sport_name"),
                 SportORM.sport_type,
             )
-            .join(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
+            .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
             .join(SportORM, LeagueORM.sport_id == SportORM.id)
             .where(where_clause)
@@ -216,16 +217,16 @@ async def get_today(
 
         match_data = {
             "id": str(row.id),
-            "phase": row.phase,
+            "phase": row.phase or "scheduled",
             "start_time": row.start_time.isoformat() if row.start_time else None,
             "venue": row.venue,
             "score": {
-                "home": row.score_home or 0,
-                "away": row.score_away or 0,
+                "home": row.score_home if row.score_home is not None else 0,
+                "away": row.score_away if row.score_away is not None else 0,
             },
             "clock": row.clock,
             "period": row.period,
-            "version": row.version or 0,
+            "version": row.version if row.version is not None else 0,
             "home_team": teams.get("home_team", {}),
             "away_team": teams.get("away_team", {}),
         }

@@ -161,8 +161,10 @@ export function TodayView({
         const patched = league.matches.map((m) => patchMatch(m));
         const filtered = patched.filter((m) => {
           if (filter === "all") return true;
-          if (filter === "live")
-            return m.phase.startsWith("live") || m.phase === "break";
+          if (filter === "live") {
+            const p = (m.phase || "").toLowerCase();
+            return p.startsWith("live") || p === "break";
+          }
           if (filter === "scheduled")
             return m.phase === "scheduled" || m.phase === "pre_match";
           if (filter === "finished")
