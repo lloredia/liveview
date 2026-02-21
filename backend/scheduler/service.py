@@ -744,7 +744,11 @@ async def main() -> None:
             sync_service.request_shutdown()
         loop.add_signal_handler(sig, shutdown_all)
 
-    logger.info("scheduler_service_started", instance_id=settings.instance_id)
+    logger.info(
+        "scheduler_service_started",
+        instance_id=settings.instance_id,
+        db=settings.database_url_safe_log,
+    )
 
     sync_task = asyncio.create_task(sync_service.run())
 

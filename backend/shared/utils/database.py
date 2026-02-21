@@ -46,7 +46,7 @@ class DatabaseManager:
             class_=AsyncSession,
             expire_on_commit=False,
         )
-        logger.info("database_connected", url=str(self._settings.database_url))
+        logger.info("database_connected", url=self._settings.database_url_safe_log)
 
     async def disconnect(self) -> None:
         """Dispose of the engine and all connections."""

@@ -4,11 +4,13 @@ Uses pydantic-settings for env-based config with validation.
 """
 from __future__ import annotations
 
+import os
 from enum import Enum
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlparse
 
-from pydantic import Field, PostgresDsn, RedisDsn
+from pydantic import Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +49,26 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
     )
     db_pool_min: int = 2
+
+    @model_validator(mode="after")
+    def use_database_url_fallback(self) -> "Settings":
+        """Use DATABASE_URL from env (e.g. Railway) when LV_DATABASE_URL is not set."""
+        default_pg = "postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
+        if str(self.database_url) != default_pg:
+            return self
+        raw = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+        if not raw:
+            return self
+        if raw.startswith("postgres://"):
+            raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
+        elif raw.startswith("postgresql://") and "+asyncpg" not in raw:
+            raw = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+        try:
+            self.database_url = PostgresDsn(raw)
+        except Exception:
+            pass
+        return self
+
     db_pool_max: int = 20
     db_command_timeout: int = 30
 
@@ -106,6 +128,17 @@ class Settings(BaseSettings):
     @property
     def database_url_str(self) -> str:
         return str(self.database_url)
+
+    @property
+    def database_url_safe_log(self) -> str:
+        """URL with password redacted, for logging only."""
+        try:
+            u = urlparse(str(self.database_url))
+            netloc = f"{u.username or '?'}@***" + (f":{u.port}" if u.port else "")
+            path = u.path or "/?"
+            return f"{u.scheme}://{netloc}{path}"
+        except Exception:
+            return "postgresql+asyncpg://***"
 
 
 @lru_cache(maxsize=1)
