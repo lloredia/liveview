@@ -139,6 +139,7 @@ function backendEventsToPlays(events: MatchEvent[]): ESPNPlay[] {
 // ===========================================================================
 
 const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
+  // Soccer — all leagues so lineup/summary/player stats work for every soccer match
   "Premier League": { sport: "soccer", slug: "eng.1" },
   "La Liga": { sport: "soccer", slug: "esp.1" },
   Bundesliga: { sport: "soccer", slug: "ger.1" },
@@ -146,6 +147,23 @@ const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
   "Ligue 1": { sport: "soccer", slug: "fra.1" },
   MLS: { sport: "soccer", slug: "usa.1" },
   "Champions League": { sport: "soccer", slug: "uefa.champions" },
+  "Europa League": { sport: "soccer", slug: "uefa.europa" },
+  "Conference League": { sport: "soccer", slug: "uefa.europa.conf" },
+  Championship: { sport: "soccer", slug: "eng.2" },
+  "FA Cup": { sport: "soccer", slug: "eng.fa" },
+  "EFL Cup": { sport: "soccer", slug: "eng.league_cup" },
+  Eredivisie: { sport: "soccer", slug: "ned.1" },
+  "Liga Portugal": { sport: "soccer", slug: "por.1" },
+  "Turkish Super Lig": { sport: "soccer", slug: "tur.1" },
+  "Scottish Premiership": { sport: "soccer", slug: "sco.1" },
+  "Saudi Pro League": { sport: "soccer", slug: "sau.1" },
+  "Major League Soccer": { sport: "soccer", slug: "usa.1" },
+  "UEFA Champions League": { sport: "soccer", slug: "uefa.champions" },
+  "UEFA Europa League": { sport: "soccer", slug: "uefa.europa" },
+  "UEFA Europa Conference League": { sport: "soccer", slug: "uefa.europa.conf" },
+  "English Premier League": { sport: "soccer", slug: "eng.1" },
+  "English Championship": { sport: "soccer", slug: "eng.2" },
+  // Other sports
   NBA: { sport: "basketball", slug: "nba" },
   WNBA: { sport: "basketball", slug: "wnba" },
   NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
