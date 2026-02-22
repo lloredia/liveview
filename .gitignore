@@ -1,3 +1,4 @@
+# liveview-app: frontend/ and backend/ only; ignore node/python artifacts
 # dependencies
 /node_modules
 /frontend/node_modules
@@ -21,6 +22,7 @@
 # misc
 .DS_Store
 *.pem
+.cursor/
 
 # debug
 npm-debug.log*
@@ -44,8 +46,6 @@ next-env.d.ts
 /frontend/public/fallback-*.js
 /frontend/public/sw.js.map
 /frontend/public/workbox-*.js.map
-
-.vercel
 
 # backend
 /backend/__pycache__

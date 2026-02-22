@@ -526,41 +526,11 @@ mindmap
 
 ## Project Structure
 
+Everything lives under **liveview-app**: the **frontend** (Next.js) and **backend** (FastAPI) are the two main app folders; repo-level config and docs stay at the root.
+
 ```
-liveview/
-├── 📁 backend/                    # Python FastAPI backend
-│   ├── 📁 api/                    # REST API layer
-│   │   ├── app.py                 # FastAPI app + phase_sync_loop
-│   │   ├── dependencies.py        # Dependency injection (db, redis)
-│   │   ├── middleware.py           # CORS configuration
-│   │   ├── service.py             # Uvicorn entry point
-│   │   └── 📁 routes/
-│   │       ├── leagues.py         # /v1/leagues, /v1/leagues/:id/scoreboard
-│   │       ├── matches.py         # /v1/matches/:id, /timeline, /stats
-│   │       └── today.py           # /v1/today?date=YYYY-MM-DD
-│   ├── 📁 ingest/                 # Data ingestion from ESPN
-│   │   ├── service.py             # Ingest service entry
-│   │   └── 📁 providers/          # ESPN adapter
-│   ├── 📁 scheduler/              # Job scheduling
-│   │   └── service.py             # Cron-based triggers
-│   ├── 📁 builder/                # Event processing
-│   │   └── service.py             # Redis → Postgres writer
-│   ├── 📁 shared/                 # Shared utilities
-│   │   ├── config.py              # Settings (LV_ prefix)
-│   │   ├── 📁 models/
-│   │   │   ├── orm.py             # SQLAlchemy ORM models
-│   │   │   └── enums.py           # MatchPhase, etc.
-│   │   └── 📁 utils/
-│   │       ├── database.py        # Async DatabaseManager
-│   │       ├── redis_manager.py   # RedisManager
-│   │       └── logging.py         # Structured logger
-│   ├── 📁 migrations/
-│   │   └── 001_initial.sql        # Full schema
-│   ├── seed.py                    # Database seeder
-│   ├── Dockerfile                 # Multi-service Docker image
-│   └── entrypoint.sh              # SERVICE_TYPE router
-│
-├── 📁 frontend/                   # Next.js 14 frontend
+liveview-app/
+├── 📁 frontend/                   # Next.js 14 frontend (Vercel deploys this; Root Directory = frontend/)
 │   ├── 📁 app/
 │   │   ├── page.tsx               # Landing page (Today view)
 │   │   ├── layout.tsx             # Root layout
@@ -569,10 +539,43 @@ liveview/
 │   ├── 📁 components/             # 20+ React components
 │   ├── 📁 hooks/                  # Custom React hooks
 │   ├── 📁 lib/                    # API client, types, utilities
-│   └── tailwind.config.ts         # Custom dark theme
+│   ├── 📁 public/                 # Static assets, PWA, icons
+│   ├── package.json               # Frontend deps (Next, React, Tailwind, @vercel/analytics)
+│   ├── next.config.js             # Next + PWA config
+│   ├── tailwind.config.ts         # Custom dark theme
+│   ├── tsconfig.json
+│   ├── postcss.config.js
+│   ├── jest.config.ts
+│   └── vercel.json                # Vercel project config (when used from monorepo)
 │
-├── docker-compose.yml             # Local development
-├── CURSOR_CONTEXT.md              # AI-assisted dev context
+├── 📁 backend/                    # Python FastAPI backend (Railway)
+│   ├── 📁 api/                    # REST API layer
+│   │   ├── app.py                 # FastAPI app + phase_sync_loop
+│   │   ├── dependencies.py        # Dependency injection (db, redis)
+│   │   ├── middleware.py          # CORS configuration
+│   │   ├── service.py             # Uvicorn entry point
+│   │   └── 📁 routes/
+│   │       ├── leagues.py         # /v1/leagues, /v1/leagues/:id/scoreboard
+│   │       ├── matches.py         # /v1/matches/:id, /timeline, /stats, /lineup, /player-stats
+│   │       └── today.py           # /v1/today?date=YYYY-MM-DD
+│   ├── 📁 ingest/                 # Data ingestion (ESPN, Football-Data.org)
+│   │   ├── service.py             # Ingest service entry
+│   │   └── 📁 providers/
+│   ├── 📁 scheduler/              # Job scheduling
+│   │   └── service.py             # Cron-based triggers
+│   ├── 📁 builder/                 # Event processing
+│   │   └── service.py             # Redis → Postgres writer
+│   ├── 📁 shared/                 # Shared utilities
+│   │   ├── config.py              # Settings (LV_ prefix)
+│   │   ├── 📁 models/
+│   │   └── 📁 utils/
+│   ├── 📁 migrations/             # SQL schema
+│   ├── seed.py                    # Database seeder
+│   ├── Dockerfile                 # Multi-service Docker image
+│   ├── entrypoint.sh              # SERVICE_TYPE router
+│   └── .env                       # Backend env (LV_*); not committed
+│
+├── .gitignore                     # Repo ignores (frontend/, backend/, env)
 └── README.md                      # ← You are here
 ```
 
@@ -696,20 +699,22 @@ graph LR
 
 ### Local Development
 
+Repo root is **liveview-app**: only **frontend/** and **backend/** contain app code; all config and docs are at the right level (see [Project Structure](#project-structure)).
+
 ```bash
-# Clone
+# Clone (then open the repo root in your editor — e.g. liveview-app)
 git clone https://github.com/lloredia/liveview.git
 cd liveview
 
-# Start infrastructure
-docker-compose up -d
+# Optional: start Postgres/Redis via docker-compose if you have it at repo root
+# docker-compose up -d
 
-# Backend
+# Backend (run from repo root)
 cd backend
 pip install -r requirements.txt
 python -m api.service
 
-# Frontend (new terminal)
+# Frontend (new terminal, from repo root)
 cd frontend
 npm install
 npm run dev
