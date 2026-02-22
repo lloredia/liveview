@@ -34,11 +34,12 @@ interface MatchDetailProps {
   leagueName?: string;
 }
 
-type Tab = "play_by_play" | "player_stats" | "team_stats";
+type Tab = "play_by_play" | "player_stats" | "lineup" | "team_stats";
 
 const TAB_LABELS: Record<Tab, string> = {
   play_by_play: "Play-by-Play",
   player_stats: "Player Stats",
+  lineup: "Lineup",
   team_stats: "Team Stats",
 };
 
@@ -96,6 +97,8 @@ interface ESPNSummaryData {
   awayPlayers: TeamPlayerStats;
   injuries: { home: InjuryEntry[]; away: InjuryEntry[] };
   sport: string;
+  homeFormation?: string;
+  awayFormation?: string;
 }
 
 /** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
@@ -147,7 +150,12 @@ const STAT_DISPLAY: Record<string, Record<string, string>> = {
     MIN: "MIN", FG: "FG", "3PT": "3PT", FT: "FT", OREB: "OR", DREB: "DR",
     REB: "REB", AST: "AST", STL: "STL", BLK: "BLK", TO: "TO", PF: "PF", PTS: "PTS",
   },
-  soccer: { SH: "SH", ST: "ST", G: "G", A: "A", OF: "OF", FD: "FD", FC: "FC", SV: "SV", YC: "YC", RC: "RC" },
+  soccer: {
+    SH: "SH", Shots: "SH", ST: "ST", Starts: "ST", G: "G", Goals: "G", A: "A", Assists: "A",
+    OF: "OF", Offsides: "OF", FD: "FD", FoulsDrawn: "FD", FC: "FC", FoulsCommitted: "FC",
+    SV: "SV", Saves: "SV", YC: "YC", "Yellow Cards": "YC", RC: "RC", "Red Cards": "RC",
+    GP: "GP", MIN: "MIN", Minutes: "MIN",
+  },
   hockey: { G: "G", A: "A", PTS: "PTS", "+/-": "+/-", PIM: "PIM", SOG: "SOG", HIT: "HIT", BLK: "BLK", FW: "FW", FL: "FL", TOI: "TOI" },
   baseball: { AB: "AB", R: "R", H: "H", HR: "HR", RBI: "RBI", BB: "BB", SO: "SO", AVG: "AVG", OBP: "OBP", SLG: "SLG" },
   football: { "C/ATT": "C/ATT", YDS: "YDS", TD: "TD", INT: "INT", CAR: "CAR", REC: "REC", TGTS: "TGTS", SACK: "SACK", TFL: "TFL" },
@@ -155,7 +163,7 @@ const STAT_DISPLAY: Record<string, Record<string, string>> = {
 
 const HIGHLIGHT_STATS: Record<string, string[]> = {
   basketball: ["PTS", "REB", "AST"],
-  soccer: ["G", "A", "SH"],
+  soccer: ["G", "A", "SH", "Goals", "Assists", "Shots", "Saves", "SV"],
   hockey: ["G", "A", "PTS"],
   baseball: ["H", "RBI", "HR"],
   football: ["YDS", "TD", "REC"],
@@ -325,6 +333,16 @@ async function fetchESPNSummary(
     const homeComp = headerComps.find((c: any) => c.homeAway === "home");
     const awayComp = headerComps.find((c: any) => c.homeAway === "away");
 
+    // Soccer formation (e.g. "4-3-3") from ESPN summary
+    const homeFormation =
+      mapping.sport === "soccer"
+        ? (homeComp?.formation || homeComp?.formatted || data.boxscore?.teams?.[0]?.formation)
+        : undefined;
+    const awayFormation =
+      mapping.sport === "soccer"
+        ? (awayComp?.formation || awayComp?.formatted || data.boxscore?.teams?.[1]?.formation)
+        : undefined;
+
     return {
       plays,
       homeTeamStats, awayTeamStats,
@@ -336,6 +354,8 @@ async function fetchESPNSummary(
       awayPlayers: { teamName: awayPlayerComp?.team?.displayName || awayTeamName, players: awayExtracted.players, statColumns: allColumns },
       injuries,
       sport: mapping.sport,
+      homeFormation: homeFormation || undefined,
+      awayFormation: awayFormation || undefined,
     };
   } catch { return null; }
 }
@@ -365,6 +385,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   const { data: espnData, loading: espnLoading } = usePolling<ESPNSummaryData | null>({
     fetcher: espnFetcher, interval: 60000, enabled: !!matchData, key: `espn-${matchId}`,
   });
+
+  // When lineup tab is active but current match is not soccer, switch to play_by_play
+  const tabs: Tab[] = espnData?.sport === "soccer" ? ["play_by_play", "player_stats", "lineup", "team_stats"] : ["play_by_play", "player_stats", "team_stats"];
+  useEffect(() => {
+    if (activeTab === "lineup" && !tabs.includes("lineup")) setActiveTab("play_by_play");
+  }, [activeTab, espnData?.sport]);
 
   const timelineFetcher = useCallback(() => fetchTimeline(matchId), [matchId]);
   const { data: timelineData } = usePolling<TimelineResponse>({
@@ -478,9 +504,9 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
       <Lineup homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} homeTeamLogo={match.home_team?.logo_url || null} awayTeamLogo={match.away_team?.logo_url || null} leagueName={leagueName} />
       <Highlights homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} leagueName={leagueName} matchPhase={match.phase} />
 
-      {/* Tabs */}
+      {/* Tabs: show Lineup only for soccer */}
       <div className="mt-6 flex gap-1 rounded-xl border border-surface-border bg-surface-card p-1">
-        {(["play_by_play", "player_stats", "team_stats"] as Tab[]).map((tab) => (
+        {tabs.map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 rounded-lg py-2 text-[11px] font-semibold uppercase tracking-wider transition-all ${activeTab === tab ? "bg-surface-hover text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-secondary"}`}>
             {TAB_LABELS[tab]}
           </button>
@@ -510,6 +536,16 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
             leagueName={leagueForESPN}
+          />
+        )}
+        {activeTab === "lineup" && espnData?.sport === "soccer" && (
+          <LineupTab
+            espnData={espnData}
+            loading={espnLoading && !espnData}
+            homeTeamLogo={match.home_team?.logo_url || null}
+            awayTeamLogo={match.away_team?.logo_url || null}
+            homeTeamName={match.home_team?.name || "Home"}
+            awayTeamName={match.away_team?.name || "Away"}
           />
         )}
         {activeTab === "team_stats" && (
@@ -886,6 +922,121 @@ function PlayerTable({ label, players, columns, displayMap, highlights, sortCol,
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Tab: Lineup (soccer only — formation + starters)
+// ===========================================================================
+
+interface LineupTabProps {
+  espnData: ESPNSummaryData | null;
+  loading: boolean;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  homeTeamName: string;
+  awayTeamName: string;
+}
+
+function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName }: LineupTabProps) {
+  if (loading) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+        <div className="flex border-b border-surface-border">
+          <div className="flex-1 py-4 text-center"><div className="mx-auto h-4 w-28 animate-pulse rounded bg-surface-hover" /></div>
+          <div className="w-px bg-surface-border" />
+          <div className="flex-1 py-4 text-center"><div className="mx-auto h-4 w-28 animate-pulse rounded bg-surface-hover" /></div>
+        </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b border-surface-border/30 px-4 py-2.5">
+            <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
+            <div className="flex-1" />
+            <div className="h-3 w-16 animate-pulse rounded bg-surface-hover" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!espnData) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">⚽</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">Lineup Unavailable</div>
+        <div className="text-[12px] text-text-muted">Match data is not available</div>
+      </div>
+    );
+  }
+
+  const homeStarters = (espnData.homePlayers?.players ?? []).filter((p) => p.starter);
+  const awayStarters = (espnData.awayPlayers?.players ?? []).filter((p) => p.starter);
+  const hasAny = homeStarters.length > 0 || awayStarters.length > 0 || espnData.homeFormation || espnData.awayFormation;
+
+  if (!hasAny) {
+    return (
+      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
+        <div className="mb-3 text-3xl opacity-60">⚽</div>
+        <div className="mb-1 text-[14px] font-semibold text-text-secondary">No Lineup Data</div>
+        <div className="text-[12px] text-text-muted">Formation and starters are not yet available for this match</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
+      <div className="grid grid-cols-2 gap-0 border-b border-surface-border">
+        {/* Home */}
+        <div className="border-r border-surface-border p-4">
+          <div className="mb-3 flex items-center gap-2">
+            {homeTeamLogo ? (
+              <img src={homeTeamLogo} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+            ) : (
+              <div className="h-6 w-6 shrink-0 rounded-full bg-surface-hover" />
+            )}
+            <span className="truncate text-[13px] font-semibold text-text-primary">{homeTeamName}</span>
+            {espnData.homeFormation && (
+              <span className="ml-auto rounded-md bg-surface-hover px-2 py-0.5 font-mono text-[11px] font-bold text-text-primary">
+                {espnData.homeFormation}
+              </span>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {homeStarters.map((p, i) => (
+              <li key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
+                {p.jersey != null && <span className="w-6 font-mono text-[10px] font-bold text-text-dim">#{p.jersey}</span>}
+                <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                {p.position && <span className="shrink-0 text-[10px] text-text-dim">{p.position}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        {/* Away */}
+        <div className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            {awayTeamLogo ? (
+              <img src={awayTeamLogo} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+            ) : (
+              <div className="h-6 w-6 shrink-0 rounded-full bg-surface-hover" />
+            )}
+            <span className="truncate text-[13px] font-semibold text-text-primary">{awayTeamName}</span>
+            {espnData.awayFormation && (
+              <span className="ml-auto rounded-md bg-surface-hover px-2 py-0.5 font-mono text-[11px] font-bold text-text-primary">
+                {espnData.awayFormation}
+              </span>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {awayStarters.map((p, i) => (
+              <li key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
+                {p.jersey != null && <span className="w-6 font-mono text-[10px] font-bold text-text-dim">#{p.jersey}</span>}
+                <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                {p.position && <span className="shrink-0 text-[10px] text-text-dim">{p.position}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
