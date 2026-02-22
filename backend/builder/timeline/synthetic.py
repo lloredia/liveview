@@ -227,6 +227,7 @@ class SyntheticTimelineGenerator:
             Sport.BASKETBALL: EventType.BASKET,
             Sport.HOCKEY: EventType.GOAL,
             Sport.BASEBALL: EventType.RUN,
+            Sport.FOOTBALL: EventType.GENERIC,
         }.get(sport, EventType.GOAL)
 
     def _parse_clock_to_minute(self, clock: Optional[str]) -> Optional[int]:

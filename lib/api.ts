@@ -86,6 +86,30 @@ export async function fetchTimeline(
   return apiFetch<TimelineResponse>(`/v1/matches/${matchId}/timeline${qs ? `?${qs}` : ""}`);
 }
 
+/** Lineup from Football-Data.org (soccer). Used when ESPN has no lineup. */
+export interface LineupResponse {
+  source: string | null;
+  home: { formation: string | null; lineup: { id: number; name: string; position: string | null; shirt_number: number | null }[]; bench: { id: number; name: string; position: string | null; shirt_number: number | null }[] } | null;
+  away: { formation: string | null; lineup: { id: number; name: string; position: string | null; shirt_number: number | null }[]; bench: { id: number; name: string; position: string | null; shirt_number: number | null }[] } | null;
+  message?: string;
+}
+
+export async function fetchLineup(matchId: string): Promise<LineupResponse> {
+  return apiFetch<LineupResponse>(`/v1/matches/${matchId}/lineup`);
+}
+
+/** Player stats from Football-Data.org (soccer) when ESPN has none. Same shape as ESPN boxscore players. */
+export interface PlayerStatsResponse {
+  source: string | null;
+  home: { teamName: string; players: { name: string; jersey: string; position: string; stats: Record<string, number>; starter: boolean }[]; statColumns: string[] } | null;
+  away: { teamName: string; players: { name: string; jersey: string; position: string; stats: Record<string, number>; starter: boolean }[]; statColumns: string[] } | null;
+  message?: string;
+}
+
+export async function fetchPlayerStats(matchId: string): Promise<PlayerStatsResponse> {
+  return apiFetch<PlayerStatsResponse>(`/v1/matches/${matchId}/player-stats`);
+}
+
 /**
  * Fetch live matches across ALL leagues for the live ticker.
  * Fetches all scoreboards in parallel and filters for live phases.

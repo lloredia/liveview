@@ -68,6 +68,8 @@ ESPN_LEAGUES: list[dict[str, str]] = [
     {"sport": "hockey", "espn_sport": "hockey", "espn_league": "nhl", "name": "NHL", "country": "USA"},
     # Baseball
     {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA"},
+    # Football
+    {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA"},
 ]
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"

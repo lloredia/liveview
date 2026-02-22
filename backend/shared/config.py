@@ -107,11 +107,13 @@ class Settings(BaseSettings):
     sportradar_api_key: str = ""
     espn_api_key: str = ""
     thesportsdb_api_key: str = ""
+    football_data_api_key: str = ""
 
     # ── Quota ────────────────────────────────────────────────
     sportradar_rpm_limit: int = 1000
     espn_rpm_limit: int = 600
     thesportsdb_rpm_limit: int = 300
+    football_data_rpm_limit: int = 60
 
     # ── Builder ──────────────────────────────────────────────
     builder_reconciliation_interval_s: float = 10.0

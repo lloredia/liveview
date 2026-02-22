@@ -47,6 +47,13 @@ SPORT_TEMPO: dict[Sport, dict[str, float]] = {
         "scheduled": 120.0,
         "finished": 300.0,
     },
+    Sport.FOOTBALL: {
+        "live_active": 3.0,     # Quarters, plays
+        "live_break": 15.0,     # Between quarters, halftime
+        "pre_match": 60.0,
+        "scheduled": 120.0,
+        "finished": 300.0,
+    },
 }
 
 # Tier multipliers: higher tiers poll less aggressively

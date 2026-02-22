@@ -27,6 +27,7 @@ from shared.utils.health_server import start_health_server
 from ingest.normalization.normalizer import NormalizationService
 from ingest.providers.base import BaseProvider
 from ingest.providers.espn import ESPNProvider
+from ingest.providers.football_data import FootballDataProvider
 from ingest.providers.registry import HealthScorer, ProviderRegistry
 from ingest.providers.sportradar import SportradarProvider
 from ingest.providers.thesportsdb import TheSportsDBProvider
@@ -222,6 +223,13 @@ def build_provider_registry(redis: RedisManager, settings: Settings) -> Provider
         providers[ProviderName.THESPORTSDB] = TheSportsDBProvider(
             redis=redis,
             rpm_limit=settings.thesportsdb_rpm_limit,
+        )
+
+    if settings.football_data_api_key:
+        providers[ProviderName.FOOTBALL_DATA] = FootballDataProvider(
+            redis=redis,
+            api_key=settings.football_data_api_key,
+            rpm_limit=settings.football_data_rpm_limit,
         )
 
     scorer = HealthScorer(redis=redis, settings=settings)

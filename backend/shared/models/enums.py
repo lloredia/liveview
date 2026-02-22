@@ -9,6 +9,7 @@ class Sport(str, Enum):
     BASKETBALL = "basketball"
     HOCKEY = "hockey"
     BASEBALL = "baseball"
+    FOOTBALL = "football"
 
 
 class MatchPhase(str, Enum):
@@ -58,6 +59,7 @@ class ProviderName(str, Enum):
     SPORTRADAR = "sportradar"
     ESPN = "espn"
     THESPORTSDB = "thesportsdb"
+    FOOTBALL_DATA = "football_data"
 
 
 class EventType(str, Enum):

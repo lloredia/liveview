@@ -84,6 +84,7 @@ SCHEDULE_SYNC_LEAGUES: list[dict[str, str]] = [
     {"sport": "basketball", "espn_sport": "basketball", "espn_league": "womens-college-basketball", "name": "NCAAW", "country": "USA"},
     {"sport": "hockey", "espn_sport": "hockey", "espn_league": "nhl", "name": "NHL", "country": "USA"},
     {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA"},
+    {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA"},
 ]
 
 SCHEDULE_SYNC_INTERVAL_S = 4 * 3600  # 4 hours
@@ -345,6 +346,7 @@ class SchedulerService:
                 "sportradar": self._settings.sportradar_rpm_limit,
                 "espn": self._settings.espn_rpm_limit,
                 "thesportsdb": self._settings.thesportsdb_rpm_limit,
+                "football_data": self._settings.football_data_rpm_limit,
             }
             quota_limit = quota_limits.get(task.provider.value, 1000)
 

@@ -33,6 +33,7 @@ _SPORT_SLUGS: dict[Sport, str] = {
     Sport.BASKETBALL: "basketball",
     Sport.HOCKEY: "hockey",
     Sport.BASEBALL: "baseball",
+    Sport.FOOTBALL: "football",
 }
 
 _LEAGUE_SLUGS: dict[str, tuple[str, str]] = {
@@ -64,6 +65,8 @@ _LEAGUE_SLUGS: dict[str, tuple[str, str]] = {
     "nhl": ("hockey", "nhl"),
     # Baseball
     "mlb": ("baseball", "mlb"),
+    # Football
+    "nfl": ("football", "nfl"),
 }
 
 
@@ -125,6 +128,21 @@ def _parse_espn_phase(status_type: str, status_detail: str, sport: Sport) -> Mat
         if sport == Sport.BASEBALL:
             return MatchPhase.LIVE_INNING
 
+        if sport == Sport.FOOTBALL:
+            if "1st" in detail:
+                return MatchPhase.LIVE_Q1
+            if "2nd" in detail:
+                return MatchPhase.LIVE_Q2
+            if "3rd" in detail:
+                return MatchPhase.LIVE_Q3
+            if "4th" in detail:
+                return MatchPhase.LIVE_Q4
+            if "ot" in detail or "overtime" in detail:
+                return MatchPhase.LIVE_OT
+            if "half" in detail:
+                return MatchPhase.BREAK
+            return MatchPhase.LIVE_Q1
+
     return MatchPhase.SCHEDULED
 
 
@@ -184,7 +202,7 @@ class ESPNProvider(BaseProvider):
             name=ProviderName.ESPN,
             http_client=http_client,
             redis=redis,
-            supported_sports={Sport.SOCCER, Sport.BASKETBALL, Sport.HOCKEY, Sport.BASEBALL},
+            supported_sports={Sport.SOCCER, Sport.BASKETBALL, Sport.HOCKEY, Sport.BASEBALL, Sport.FOOTBALL},
             rpm_limit=rpm_limit,
         )
 
