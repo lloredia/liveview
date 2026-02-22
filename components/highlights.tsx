@@ -73,9 +73,8 @@ export function Highlights({
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [recapUrl, setRecapUrl] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-
   const finished = matchPhase === "finished";
+  const [expanded, setExpanded] = useState(finished);
 
   useEffect(() => {
     if (!finished || !homeTeamName || !awayTeamName) return;
