@@ -155,6 +155,19 @@ const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
   NFL: { sport: "football", slug: "nfl" },
 };
 
+/** Resolve league name to ESPN mapping (exact or fuzzy, e.g. "Major League Soccer" -> MLS). */
+function getLeagueMapping(leagueName: string): { sport: string; slug: string } | null {
+  if (!leagueName) return null;
+  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  if (mapping) return mapping;
+  const n = leagueName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [k, v] of Object.entries(LEAGUE_ESPN_MAP)) {
+    const kNorm = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (n === kNorm || n.includes(kNorm) || kNorm.includes(n)) return v;
+  }
+  return null;
+}
+
 const STAT_DISPLAY: Record<string, Record<string, string>> = {
   basketball: {
     MIN: "MIN", FG: "FG", "3PT": "3PT", FT: "FT", OREB: "OR", DREB: "DR",
@@ -209,6 +222,33 @@ const TEAM_STAT_DISPLAY_ORDER = [
 // ESPN Data Fetchers
 // ===========================================================================
 
+/** Returns true if two team names refer to the same team (flexible match for lineup/ESPN). */
+function teamNamesMatch(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const stripSuffix = (s: string) => {
+    let out = norm(s);
+    for (const suf of ["fc", "cf", "cfc", "sc", "united", "city"]) {
+      if (out.endsWith(suf) && out.length > suf.length) out = out.slice(0, -suf.length);
+    }
+    return out;
+  };
+  const an = norm(a);
+  const bn = norm(b);
+  const anAlt = stripSuffix(a);
+  const bnAlt = stripSuffix(b);
+  if (an === bn || anAlt === bnAlt) return true;
+  if (an.includes(bn) || bn.includes(an) || anAlt.includes(bnAlt) || bnAlt.includes(anAlt)) return true;
+  if (an.length >= 2 && bn.length >= 2) {
+    let i = 0;
+    for (const c of an) { i = bn.indexOf(c, i); if (i === -1) break; i += 1; }
+    if (i !== -1) return true;
+    i = 0;
+    for (const c of bn) { i = an.indexOf(c, i); if (i === -1) break; i += 1; }
+    if (i !== -1) return true;
+  }
+  return false;
+}
+
 async function findEspnEventId(
   homeTeamName: string, awayTeamName: string, sport: string, slug: string,
 ): Promise<string | null> {
@@ -218,21 +258,21 @@ async function findEspnEventId(
     if (!res.ok) return null;
     const data = await res.json();
     const events: any[] = data.events || [];
-    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const homeLower = normalize(homeTeamName);
-    const awayLower = normalize(awayTeamName);
 
     for (const evt of events) {
       const comp = evt.competitions?.[0];
       if (!comp) continue;
       const competitors = comp.competitors || [];
-      const names = competitors.map((c: any) => normalize(c.team?.displayName || c.team?.name || ""));
-      const shortNames = competitors.map((c: any) => normalize(c.team?.shortDisplayName || c.team?.name || ""));
-      const matchesHome = names.some((n: string) => n.includes(homeLower) || homeLower.includes(n)) ||
-        shortNames.some((n: string) => n.includes(homeLower) || homeLower.includes(n));
-      const matchesAway = names.some((n: string) => n.includes(awayLower) || awayLower.includes(n)) ||
-        shortNames.some((n: string) => n.includes(awayLower) || awayLower.includes(n));
-      if (matchesHome && matchesAway) return evt.id;
+      const homeComp = competitors.find((c: any) => c.homeAway === "home");
+      const awayComp = competitors.find((c: any) => c.homeAway === "away");
+      if (!homeComp || !awayComp) continue;
+      const homeDisplay = homeComp.team?.displayName || homeComp.team?.name || "";
+      const awayDisplay = awayComp.team?.displayName || awayComp.team?.name || "";
+      const homeShort = homeComp.team?.shortDisplayName || homeComp.team?.abbreviation || "";
+      const awayShort = awayComp.team?.shortDisplayName || awayComp.team?.abbreviation || "";
+      const homeMatch = teamNamesMatch(homeTeamName, homeDisplay) || teamNamesMatch(homeTeamName, homeShort);
+      const awayMatch = teamNamesMatch(awayTeamName, awayDisplay) || teamNamesMatch(awayTeamName, awayShort);
+      if (homeMatch && awayMatch) return evt.id;
     }
     return null;
   } catch { return null; }
@@ -281,7 +321,7 @@ function extractPlayerStats(competitor: any): { players: PlayerStatLine[]; statC
 async function fetchESPNSummary(
   homeTeamName: string, awayTeamName: string, leagueName: string,
 ): Promise<ESPNSummaryData | null> {
-  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  const mapping = getLeagueMapping(leagueName);
   if (!mapping) return null;
 
   const eventId = await findEspnEventId(homeTeamName, awayTeamName, mapping.sport, mapping.slug);
@@ -788,7 +828,7 @@ interface PlayerStatsTabProps {
 }
 
 function PlayerStatsTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, onPlayerClick }: PlayerStatsTabProps) {
-  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  const mapping = getLeagueMapping(leagueName);
   const [activeSide, setActiveSide] = useState<"home" | "away">("home");
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
