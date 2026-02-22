@@ -58,35 +58,47 @@ function HomeContent() {
       });
   }, []);
 
+  const [tabVisible, setTabVisible] = useState(true);
+  useEffect(() => {
+    const onVisibility = () => setTabVisible(document.visibilityState === "visible");
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   useEffect(() => {
     if (leagues.length === 0) return;
-    const pollCounts = async () => {
+    const isLive = (m: { phase?: string }) => {
+      const p = (m.phase || "").toLowerCase();
+      return p.startsWith("live") || p === "break";
+    };
+    const applyTodayData = (data: TodayResponse) => {
+      setTodaySnapshot(data);
+      const counts: Record<string, number> = {};
+      let total = 0;
+      for (const lg of data.leagues ?? []) {
+        const liveCount = (lg.matches ?? []).filter(isLive).length;
+        if (liveCount > 0) {
+          counts[lg.league_id] = liveCount;
+          total += liveCount;
+        }
+      }
+      setLiveCounts(counts);
+      setTotalLive(total);
+    };
+    const pollCounts = async (retry = false) => {
       try {
         const data = await fetchLiveCounts();
-        setTodaySnapshot(data);
-        const counts: Record<string, number> = {};
-        let total = 0;
-        const isLive = (m: { phase?: string }) => {
-          const p = (m.phase || "").toLowerCase();
-          return p.startsWith("live") || p === "break";
-        };
-        for (const lg of data.leagues ?? []) {
-          const liveCount = (lg.matches ?? []).filter(isLive).length;
-          if (liveCount > 0) {
-            counts[lg.league_id] = liveCount;
-            total += liveCount;
-          }
-        }
-        setLiveCounts(counts);
-        setTotalLive(total);
+        applyTodayData(data);
       } catch {
-        // silent
+        if (!retry) setTimeout(() => pollCounts(true), 2000);
       }
     };
     pollCounts();
-    const timer = setInterval(pollCounts, 30000);
+    const interval = tabVisible ? (totalLive > 0 ? 12_000 : 30_000) : 60_000;
+    const timer = setInterval(() => pollCounts(), interval);
     return () => clearInterval(timer);
-  }, [leagues]);
+  }, [leagues, tabVisible, totalLive]);
 
   useEffect(() => {
     const check = async () => {

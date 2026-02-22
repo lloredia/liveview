@@ -112,7 +112,8 @@ export function TodayView({
   const [hasLive, setHasLive] = useState(false);
   const { data, loading, error } = usePolling({
     fetcher,
-    interval: hasLive ? 10000 : 20000,
+    interval: hasLive ? 10_000 : 20_000,
+    intervalWhenHidden: 60_000,
     enabled: true,
     key: apiDateStr ?? "today",
   });
