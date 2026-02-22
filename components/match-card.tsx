@@ -3,11 +3,13 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { MatchSummary } from "@/lib/types";
 import { formatTime, isLive, phaseLabel, phaseShortLabel } from "@/lib/utils";
+import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
 
 /* ── Animated score digit ─────────────────────────────────────────── */
 
 function AnimatedScore({ value, live }: { value: number; live: boolean }) {
+  const { theme } = useTheme();
   const prevRef = useRef(value);
   const [pop, setPop] = useState(false);
 
@@ -20,10 +22,15 @@ function AnimatedScore({ value, live }: { value: number; live: boolean }) {
     }
   }, [value]);
 
+  const liveScoreClass =
+    theme === "light"
+      ? "text-text-primary"
+      : "text-white [text-shadow:0_0_10px_rgba(0,230,118,0.3)]";
+
   return (
     <span
       className={`inline-block font-mono text-[17px] font-extrabold tabular-nums md:text-xl ${
-        live ? "text-white [text-shadow:0_0_10px_rgba(0,230,118,0.3)]" : "text-text-primary"
+        live ? liveScoreClass : "text-text-primary"
       } ${pop ? "score-pop" : ""}`}
     >
       {value}

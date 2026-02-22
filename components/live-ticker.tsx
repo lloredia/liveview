@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { phaseShortLabel } from "@/lib/utils";
+import { useTheme } from "@/lib/theme";
 import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
 interface LiveTickerProps {
@@ -38,13 +39,15 @@ function TickerItem({
   match: MatchSummaryWithLeague;
   onClick: () => void;
 }) {
+  const { theme } = useTheme();
+  const scoreClass = theme === "light" ? "font-mono font-extrabold text-text-primary" : "font-mono font-extrabold text-white";
   return (
     <button
       onClick={onClick}
       className="flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
     >
       <span className="font-medium">{match.home_team.short_name}</span>
-      <span className="font-mono font-extrabold text-white">
+      <span className={scoreClass}>
         <TickerScore value={match.score.home} />
         <span className="text-text-dim/50">-</span>
         <TickerScore value={match.score.away} />

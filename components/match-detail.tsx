@@ -19,6 +19,7 @@ import { AnimatedScore } from "./animated-score";
 import { MatchForm } from "./match-form";
 import { HeadToHead } from "./head-to-head";
 import { Lineup } from "./lineup";
+import { useTheme } from "@/lib/theme";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
 import type { MatchDetailResponse, MatchEvent, TimelineResponse } from "@/lib/types";
@@ -408,6 +409,11 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   const effectiveScoreAway = useEspn ? espnLive.awayScore : state?.score_away ?? 0;
   const live = isLive(effectivePhase);
   const color = phaseColor(effectivePhase);
+  const { theme } = useTheme();
+  const bigScoreClass =
+    theme === "light"
+      ? "font-mono text-5xl font-black text-text-primary md:text-6xl"
+      : "font-mono text-5xl font-black text-white md:text-6xl drop-shadow-[0_0_24px_rgba(255,255,255,0.25)] [text-shadow:0_0_30px_rgba(239,68,68,0.35)]";
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
@@ -425,7 +431,15 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
       </div>
 
       {/* Score header */}
-      <div className={`relative overflow-hidden rounded-2xl border p-6 text-center md:p-8 ${live ? "border-red-500/20 bg-gradient-to-br from-surface-card via-[#1a0f0f] to-surface-card shadow-[0_0_30px_rgba(239,68,68,0.06)]" : "border-surface-border bg-surface-card"}`}>
+      <div
+        className={`relative overflow-hidden rounded-2xl border p-6 text-center md:p-8 ${
+          live
+            ? theme === "light"
+              ? "border-accent-red/30 bg-gradient-to-br from-surface-card via-accent-red/5 to-surface-card shadow-[0_0_20px_rgba(239,68,68,0.08)]"
+              : "border-red-500/20 bg-gradient-to-br from-surface-card via-[#1a0f0f] to-surface-card shadow-[0_0_30px_rgba(239,68,68,0.06)]"
+            : "border-surface-border bg-surface-card"
+        }`}
+      >
         {live && <div className="absolute inset-x-0 top-0 h-[2px] animate-shimmer bg-gradient-to-r from-transparent via-red-500 to-transparent" />}
         <div className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1" style={{ background: live ? "rgba(239,68,68,0.1)" : `${color}15` }}>
           {live && (<div className="relative h-1.5 w-1.5"><div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" /><div className="relative h-1.5 w-1.5 rounded-full bg-red-500" /></div>)}
@@ -442,20 +456,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           <div className="flex items-center gap-3 md:gap-4">
             <AnimatedScore
               value={effectiveScoreHome}
-              className={`font-mono text-5xl font-black text-white md:text-6xl ${
-                live
-                  ? "drop-shadow-[0_0_24px_rgba(255,255,255,0.25)] [text-shadow:0_0_30px_rgba(239,68,68,0.35)]"
-                  : "[text-shadow:0_1px_8px_rgba(0,0,0,0.3)]"
-              }`}
+              className={live ? bigScoreClass : `font-mono text-5xl font-black text-text-primary md:text-6xl [text-shadow:0_1px_8px_rgba(0,0,0,0.15)]`}
             />
             <span className="text-2xl font-light text-text-muted/40 md:text-3xl">:</span>
             <AnimatedScore
               value={effectiveScoreAway}
-              className={`font-mono text-5xl font-black text-white md:text-6xl ${
-                live
-                  ? "drop-shadow-[0_0_24px_rgba(255,255,255,0.25)] [text-shadow:0_0_30px_rgba(239,68,68,0.35)]"
-                  : "[text-shadow:0_1px_8px_rgba(0,0,0,0.3)]"
-              }`}
+              className={live ? bigScoreClass : `font-mono text-5xl font-black text-text-primary md:text-6xl [text-shadow:0_1px_8px_rgba(0,0,0,0.15)]`}
             />
           </div>
           <div className="flex-1 text-center">
