@@ -185,30 +185,54 @@ export async function fetchESPNScoreboard(
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+/** Strip common suffixes so "Inter Miami FC" and "Inter Miami CF" both become "intermiami". */
+function normalizeForMatch(s: string): string {
+  const n = normalize(s);
+  const suffixes = ["fc", "cf", "cfc", "sc", "united", "city", "cfc"];
+  let out = n;
+  for (const suf of suffixes) {
+    if (out.endsWith(suf) && out.length > suf.length) out = out.slice(0, -suf.length);
+  }
+  return out;
+}
+
+/** True if short looks like an initialism of long (e.g. "lafc" vs "losangelesfootballclub"). */
+function isInitialismOf(short: string, long: string): boolean {
+  if (short.length > long.length || short.length < 2) return false;
+  let i = 0;
+  for (const c of short) {
+    i = long.indexOf(c, i);
+    if (i === -1) return false;
+    i += 1;
+  }
+  return true;
+}
+
+function namesMatch(a: string, b: string): boolean {
+  const an = normalize(a);
+  const bn = normalize(b);
+  const anAlt = normalizeForMatch(a);
+  const bnAlt = normalizeForMatch(b);
+  if (an === bn || anAlt === bnAlt) return true;
+  if (an.includes(bn) || bn.includes(an)) return true;
+  if (anAlt.includes(bnAlt) || bnAlt.includes(anAlt)) return true;
+  if (isInitialismOf(an, bn) || isInitialismOf(bn, an)) return true;
+  if (an.length >= 3 && bn.length >= 3 && (isInitialismOf(an, bnAlt) || isInitialismOf(bn, anAlt))) return true;
+  return false;
+}
+
 export function findESPNMatch(
   espnMatches: ESPNLiveMatch[],
   homeTeamName: string,
   awayTeamName: string,
 ): ESPNLiveMatch | null {
-  const homeNorm = normalize(homeTeamName);
-  const awayNorm = normalize(awayTeamName);
-
   for (const m of espnMatches) {
-    const mHome = normalize(m.homeTeam);
-    const mAway = normalize(m.awayTeam);
-    const mHomeShort = normalize(m.homeShort);
-    const mAwayShort = normalize(m.awayShort);
-
     const homeMatch =
-      mHome.includes(homeNorm) ||
-      homeNorm.includes(mHome) ||
-      mHomeShort.includes(homeNorm) ||
-      homeNorm.includes(mHomeShort);
+      namesMatch(homeTeamName, m.homeTeam) ||
+      namesMatch(homeTeamName, m.homeShort);
     const awayMatch =
-      mAway.includes(awayNorm) ||
-      awayNorm.includes(mAway) ||
-      mAwayShort.includes(awayNorm) ||
-      awayNorm.includes(mAwayShort);
+      namesMatch(awayTeamName, m.awayTeam) ||
+      namesMatch(awayTeamName, m.awayShort);
 
     if (homeMatch && awayMatch) return m;
   }

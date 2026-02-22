@@ -85,6 +85,14 @@ interface InjuryEntry {
   status: string;
 }
 
+/** One substitution: minute, player off, player on. */
+export interface SubstitutionEntry {
+  minute: string;
+  playerOff: string;
+  playerOn: string;
+  homeAway: "home" | "away";
+}
+
 interface ESPNSummaryData {
   plays: ESPNPlay[];
   homeTeamStats: ESPNTeamStat[];
@@ -99,6 +107,8 @@ interface ESPNSummaryData {
   sport: string;
   homeFormation?: string;
   awayFormation?: string;
+  /** Soccer: substitutions parsed from plays (home and away combined, ordered by time). */
+  substitutions?: SubstitutionEntry[];
 }
 
 /** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
@@ -168,6 +178,18 @@ const HIGHLIGHT_STATS: Record<string, string[]> = {
   baseball: ["H", "RBI", "HR"],
   football: ["YDS", "TD", "REC"],
 };
+
+/** Soccer player detail: stat keys to show (label, key). */
+const SOCCER_PLAYER_DETAIL_STATS = [
+  { label: "Matches", keys: [] as string[], fallback: "1" },
+  { label: "Goals", keys: ["G", "Goals"] },
+  { label: "Assists", keys: ["A", "Assists"] },
+  { label: "Shots", keys: ["SH", "Shots"] },
+  { label: "Saves", keys: ["SV", "Saves"] },
+  { label: "Yellow Cards", keys: ["YC", "Yellow Cards"] },
+  { label: "Red Cards", keys: ["RC", "Red Cards"] },
+  { label: "Minutes", keys: ["MIN", "Minutes"] },
+];
 
 const TEAM_STAT_DISPLAY_ORDER = [
   "fieldGoalsMade-fieldGoalsAttempted", "fieldGoalPct",
@@ -343,6 +365,26 @@ async function fetchESPNSummary(
         ? (awayComp?.formation || awayComp?.formatted || data.boxscore?.teams?.[1]?.formation)
         : undefined;
 
+    // Soccer: parse substitutions from plays (need homeComp for homeAway)
+    let substitutions: SubstitutionEntry[] | undefined;
+    if (mapping.sport === "soccer" && plays.length > 0) {
+      const homeId = homeComp?.id || "";
+      substitutions = [];
+      for (const p of plays) {
+        const typeText = (p.type?.text || "").toLowerCase();
+        if (!typeText.includes("substitution") && typeText !== "substitution") continue;
+        const parts = p.participants || [];
+        if (parts.length >= 2) {
+          const playerOff = parts[0].athlete?.displayName || "—";
+          const playerOn = parts[1].athlete?.displayName || "—";
+          const minute = p.clock?.displayValue?.replace(/\s/g, "") || "";
+          const homeAway: "home" | "away" = p.team?.id === homeId ? "home" : "away";
+          substitutions.push({ minute, playerOff, playerOn, homeAway });
+        }
+      }
+      if (substitutions.length === 0) substitutions = undefined;
+    }
+
     return {
       plays,
       homeTeamStats, awayTeamStats,
@@ -356,6 +398,7 @@ async function fetchESPNSummary(
       sport: mapping.sport,
       homeFormation: homeFormation || undefined,
       awayFormation: awayFormation || undefined,
+      substitutions,
     };
   } catch { return null; }
 }
@@ -364,8 +407,16 @@ async function fetchESPNSummary(
 // Main Component
 // ===========================================================================
 
+export type SoccerPlayerSelection = {
+  player: PlayerStatLine;
+  teamName: string;
+  teamLogo: string | null;
+  side: "home" | "away";
+};
+
 export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailProps) {
   const [activeTab, setActiveTab] = useState<Tab>("play_by_play");
+  const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
   const matchFetcher = useCallback(() => fetchMatch(matchId), [matchId]);
   const { data: matchData, loading: matchLoading } = usePolling<MatchDetailResponse>({
@@ -536,6 +587,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
             leagueName={leagueForESPN}
+            onPlayerClick={espnData?.sport === "soccer" ? (player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side }) : undefined}
           />
         )}
         {activeTab === "lineup" && espnData?.sport === "soccer" && (
@@ -546,6 +598,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
+            onPlayerClick={(player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side })}
           />
         )}
         {activeTab === "team_stats" && (
@@ -561,6 +614,17 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           />
         )}
       </div>
+
+      {selectedSoccerPlayer && (
+        <SoccerPlayerDetailModal
+          player={selectedSoccerPlayer.player}
+          teamName={selectedSoccerPlayer.teamName}
+          teamLogo={selectedSoccerPlayer.teamLogo}
+          leagueName={leagueForESPN}
+          matchContext={`${match.home_team?.name || "Home"} vs ${match.away_team?.name || "Away"}`}
+          onClose={() => setSelectedSoccerPlayer(null)}
+        />
+      )}
     </div>
   );
 }
@@ -720,9 +784,10 @@ interface PlayerStatsTabProps {
   homeTeamName: string;
   awayTeamName: string;
   leagueName: string;
+  onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function PlayerStatsTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName }: PlayerStatsTabProps) {
+function PlayerStatsTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, onPlayerClick }: PlayerStatsTabProps) {
   const mapping = LEAGUE_ESPN_MAP[leagueName];
   const [activeSide, setActiveSide] = useState<"home" | "away">("home");
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -808,15 +873,54 @@ function PlayerStatsTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTea
         </button>
       </div>
 
-      <TopPerformers players={teamData.players} highlights={highlights} />
+      <TopPerformers
+        players={teamData.players}
+        highlights={highlights}
+        onPlayerSelect={onPlayerClick ? (player) => onPlayerClick(player, activeSide === "home" ? homeTeamName : awayTeamName, activeSide === "home" ? homeTeamLogo : awayTeamLogo, activeSide) : undefined}
+      />
 
       {teamData.players.length === 0 ? (
         <div className="py-8 text-center text-[12px] text-text-muted">Player statistics not yet available</div>
       ) : (
         <div className="overflow-x-auto">
-          {starters.length > 0 && <PlayerTable label="Starters" players={starters} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />}
-          {bench.length > 0 && <PlayerTable label="Bench" players={bench} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />}
-          {starters.length === 0 && bench.length === 0 && <PlayerTable players={sortedPlayers} columns={visibleColumns} displayMap={displayMap} highlights={highlights} sortCol={sortCol} sortAsc={sortAsc} onSort={handleSort} />}
+          {starters.length > 0 && (
+            <PlayerTable
+              label="Starters"
+              players={starters}
+              columns={visibleColumns}
+              displayMap={displayMap}
+              highlights={highlights}
+              sortCol={sortCol}
+              sortAsc={sortAsc}
+              onSort={handleSort}
+              onRowClick={onPlayerClick ? (player) => onPlayerClick(player, activeSide === "home" ? homeTeamName : awayTeamName, activeSide === "home" ? homeTeamLogo : awayTeamLogo, activeSide) : undefined}
+            />
+          )}
+          {bench.length > 0 && (
+            <PlayerTable
+              label="Bench"
+              players={bench}
+              columns={visibleColumns}
+              displayMap={displayMap}
+              highlights={highlights}
+              sortCol={sortCol}
+              sortAsc={sortAsc}
+              onSort={handleSort}
+              onRowClick={onPlayerClick ? (player) => onPlayerClick(player, activeSide === "home" ? homeTeamName : awayTeamName, activeSide === "home" ? homeTeamLogo : awayTeamLogo, activeSide) : undefined}
+            />
+          )}
+          {starters.length === 0 && bench.length === 0 && (
+            <PlayerTable
+              players={sortedPlayers}
+              columns={visibleColumns}
+              displayMap={displayMap}
+              highlights={highlights}
+              sortCol={sortCol}
+              sortAsc={sortAsc}
+              onSort={handleSort}
+              onRowClick={onPlayerClick ? (player) => onPlayerClick(player, activeSide === "home" ? homeTeamName : awayTeamName, activeSide === "home" ? homeTeamLogo : awayTeamLogo, activeSide) : undefined}
+            />
+          )}
         </div>
       )}
 
@@ -844,7 +948,7 @@ function PlayerStatsTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTea
   );
 }
 
-function TopPerformers({ players, highlights }: { players: PlayerStatLine[]; highlights: string[] }) {
+function TopPerformers({ players, highlights, onPlayerSelect }: { players: PlayerStatLine[]; highlights: string[]; onPlayerSelect?: (player: PlayerStatLine) => void }) {
   const topPlayers: { player: PlayerStatLine; stat: string; value: string }[] = [];
   for (const stat of highlights) {
     let best: PlayerStatLine | null = null;
@@ -864,7 +968,12 @@ function TopPerformers({ players, highlights }: { players: PlayerStatLine[]; hig
       <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-text-dim">Top Performers</div>
       <div className="flex gap-2.5 overflow-x-auto">
         {topPlayers.map(({ player, stat, value }) => (
-          <div key={`${player.name}-${stat}`} className="flex min-w-[110px] items-center gap-2 rounded-lg border border-surface-border/50 bg-surface-card px-3 py-2">
+          <button
+            key={`${player.name}-${stat}`}
+            type="button"
+            onClick={onPlayerSelect ? () => onPlayerSelect(player) : undefined}
+            className={`flex min-w-[110px] items-center gap-2 rounded-lg border border-surface-border/50 bg-surface-card px-3 py-2 text-left transition-colors ${onPlayerSelect ? "cursor-pointer hover:border-accent-blue/40 hover:bg-surface-hover/30" : ""}`}
+          >
             <div className="min-w-0 flex-1">
               <div className="truncate text-[11px] font-semibold text-text-primary">{player.name}</div>
               <div className="flex items-baseline gap-1">
@@ -872,16 +981,17 @@ function TopPerformers({ players, highlights }: { players: PlayerStatLine[]; hig
                 <span className="text-[9px] font-bold uppercase text-text-dim">{stat}</span>
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
   );
 }
 
-function PlayerTable({ label, players, columns, displayMap, highlights, sortCol, sortAsc, onSort }: {
+function PlayerTable({ label, players, columns, displayMap, highlights, sortCol, sortAsc, onSort, onRowClick }: {
   label?: string; players: PlayerStatLine[]; columns: string[]; displayMap: Record<string, string>;
   highlights: string[]; sortCol: string | null; sortAsc: boolean; onSort: (col: string) => void;
+  onRowClick?: (player: PlayerStatLine) => void;
 }) {
   return (
     <div>
@@ -899,7 +1009,11 @@ function PlayerTable({ label, players, columns, displayMap, highlights, sortCol,
         </thead>
         <tbody>
           {players.map((player, i) => (
-            <tr key={`${player.name}-${i}`} className={`transition-colors hover:bg-surface-hover/30 ${i < players.length - 1 ? "border-b border-surface-border/50" : ""}`}>
+            <tr
+              key={`${player.name}-${i}`}
+              className={`transition-colors hover:bg-surface-hover/30 ${i < players.length - 1 ? "border-b border-surface-border/50" : ""} ${onRowClick ? "cursor-pointer" : ""}`}
+              onClick={onRowClick ? () => onRowClick(player) : undefined}
+            >
               <td className="sticky left-0 z-10 bg-surface-card px-3 py-2">
                 <div className="flex items-center gap-1.5">
                   {player.jersey && <span className="font-mono text-[9px] font-bold text-text-dim">#{player.jersey}</span>}
@@ -927,8 +1041,54 @@ function PlayerTable({ label, players, columns, displayMap, highlights, sortCol,
 }
 
 // ===========================================================================
-// Tab: Lineup (soccer only — formation + starters)
+// Tab: Lineup (soccer only — pitch, formation, substitutions, bench)
 // ===========================================================================
+
+/** Parse "4-2-3-1" -> [1, 4, 2, 3, 1] (GK row optional; we treat first as GK when single). */
+function formationToRows(formation: string): number[] {
+  const parts = formation.trim().split(/-/).map((s) => parseInt(s.replace(/\D/g, ""), 10)).filter((n) => !isNaN(n) && n > 0);
+  if (parts.length === 0) return [1];
+  return parts;
+}
+
+const POSITION_ORDER: Record<string, number> = { GK: 0, G: 0, D: 1, DF: 1, DEF: 1, M: 2, MF: 2, MID: 2, F: 3, FW: 3, FWD: 3 };
+
+function positionSortKey(pos: string): number {
+  const u = pos.toUpperCase();
+  for (const [k, v] of Object.entries(POSITION_ORDER)) {
+    if (u.includes(k)) return v;
+  }
+  return 2;
+}
+
+/** Split starters into rows by formation. Sort by position (GK, D, M, F) then chunk by formation row counts. */
+function startersByFormationRows(starters: PlayerStatLine[], formation: string | undefined): PlayerStatLine[][] {
+  if (starters.length === 0) return [];
+  const sorted = [...starters].sort((a, b) => positionSortKey(a.position) - positionSortKey(b.position));
+  const rows = formationToRows(formation || "4-4-2");
+  const result: PlayerStatLine[][] = [];
+  let idx = 0;
+  for (const count of rows) {
+    result.push(sorted.slice(idx, idx + count));
+    idx += count;
+    if (idx >= sorted.length) break;
+  }
+  if (idx < sorted.length) result.push(sorted.slice(idx));
+  return result;
+}
+
+function getCardFlags(p: PlayerStatLine): { yellow?: boolean; red?: boolean } {
+  const yc = p.stats["YC"] ?? p.stats["Yellow Cards"];
+  const rc = p.stats["RC"] ?? p.stats["Red Cards"];
+  const y = Number(yc) || (String(yc).trim() && String(yc) !== "-" ? 1 : 0);
+  const r = Number(rc) || (String(rc).trim() && String(rc) !== "-" ? 1 : 0);
+  return { yellow: y > 0, red: r > 0 };
+}
+
+function hasScored(p: PlayerStatLine): boolean {
+  const g = p.stats["G"] ?? p.stats["Goals"];
+  return (Number(g) || 0) > 0;
+}
 
 interface LineupTabProps {
   espnData: ESPNSummaryData | null;
@@ -937,9 +1097,10 @@ interface LineupTabProps {
   awayTeamLogo: string | null;
   homeTeamName: string;
   awayTeamName: string;
+  onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName }: LineupTabProps) {
+function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, onPlayerClick }: LineupTabProps) {
   if (loading) {
     return (
       <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
@@ -948,7 +1109,8 @@ function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName
           <div className="w-px bg-surface-border" />
           <div className="flex-1 py-4 text-center"><div className="mx-auto h-4 w-28 animate-pulse rounded bg-surface-hover" /></div>
         </div>
-        {Array.from({ length: 6 }).map((_, i) => (
+        <div className="h-64 bg-[#0d3d1a]/20" />
+        {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 border-b border-surface-border/30 px-4 py-2.5">
             <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
             <div className="flex-1" />
@@ -971,6 +1133,8 @@ function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName
 
   const homeStarters = (espnData.homePlayers?.players ?? []).filter((p) => p.starter);
   const awayStarters = (espnData.awayPlayers?.players ?? []).filter((p) => p.starter);
+  const homeBench = (espnData.homePlayers?.players ?? []).filter((p) => !p.starter);
+  const awayBench = (espnData.awayPlayers?.players ?? []).filter((p) => !p.starter);
   const hasAny = homeStarters.length > 0 || awayStarters.length > 0 || espnData.homeFormation || espnData.awayFormation;
 
   if (!hasAny) {
@@ -983,58 +1147,230 @@ function LineupTab({ espnData, loading, homeTeamLogo, awayTeamLogo, homeTeamName
     );
   }
 
+  const homeRows = startersByFormationRows(homeStarters, espnData.homeFormation);
+  const awayRows = startersByFormationRows(awayStarters, espnData.awayFormation);
+  const subs = espnData.substitutions ?? [];
+
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      <div className="grid grid-cols-2 gap-0 border-b border-surface-border">
-        {/* Home */}
-        <div className="border-r border-surface-border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            {homeTeamLogo ? (
-              <img src={homeTeamLogo} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
-            ) : (
-              <div className="h-6 w-6 shrink-0 rounded-full bg-surface-hover" />
-            )}
-            <span className="truncate text-[13px] font-semibold text-text-primary">{homeTeamName}</span>
-            {espnData.homeFormation && (
-              <span className="ml-auto rounded-md bg-surface-hover px-2 py-0.5 font-mono text-[11px] font-bold text-text-primary">
-                {espnData.homeFormation}
-              </span>
-            )}
-          </div>
-          <ul className="space-y-1.5">
-            {homeStarters.map((p, i) => (
-              <li key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
-                {p.jersey != null && <span className="w-6 font-mono text-[10px] font-bold text-text-dim">#{p.jersey}</span>}
-                <span className="truncate text-text-primary">{p.name ?? "—"}</span>
-                {p.position && <span className="shrink-0 text-[10px] text-text-dim">{p.position}</span>}
-              </li>
-            ))}
-          </ul>
+      {/* Pitch: dark green field, vertical layout — home top, away bottom */}
+      <div className="relative bg-[#0d3d1a] text-white" style={{ minHeight: 320 }}>
+        {/* White field lines (simplified) */}
+        <div className="absolute inset-0 border-[3px] border-white/60 rounded-none" />
+        <div className="absolute left-0 right-0 top-1/2 h-0 border-t-2 border-dashed border-white/50" />
+        <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/50" />
+        <div className="absolute left-1/2 top-0 h-12 w-24 -translate-x-1/2 rounded-b-[2rem] border-2 border-b-0 border-white/50" />
+        <div className="absolute bottom-0 left-1/2 h-12 w-24 -translate-x-1/2 rounded-t-[2rem] border-2 border-t-0 border-white/50" />
+
+        {/* Home team name + formation (top) */}
+        <div className="absolute left-0 right-0 top-2 z-10 flex items-center justify-center gap-2">
+          {homeTeamLogo && <img src={homeTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
+          <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{homeTeamName}</span>
+          {espnData.homeFormation && (
+            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{espnData.homeFormation}</span>
+          )}
         </div>
-        {/* Away */}
-        <div className="p-4">
-          <div className="mb-3 flex items-center gap-2">
-            {awayTeamLogo ? (
-              <img src={awayTeamLogo} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
-            ) : (
-              <div className="h-6 w-6 shrink-0 rounded-full bg-surface-hover" />
-            )}
-            <span className="truncate text-[13px] font-semibold text-text-primary">{awayTeamName}</span>
-            {espnData.awayFormation && (
-              <span className="ml-auto rounded-md bg-surface-hover px-2 py-0.5 font-mono text-[11px] font-bold text-text-primary">
-                {espnData.awayFormation}
-              </span>
-            )}
-          </div>
-          <ul className="space-y-1.5">
-            {awayStarters.map((p, i) => (
-              <li key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
-                {p.jersey != null && <span className="w-6 font-mono text-[10px] font-bold text-text-dim">#{p.jersey}</span>}
-                <span className="truncate text-text-primary">{p.name ?? "—"}</span>
-                {p.position && <span className="shrink-0 text-[10px] text-text-dim">{p.position}</span>}
-              </li>
+
+        {/* Home team players (top half of pitch) */}
+        <div className="absolute left-0 right-0 top-10 bottom-1/2 flex flex-col justify-around px-2">
+          {homeRows.map((row, rowIdx) => (
+            <div key={rowIdx} className="flex justify-around gap-1">
+              {row.map((p, i) => (
+                <LineupPlayerBadge
+                  key={p.name ?? i}
+                  player={p}
+                  onClick={onPlayerClick ? () => onPlayerClick(p, homeTeamName, homeTeamLogo, "home") : undefined}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Away team players (bottom half) */}
+        <div className="absolute left-0 right-0 top-1/2 bottom-10 flex flex-col justify-around px-2">
+          {awayRows.map((row, rowIdx) => (
+            <div key={rowIdx} className="flex justify-around gap-1">
+              {row.map((p, i) => (
+                <LineupPlayerBadge
+                  key={p.name ?? i}
+                  player={p}
+                  onClick={onPlayerClick ? () => onPlayerClick(p, awayTeamName, awayTeamLogo, "away") : undefined}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Away team name + formation (bottom) */}
+        <div className="absolute bottom-2 left-0 right-0 z-10 flex items-center justify-center gap-2">
+          {awayTeamLogo && <img src={awayTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
+          <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{awayTeamName}</span>
+          {espnData.awayFormation && (
+            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{espnData.awayFormation}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Substitutions */}
+      {subs.length > 0 && (
+        <div className="border-t border-surface-border bg-surface-card px-4 py-3">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Substitutions</div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            {subs.map((s, i) => (
+              <div key={i} className="flex items-start gap-2 text-[12px]">
+                <span className="shrink-0 font-mono text-text-dim">{s.minute}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-[8px] text-white">↑</span>
+                    <span className="truncate text-text-primary">{s.playerOff}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/90 text-[8px] text-white">↓</span>
+                    <span className="truncate text-text-secondary">{s.playerOn}</span>
+                  </div>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Substitute players (bench) — two columns */}
+      {(homeBench.length > 0 || awayBench.length > 0) && (
+        <div className="border-t border-surface-border bg-surface-card px-4 py-3">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Substitute Players</div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+            <div className="space-y-1.5">
+              {homeBench.map((p, i) => (
+                <div key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover font-mono text-[10px] font-bold text-text-secondary">
+                    {p.jersey || "—"}
+                  </span>
+                  <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              {awayBench.map((p, i) => (
+                <div key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover font-mono text-[10px] font-bold text-text-secondary">
+                    {p.jersey || "—"}
+                  </span>
+                  <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineupPlayerBadge({ player, onClick }: { player: PlayerStatLine; onClick?: () => void }) {
+  const cards = getCardFlags(player);
+  const scored = hasScored(player);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex flex-col items-center ${onClick ? "cursor-pointer transition-transform hover:scale-105 active:scale-95" : ""}`}
+    >
+      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#1a4d2a] font-mono text-[13px] font-bold text-white shadow">
+        {player.jersey || "—"}
+        {scored && <span className="absolute -right-0.5 -top-0.5 text-[10px]">⚽</span>}
+        {cards.red && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-sm bg-red-500" title="Red card" />}
+        {cards.yellow && !cards.red && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-sm bg-amber-400" title="Yellow card" />}
+      </div>
+      <span className="mt-0.5 max-w-[72px] truncate text-center text-[10px] font-medium text-white/95">{player.name ?? "—"}</span>
+    </button>
+  );
+}
+
+// ===========================================================================
+// Soccer Player Detail Modal (LiveScore-style)
+// ===========================================================================
+
+interface SoccerPlayerDetailModalProps {
+  player: PlayerStatLine;
+  teamName: string;
+  teamLogo: string | null;
+  leagueName: string;
+  matchContext: string;
+  onClose: () => void;
+}
+
+function SoccerPlayerDetailModal({ player, teamName, teamLogo, leagueName, matchContext, onClose }: SoccerPlayerDetailModalProps) {
+  const statValue = (keys: string[], fallback?: string): string => {
+    if (fallback != null && keys.length === 0) return fallback;
+    for (const k of keys) {
+      const v = player.stats[k];
+      if (v != null && v !== "" && v !== "-") return String(v);
+    }
+    return "0";
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Player stats">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-xl">
+        {/* Header — LiveScore style: name, team, #, position */}
+        <div className="border-b border-surface-border bg-surface-hover/30 px-5 py-4">
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary" aria-label="Close">
+              ✕
+            </button>
+            <div className="min-w-0 flex-1 text-center">
+              <h2 className="truncate text-lg font-bold text-text-primary">{player.name}</h2>
+              <div className="mt-1 flex items-center justify-center gap-2 text-[13px] text-text-secondary">
+                {teamLogo && <img src={teamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
+                <span className="truncate">{teamName}</span>
+                {player.jersey && <span className="font-mono font-semibold text-text-dim">#{player.jersey}</span>}
+                {player.position && <span className="text-text-dim">— {player.position}</span>}
+              </div>
+            </div>
+            <div className="w-8 shrink-0" />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          {/* Bio — placeholder for when we have height/age/DOB/country */}
+          <section className="mb-5">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-dim">Bio</h3>
+            <div className="grid grid-cols-2 gap-3 rounded-xl border border-surface-border bg-surface-hover/20 p-3 text-[12px]">
+              <div>
+                <div className="text-[10px] font-semibold uppercase text-text-dim">Height</div>
+                <div className="text-text-secondary">—</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase text-text-dim">Age</div>
+                <div className="text-text-secondary">—</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase text-text-dim">Country</div>
+                <div className="text-text-secondary">—</div>
+              </div>
+            </div>
+          </section>
+
+          {/* This match / League stats — LiveScore style cards */}
+          <section className="mb-5">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-dim">Match stats</h3>
+            <p className="mb-3 text-[11px] text-text-muted">{matchContext}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {SOCCER_PLAYER_DETAIL_STATS.map(({ label, keys, fallback }) => (
+                <div key={label} className="rounded-xl border border-surface-border bg-surface-hover/20 p-3 text-center">
+                  <div className="font-mono text-xl font-bold text-text-primary">{statValue(keys, fallback)}</div>
+                  <div className="mt-0.5 text-[10px] font-semibold uppercase text-text-dim">{label}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Overview text — like LiveScore "About" */}
+          <p className="text-[12px] leading-relaxed text-text-secondary">
+            Statistics for this match. Season totals and club history can be viewed on the official league or team site.
+          </p>
         </div>
       </div>
     </div>

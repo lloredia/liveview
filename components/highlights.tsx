@@ -45,6 +45,25 @@ function ytSearch(h: string, a: string, l: string): string {
   );
 }
 
+/** Extract YouTube video ID for embedding (watch, youtu.be, embed). */
+function youtubeVideoId(url: string): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname === "www.youtube.com" || u.hostname === "youtube.com") {
+      const v = u.searchParams.get("v");
+      if (v) return v;
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts[0] === "embed" && parts[1]) return parts[1];
+      return null;
+    }
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0] || null;
+  } catch {
+    // not a valid URL
+  }
+  return null;
+}
+
 export function Highlights({
   homeTeamName,
   awayTeamName,
@@ -195,6 +214,8 @@ export function Highlights({
   if (!finished) return null;
 
   const ytUrl = ytSearch(homeTeamName, awayTeamName, leagueName);
+  const firstYoutubeVideo = videos.find((v) => youtubeVideoId(v.url));
+  const embedId = firstYoutubeVideo ? youtubeVideoId(firstYoutubeVideo.url) : null;
 
   return (
     <div className="mt-6">
@@ -207,9 +228,9 @@ export function Highlights({
           <span className="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">
             Highlights &amp; Recap
           </span>
-          {videos.length > 0 && (
+          {(videos.length > 0 || loading) && (
             <span className="rounded-full bg-accent-green/10 px-1.5 py-0.5 text-[9px] font-bold text-accent-green">
-              {videos.length}
+              {videos.length > 0 ? videos.length : "…"}
             </span>
           )}
         </div>
@@ -231,6 +252,47 @@ export function Highlights({
             </div>
           ) : (
             <div>
+              {/* Embedded video: first YouTube from API, or fallback embed for official/match glance */}
+              <div className="mb-4 overflow-hidden rounded-xl border border-surface-border bg-black">
+                {embedId ? (
+                  <div className="relative aspect-video w-full">
+                    <iframe
+                      title="Match highlights"
+                      src={`https://www.youtube.com/embed/${embedId}?rel=0`}
+                      className="absolute inset-0 h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <a
+                    href={ytUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative flex aspect-video w-full items-center justify-center bg-surface-card"
+                  >
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-surface-hover/50 to-surface-card">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-red shadow-lg ring-4 ring-white/20">
+                        <span className="ml-1 text-3xl text-white">▶</span>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-3">
+                      <p className="text-[13px] font-semibold text-white">
+                        {homeTeamName} vs {awayTeamName}
+                      </p>
+                      <p className="text-[11px] text-white/90">Watch highlights & recap on YouTube</p>
+                    </div>
+                  </a>
+                )}
+                {firstYoutubeVideo && (
+                  <div className="border-t border-surface-border bg-surface-card px-3 py-2">
+                    <p className="line-clamp-1 text-[11px] font-medium text-text-secondary">
+                      {firstYoutubeVideo.title}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {videos.length > 0 && (
                 <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {videos.map((vid) => (
@@ -302,9 +364,9 @@ export function Highlights({
                 </a>
               </div>
 
-              {videos.length === 0 && (
+              {videos.length === 0 && !embedId && (
                 <div className="mt-2 text-[11px] text-text-muted">
-                  No embedded highlights found — check the links above.
+                  Use the links above to watch highlights.
                 </div>
               )}
             </div>
