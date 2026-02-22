@@ -1,4 +1,12 @@
 <p align="center">
+  <img src="https://img.shields.io/badge/LiveView-Sports%20Tracker-00E676?style=for-the-badge&logoColor=white" alt="LiveView" />
+</p>
+<h1 align="center">⚡ LiveView — Real-Time Sports Tracker</h1>
+<p align="center">
+  A production-grade, real-time sports tracking platform built to rival <a href="https://livescore.com">LiveScore.com</a>.<br/>
+  Live scores, match timelines, league standings, and multi-sport coverage — all in one place.
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" />
   <img src="https://img.shields.io/badge/Next.js_14-000000?style=flat-square&logo=next.js&logoColor=white" />
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
@@ -10,6 +18,7 @@
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" />
   <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" />
 </p>
+
 
 <p align="center">
   <a href="https://frontend-lloredias-projects.vercel.app"><strong>🌐 Live Demo</strong></a> ·
