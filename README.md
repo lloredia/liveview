@@ -1,15 +1,4 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/LiveView-Sports%20Tracker-00E676?style=for-the-badge&logoColor=white" alt="LiveView" />
-</p>
-
-<h1 align="center">⚡ LiveView — Real-Time Sports Tracker</h1>
-
-<p align="center">
-  A production-grade, real-time sports tracking platform built to rival <a href="https://livescore.com">LiveScore.com</a>.<br/>
-  Live scores, match timelines, league standings, and multi-sport coverage — all in one place.
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" />
   <img src="https://img.shields.io/badge/Next.js_14-000000?style=flat-square&logo=next.js&logoColor=white" />
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
@@ -62,6 +51,150 @@ LiveView is a full-stack sports tracking platform that provides real-time scores
 ---
 
 ## Architecture
+
+### System overview
+
+```mermaid
+flowchart TB
+  subgraph Clients["Clients"]
+    Browser[Browser / PWA]
+    Mobile[Mobile]
+  end
+
+  subgraph Frontend["Frontend (Next.js)"]
+    App[App Router]
+    UI[Components]
+    Hooks[hooks]
+    API_Client[API client]
+    App --> UI
+    App --> Hooks
+    Hooks --> API_Client
+  end
+
+  subgraph Backend["Backend (Python)"]
+    REST[REST API]
+    WS[WebSocket]
+    REST --> Redis[(Redis)]
+    WS --> Redis
+    Redis --> PG[(PostgreSQL)]
+    Ingest[Ingest Service]
+    Scheduler[Scheduler]
+    Ingest --> PG
+    Ingest --> Redis
+    Scheduler --> Ingest
+  end
+
+  subgraph External["External APIs"]
+    ESPN[ESPN API]
+  end
+
+  Browser --> App
+  Mobile --> App
+  API_Client --> REST
+  API_Client --> WS
+  Frontend -.->|supplement data| ESPN
+  Ingest -.->|poll| ESPN
+```
+
+### Frontend architecture
+
+```mermaid
+flowchart LR
+  subgraph Routes["App routes"]
+    Home["/"]
+    Match["/match/[id]"]
+    Offline["/offline"]
+  end
+
+  subgraph Core["Core UI"]
+    Header[Header]
+    Sidebar[Sidebar]
+    Scoreboard[Scoreboard]
+    TodayView[Today view]
+    MatchDetail[Match detail]
+    LiveTicker[Live ticker]
+  end
+
+  subgraph Data["Data layer"]
+    Polling[usePolling]
+    ESPN[useESPNLive]
+    WS[WebSocket]
+  end
+
+  subgraph API["Backend API"]
+    Leagues[/v1/leagues]
+    ScoreboardAPI[/v1/leagues/:id/scoreboard]
+    TodayAPI[/v1/today]
+    MatchAPI[/v1/matches/:id]
+    Timeline[/v1/matches/:id/timeline]
+  end
+
+  Home --> TodayView
+  Home --> Scoreboard
+  Match --> MatchDetail
+  TodayView --> Polling
+  Scoreboard --> Polling
+  MatchDetail --> Polling
+  MatchDetail --> ESPN
+  Polling --> Leagues
+  Polling --> ScoreboardAPI
+  Polling --> TodayAPI
+  Polling --> MatchAPI
+  Polling --> Timeline
+  ESPN --> ESPN_API[ESPN public API]
+```
+
+### Data flow (match detail)
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant MatchDetail
+  participant Backend
+  participant ESPN
+
+  User->>MatchDetail: Open match
+  MatchDetail->>Backend: GET /v1/matches/:id
+  Backend-->>MatchDetail: match + state
+  MatchDetail->>Backend: GET /v1/matches/:id/timeline
+  Backend-->>MatchDetail: events (or empty)
+  MatchDetail->>ESPN: summary?event=... (by team names + league)
+  ESPN-->>MatchDetail: plays, boxscore, formation
+  MatchDetail->>MatchDetail: Merge play-by-play, lineup, player stats
+  MatchDetail-->>User: Full match view + Lineup tab
+```
+
+### Backend services (high level)
+
+```mermaid
+flowchart TB
+  subgraph API["API (FastAPI)"]
+    REST[REST routes]
+    WSM[WS manager]
+    REST --> DB
+    WSM --> Redis
+  end
+
+  subgraph Data["Data stores"]
+    Redis[(Redis)]
+    DB[(PostgreSQL)]
+  end
+
+  subgraph Workers["Background"]
+    Ingest[Ingest]
+    Scheduler[Scheduler]
+    Builder[Builder]
+  end
+
+  Ingest --> DB
+  Ingest --> Redis
+  Scheduler --> Ingest
+  Builder --> DB
+  REST --> Redis
+  REST --> DB
+```
+
+### Cloud deployment view
 
 ```mermaid
 graph TB
