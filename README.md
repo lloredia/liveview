@@ -106,7 +106,6 @@ flowchart TB
 ```
 
 ### Frontend architecture
-
 ```mermaid
 flowchart LR
   subgraph Routes["App routes"]
@@ -131,12 +130,14 @@ flowchart LR
   end
 
   subgraph API["Backend API"]
-    Leagues[/v1/leagues]
-    ScoreboardAPI[/v1/leagues/:id/scoreboard]
-    TodayAPI[/v1/today]
-    MatchAPI[/v1/matches/:id]
-    Timeline[/v1/matches/:id/timeline]
+    Leagues["/v1/leagues"]
+    ScoreboardAPI["/v1/leagues/:id/scoreboard"]
+    TodayAPI["/v1/today"]
+    MatchAPI["/v1/matches/:id"]
+    Timeline["/v1/matches/:id/timeline"]
   end
+
+  ESPN_API[ESPN public API]
 
   Home --> TodayView
   Home --> Scoreboard
@@ -150,7 +151,7 @@ flowchart LR
   Polling --> TodayAPI
   Polling --> MatchAPI
   Polling --> Timeline
-  ESPN --> ESPN_API[ESPN public API]
+  ESPN --> ESPN_API
 ```
 
 ### Data flow (match detail)
