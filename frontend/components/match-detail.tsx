@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { fetchMatch, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
+import { ApiError, fetchMatch, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { useESPNLive } from "@/hooks/use-espn-live";
 import {
@@ -477,7 +477,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
   const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
   const matchFetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data: matchData, loading: matchLoading } = usePolling<MatchDetailResponse>({
+  const { data: matchData, loading: matchLoading, lastError: matchError } = usePolling<MatchDetailResponse>({
     fetcher: matchFetcher, interval: 15000, key: matchId,
   });
 
@@ -539,6 +539,24 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
     return (
       <div className="flex justify-center py-16">
         <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-border border-t-accent-green" />
+      </div>
+    );
+  }
+
+  if (matchError instanceof ApiError && matchError.status === 404) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-surface-border bg-surface-raised px-6 py-12 text-center">
+        <h2 className="text-lg font-bold text-text-primary">Match not found</h2>
+        <p className="max-w-sm text-sm text-text-secondary">
+          This match doesn&apos;t exist or has been removed. Check the ID or go back to today&apos;s matches.
+        </p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-md bg-accent-green px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-accent-green/90"
+        >
+          Back to matches
+        </button>
       </div>
     );
   }

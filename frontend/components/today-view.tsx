@@ -370,7 +370,7 @@ export function TodayView({
                   <MatchCard
                     key={m.id}
                     match={toMatchSummary(m)}
-                    onClick={() => onMatchSelect(m.id)}
+                    leagueNameForLink={league.league_name}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
                   />

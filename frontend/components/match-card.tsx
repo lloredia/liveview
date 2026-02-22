@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { memo, useEffect, useRef, useState } from "react";
 import type { MatchSummary } from "@/lib/types";
 import { formatTime, isLive, phaseLabel, phaseShortLabel } from "@/lib/utils";
@@ -102,15 +103,22 @@ function LiveClock({
 
 interface MatchCardProps {
   match: MatchSummary;
-  onClick: () => void;
+  /** Optional league name to append as ?league= for match detail context */
+  leagueNameForLink?: string;
   compact?: boolean;
   pinned?: boolean;
   onTogglePin?: (matchId: string) => void;
 }
 
+function buildMatchHref(matchId: string, leagueName?: string): string {
+  const base = `/match/${matchId}`;
+  if (!leagueName?.trim()) return base;
+  return `${base}?league=${encodeURIComponent(leagueName.trim())}`;
+}
+
 export const MatchCard = memo(function MatchCard({
   match,
-  onClick,
+  leagueNameForLink,
   pinned = false,
   onTogglePin,
 }: MatchCardProps) {
@@ -131,15 +139,18 @@ export const MatchCard = memo(function MatchCard({
     }
   }, [live, match.score.home, match.score.away]);
 
+  const href = buildMatchHref(match.id, leagueNameForLink);
+
   return (
-    <div
-      onClick={onClick}
+    <Link
+      href={href}
       className={`
         group relative flex h-12 cursor-pointer items-center border-b border-surface-border
         transition-colors duration-150 hover:bg-surface-hover
         ${live ? "bg-accent-red/[0.04]" : ""}
         ${flash ? "score-flash" : ""}
       `}
+      aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
     >
       {/* Status column */}
       <div className="flex w-[60px] shrink-0 flex-col items-center justify-center px-1">
@@ -226,10 +237,12 @@ export const MatchCard = memo(function MatchCard({
         </span>
       </div>
 
-      {/* Pin (hover only) */}
+      {/* Pin (hover only) — stop propagation so Link doesn't navigate */}
       {onTogglePin && (
         <button
+          type="button"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onTogglePin(match.id);
           }}
@@ -238,11 +251,11 @@ export const MatchCard = memo(function MatchCard({
               ? "text-accent-blue opacity-100"
               : "text-text-dim opacity-0 group-hover:opacity-100 hover:text-accent-blue"
           }`}
-          aria-label={pinned ? "Unpin" : "Pin"}
+          aria-label={pinned ? "Unpin match" : "Pin match"}
         >
           {pinned ? "★" : "☆"}
         </button>
       )}
-    </div>
+    </Link>
   );
 });

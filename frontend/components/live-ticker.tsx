@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
@@ -32,19 +33,21 @@ function TickerScore({ value }: { value: number }) {
   );
 }
 
-function TickerItem({
-  match,
-  onClick,
-}: {
-  match: MatchSummaryWithLeague;
-  onClick: () => void;
-}) {
+function buildMatchHref(matchId: string, leagueName?: string): string {
+  const base = `/match/${matchId}`;
+  if (!leagueName?.trim()) return base;
+  return `${base}?league=${encodeURIComponent(leagueName.trim())}`;
+}
+
+function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
   const { theme } = useTheme();
   const scoreClass = theme === "light" ? "font-mono font-extrabold text-text-primary" : "font-mono font-extrabold text-white";
+  const href = buildMatchHref(match.id, match.league_name ?? undefined);
   return (
-    <button
-      onClick={onClick}
+    <Link
+      href={href}
       className="flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+      aria-label={`${match.home_team.short_name} ${match.score.home} ${match.score.away} ${match.away_team.short_name}, live`}
     >
       <span className="font-medium">{match.home_team.short_name}</span>
       <span className={scoreClass}>
@@ -59,7 +62,7 @@ function TickerItem({
       {match.clock && (
         <span className="text-[9px] font-semibold tabular-nums text-accent-green">{match.clock}</span>
       )}
-    </button>
+    </Link>
   );
 }
 
@@ -96,8 +99,11 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
   const duration = Math.max(20, stableMatches.length * 4);
 
   return (
-    <div className="flex h-8 items-center border-b border-surface-border bg-surface-raised overflow-hidden">
-      {/* Fixed LIVE label */}
+    <div
+      className="flex h-8 items-center border-b border-surface-border bg-surface-raised overflow-hidden"
+      aria-hidden="true"
+    >
+      {/* Fixed LIVE label — decorative; main match list is the accessible source */}
       <div className="relative z-10 flex shrink-0 items-center gap-1.5 border-r border-surface-border bg-surface-raised px-2.5">
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
@@ -108,28 +114,20 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
         </span>
       </div>
 
-      {/* Scrolling track — matches are duplicated for seamless loop */}
-      <div className="relative flex-1 overflow-hidden">
+      {/* Scrolling track — matches duplicated for seamless loop; single overflow container */}
+      <div className="relative flex-1 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: "touch" }}>
         <div
           className="ticker-track flex items-center gap-4 whitespace-nowrap"
           style={{ "--ticker-duration": `${duration}s` } as React.CSSProperties}
         >
           {stableMatches.map((m) => (
-            <TickerItem
-              key={`a-${m.id}`}
-              match={m}
-              onClick={() => onMatchSelect(m.id)}
-            />
+            <TickerItem key={`a-${m.id}`} match={m} />
           ))}
 
-          <span className="mx-2 h-1 w-1 shrink-0 rounded-full bg-surface-border" />
+          <span className="mx-2 h-1 w-1 shrink-0 rounded-full bg-surface-border" aria-hidden="true" />
 
           {stableMatches.map((m) => (
-            <TickerItem
-              key={`b-${m.id}`}
-              match={m}
-              onClick={() => onMatchSelect(m.id)}
-            />
+            <TickerItem key={`b-${m.id}`} match={m} />
           ))}
         </div>
       </div>

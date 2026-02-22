@@ -174,7 +174,7 @@ export function Scoreboard({
                   <MatchCard
                     key={m.id}
                     match={m}
-                    onClick={() => onMatchSelect(m.id)}
+                    leagueNameForLink={leagueName}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
                   />
@@ -194,7 +194,7 @@ export function Scoreboard({
                   <MatchCard
                     key={m.id}
                     match={m}
-                    onClick={() => onMatchSelect(m.id)}
+                    leagueNameForLink={leagueName}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
                   />
@@ -214,7 +214,7 @@ export function Scoreboard({
                   <MatchCard
                     key={m.id}
                     match={m}
-                    onClick={() => onMatchSelect(m.id)}
+                    leagueNameForLink={leagueName}
                     compact
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
