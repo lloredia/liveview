@@ -1,17 +1,22 @@
 # dependencies
 /node_modules
+/frontend/node_modules
 /.pnp
 .pnp.js
 
 # testing
 /coverage
+/frontend/coverage
 
-# next.js
+# next.js (root and frontend)
 /.next/
+/frontend/.next/
 /out/
+/frontend/out/
 
 # production
 /build
+/frontend/build
 
 # misc
 .DS_Store
@@ -27,17 +32,18 @@ yarn-error.log*
 
 # vercel
 .vercel
+/frontend/.vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-# PWA
-public/sw.js
-public/workbox-*.js
-public/fallback-*.js
-public/sw.js.map
-public/workbox-*.js.map
+# PWA (frontend)
+/frontend/public/sw.js
+/frontend/public/workbox-*.js
+/frontend/public/fallback-*.js
+/frontend/public/sw.js.map
+/frontend/public/workbox-*.js.map
 
 .vercel
 
