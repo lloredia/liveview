@@ -1,3 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#1A1A2E"/>
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#2A2A4A" stroke-width="2"/>
+  <!-- L bar -->
+  <rect x="128" y="120" width="56" height="272" rx="8" fill="#FFFFFF"/>
+  <rect x="128" y="336" width="160" height="56" rx="8" fill="#FFFFFF"/>
+  <!-- V shape + pulse dot with glow -->
+  <g filter="url(#glow)">
+    <polygon points="320,120 360,120 400,340 440,120 480,120 420,392 340,392" fill="#00E676"/>
+    <circle cx="108" cy="108" r="24" fill="#00E676"/>
+    <circle cx="108" cy="108" r="24" fill="#00E676" opacity="0.4">
+      <animate attributeName="r" values="24;36;24" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.4;0;0.4" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
+
 <p align="center">
   <img src="frontend/public/icons/icon.svg" alt="LiveView" width="120" />
 </p>
