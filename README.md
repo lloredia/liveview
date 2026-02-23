@@ -837,7 +837,7 @@ gantt
 | Sport | Leagues |
 |-------|---------|
 | ⚽ Soccer | Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, MLS |
-| 🏀 Basketball | NBA |
+| 🏀 Basketball | NBA, WNBA, NCAAM, NCAAW  |
 | 🏈 Football | NFL |
 | 🏒 Hockey | NHL |
 | ⚾ Baseball | MLB |
