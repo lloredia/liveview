@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 import feedparser
 import httpx
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from shared.models.orm import NewsArticleORM
@@ -101,31 +101,63 @@ def _strip_html(raw: str) -> str:
     return " ".join(text.split()).strip()[:2000]
 
 
+def _absolute_image_url(url: str, base: str) -> str:
+    """Resolve relative image URL using entry link as base."""
+    if not url or url.startswith("http://") or url.startswith("https://"):
+        return url
+    try:
+        from urllib.parse import urljoin
+        return urljoin(base, url)
+    except Exception:
+        return url
+
+
 def _extract_image(entry: Any, source: str) -> Optional[str]:
+    entry_link = getattr(entry, "link", "") or ""
+    raw: Optional[str] = None
+
     # media:content
     media = getattr(entry, "media_content", []) or []
     if media and len(media) > 0:
         m = media[0]
         if getattr(m, "get", None):
-            url = m.get("url") if callable(m.get) else getattr(m, "url", None)
+            raw = m.get("url") if callable(m.get) else getattr(m, "url", None)
         else:
-            url = getattr(m, "url", None)
-        if url:
-            return url
+            raw = getattr(m, "url", None)
+
+    # media:thumbnail (very common in RSS)
+    if not raw:
+        thumb = getattr(entry, "media_thumbnail", []) or []
+        if thumb and len(thumb) > 0:
+            t = thumb[0]
+            raw = t.get("url") if isinstance(t, dict) and t.get("url") else getattr(t, "url", None)
+
     # enclosure
-    enclosures = getattr(entry, "enclosures", []) or []
-    for enc in enclosures:
-        href = getattr(enc, "href", None) or (enc.get("href") if isinstance(enc, dict) else None)
-        if href and (href.startswith("http") and "/image" in (enc.get("type") or getattr(enc, "type", "") or "").lower() or True):
-            if href.endswith(".jpg") or href.endswith(".jpeg") or href.endswith(".png") or ".webp" in href:
-                return href
-    # first img in description
-    summary = getattr(entry, "summary", "") or ""
-    if summary:
-        match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary, re.I)
-        if match:
-            return match.group(1)
-    return None
+    if not raw:
+        enclosures = getattr(entry, "enclosures", []) or []
+        for enc in enclosures:
+            href = getattr(enc, "href", None) or (enc.get("href") if isinstance(enc, dict) else None)
+            if not href or not str(href).startswith("http"):
+                continue
+            enc_type = (enc.get("type") or getattr(enc, "type", "") or "").lower()
+            if "/image" in enc_type or href.endswith(".jpg") or href.endswith(".jpeg") or href.endswith(".png") or ".webp" in href:
+                raw = href
+                break
+
+    # first img in description/summary
+    if not raw:
+        summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+        if summary:
+            match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary, re.I)
+            if match:
+                raw = match.group(1)
+
+    if not raw or not str(raw).strip():
+        return None
+    raw = str(raw).strip()
+    if not raw.startswith("http"):
+        raw = _absolute_image_url(raw, entry_link or "https://example.com/")
+    return raw if raw.startswith("http") else None
 
 
 def _categorize(text_block: str) -> tuple[str, bool]:
@@ -271,6 +303,14 @@ async def fetch_and_store_news(db: DatabaseManager) -> None:
             )
             if source_url in seen_urls:
                 duplicate_count += 1
+                # Backfill image_url for existing articles that don't have one
+                if first.get("image_url"):
+                    await session.execute(
+                        update(NewsArticleORM)
+                        .where(NewsArticleORM.source_url == source_url)
+                        .where(NewsArticleORM.image_url.is_(None))
+                        .values(image_url=first["image_url"])
+                    )
                 continue
             stmt = insert(NewsArticleORM).values(
                 id=uuid.uuid4(),

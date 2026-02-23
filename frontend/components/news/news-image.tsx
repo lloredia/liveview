@@ -42,6 +42,7 @@ export function NewsImage({
       className={className}
       loading="lazy"
       decoding="async"
+      referrerPolicy="no-referrer"
       onError={() => setError(true)}
     />
   ) : (
