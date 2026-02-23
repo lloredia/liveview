@@ -10,13 +10,11 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     ARRAY,
-    JSON,
     Boolean,
     CheckConstraint,
-    Column,
     Date,
     DateTime,
-    Enum,
+    Float,
     ForeignKey,
     Integer,
     SmallInteger,
@@ -239,3 +237,27 @@ class SubscriptionORM(Base):
     tiers: Mapped[list] = mapped_column(ARRAY(SmallInteger), nullable=False, default=lambda: [0])
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsArticleORM(Base):
+    __tablename__ = "news_articles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False, unique=True)
+    image_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="general")
+    sport: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    leagues: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    teams: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    players: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    trending_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_breaking: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

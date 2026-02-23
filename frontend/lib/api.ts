@@ -2,6 +2,8 @@ import type {
   LeagueGroup,
   MatchDetailResponse,
   MatchStatsResponse,
+  NewsArticle,
+  NewsResponse,
   ScoreboardResponse,
   TimelineResponse,
   LiveTickerResponse,
@@ -135,6 +137,35 @@ export async function fetchLiveMatches(leagueGroups: LeagueGroup[]): Promise<Liv
   );
 
   return { matches: liveMatches, fetched_at: new Date().toISOString() };
+}
+
+export async function fetchNews(params?: {
+  page?: number;
+  limit?: number;
+  category?: string;
+  sport?: string;
+  league?: string;
+  q?: string;
+  hours?: number;
+}): Promise<NewsResponse> {
+  const search = new URLSearchParams();
+  if (params?.page != null) search.set("page", String(params.page));
+  if (params?.limit != null) search.set("limit", String(params.limit));
+  if (params?.category) search.set("category", params.category);
+  if (params?.sport) search.set("sport", params.sport);
+  if (params?.league) search.set("league", params.league);
+  if (params?.q) search.set("q", params.q);
+  if (params?.hours != null) search.set("hours", String(params.hours));
+  const qs = search.toString();
+  return apiFetch<NewsResponse>(`/v1/news${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchTrendingNews(): Promise<NewsArticle[]> {
+  return apiFetch<NewsArticle[]>("/v1/news/trending");
+}
+
+export async function fetchBreakingNews(): Promise<NewsArticle[]> {
+  return apiFetch<NewsArticle[]>("/v1/news/breaking");
 }
 
 export function getHealthUrl(): string {

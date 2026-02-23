@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Search } from "./search";
 import { useTheme } from "@/lib/theme";
 
@@ -45,6 +47,8 @@ export function Header({
   onPushToggle,
 }: HeaderProps) {
   const { mode, toggle } = useTheme();
+  const pathname = usePathname();
+  const isNews = pathname === "/news";
 
   return (
     <header role="banner" className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-surface-border bg-surface-raised px-3 md:px-4">
@@ -59,9 +63,23 @@ export function Header({
           </svg>
         </button>
 
-        <span className="text-[15px] font-black tracking-tight text-text-primary">
+        <Link
+          href="/"
+          className="text-[15px] font-black tracking-tight text-text-primary hover:opacity-90"
+        >
           LIVE<span className="text-accent-green">VIEW</span>
-        </span>
+        </Link>
+
+        <Link
+          href="/news"
+          className={`ml-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold transition-colors ${
+            isNews
+              ? "bg-accent-green/15 text-accent-green"
+              : "text-text-muted hover:bg-surface-hover hover:text-text-primary"
+          }`}
+        >
+          News
+        </Link>
       </div>
 
       <div className="flex items-center gap-1.5">

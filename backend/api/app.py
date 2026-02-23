@@ -39,9 +39,11 @@ from shared.utils.redis_manager import RedisManager
 from api.dependencies import get_db, get_redis, init_dependencies
 from api.middleware import setup_middleware
 from api.routes.leagues import router as leagues_router
-from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.routes.matches import router as matches_router
+from api.routes.news import router as news_router
 from api.routes.today import router as today_router
+from ingest.news_fetcher import fetch_and_store_news
+from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.ws.manager import WebSocketManager
 
 logger = get_logger(__name__)
@@ -458,6 +460,25 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             await asyncio.sleep(10)
 
 
+NEWS_FETCH_INTERVAL_S = 300
+
+
+async def news_fetch_loop(db: DatabaseManager) -> None:
+    """Background task: fetch RSS feeds and store news every 5 minutes."""
+    await asyncio.sleep(10)  # let startup settle
+    logger.info("news_fetch_started")
+    while True:
+        try:
+            await asyncio.sleep(NEWS_FETCH_INTERVAL_S)
+            await fetch_and_store_news(db)
+        except asyncio.CancelledError:
+            logger.info("news_fetch_stopped")
+            break
+        except Exception as exc:
+            logger.error("news_fetch_error", error=str(exc), exc_info=True)
+            await asyncio.sleep(60)
+
+
 # Retry connection on startup (e.g. Redis/DB not ready yet on Railway)
 _CONNECT_RETRY_ATTEMPTS = 10
 _CONNECT_RETRY_BASE_DELAY_S = 2.0
@@ -521,6 +542,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start live score refresh (fetches from ESPN every 30s)
     live_refresh_task = asyncio.create_task(live_score_refresh_loop(db, redis))
 
+    # Start news RSS aggregation (every 5 min)
+    news_fetch_task = asyncio.create_task(news_fetch_loop(db))
+
     logger.info(
         "api_service_started",
         host=settings.api_host,
@@ -532,12 +556,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     phase_sync_task.cancel()
     live_refresh_task.cancel()
+    news_fetch_task.cancel()
     try:
         await phase_sync_task
     except asyncio.CancelledError:
         pass
     try:
         await live_refresh_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await news_fetch_task
     except asyncio.CancelledError:
         pass
 
@@ -567,6 +596,7 @@ def create_app() -> FastAPI:
     # REST routes
     app.include_router(leagues_router)
     app.include_router(matches_router)
+    app.include_router(news_router)
     app.include_router(today_router)
 
     # Health check

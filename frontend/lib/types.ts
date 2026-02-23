@@ -116,6 +116,34 @@ export interface MatchStatsResponse {
   generated_at: string;
 }
 
+// ── News ────────────────────────────────────────────────────────────
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  summary: string | null;
+  content_snippet: string | null;
+  source: string;
+  source_url: string;
+  image_url: string | null;
+  category: string;
+  sport: string | null;
+  leagues: string[];
+  teams: string[];
+  published_at: string;
+  fetched_at: string;
+  trending_score: number;
+  is_breaking: boolean;
+}
+
+export interface NewsResponse {
+  articles: NewsArticle[];
+  total: number;
+  page: number;
+  pages: number;
+  has_next: boolean;
+}
+
 // ── WebSocket message types ─────────────────────────────────────────
 
 export interface WSMessage {
