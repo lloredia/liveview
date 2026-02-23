@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
 import { Header } from "@/components/header";
-import { HomeNewsWidget } from "@/components/news/home-news-widget";
 import { Sidebar } from "@/components/sidebar";
 import { Scoreboard } from "@/components/scoreboard";
 import { TodayView } from "@/components/today-view";
@@ -215,8 +214,6 @@ function HomeContent() {
                   <span className="block text-[10px] opacity-60">{error}</span>
                 </div>
               )}
-
-              <HomeNewsWidget />
 
               {selectedLeague ? (
                 <Scoreboard
