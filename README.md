@@ -1,4 +1,7 @@
 <p align="center">
+  <img src="frontend/public/icons/icon.svg" alt="LiveView" width="120" />
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/LiveView-Sports%20Tracker-00E676?style=for-the-badge&logoColor=white" alt="LiveView" />
 </p>
 <h1 align="center">⚡ LiveView — Real-Time Sports Tracker</h1>
