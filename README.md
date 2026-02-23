@@ -4,10 +4,10 @@
 <p align="center">
   <img src="https://img.shields.io/badge/LiveView-Sports%20Tracker-00E676?style=for-the-badge&logoColor=white" alt="LiveView" />
 </p>
-<h1 align="center">⚡ LiveView — Real-Time Sports Tracker</h1>
+<h1 align="center"> LiveView — Real-Time Sports Tracker</h1>
+
 <p align="center">
-  A production-grade, real-time sports tracking platform built to rival <a href="https://livescore.com">LiveScore.com</a>.<br/>
-  Live scores, match timelines, league standings, and multi-sport coverage — all in one place.
+  Production-ready real-time sports tracker: live scores, match timelines, and league standings with multi-sport coverage across 20+ leagues and 5 sports.
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" />
