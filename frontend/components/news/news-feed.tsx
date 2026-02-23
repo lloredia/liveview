@@ -46,6 +46,7 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [category, setCategory] = useState<string>("all");
   const [sport, setSport] = useState<string>("");
   const [hours, setHours] = useState<number>(0);
@@ -56,6 +57,7 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
       if (pageNum === 1) {
         setLoading(true);
         setError(null);
+        setLoadMoreError(false);
       }
 
       if (category === "trending") {
@@ -93,11 +95,17 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
           setPage(res.page);
           setArticles((prev) => (append ? [...prev, ...res.articles] : res.articles));
           setError(null);
+          setLoadMoreError(false);
         })
         .catch(() => {
-          setArticles((prev) => (append ? prev : []));
-          setHasNext(false);
-          if (pageNum === 1) setError("Could not load news. Check your connection and try again.");
+          if (pageNum === 1) {
+            setArticles([]);
+            setHasNext(false);
+            setError("Could not load news. Check your connection and try again.");
+          } else {
+            setLoadMoreError(true);
+            // Keep hasNext true so user can retry load more
+          }
         })
         .finally(() => setLoading(false));
     },
@@ -113,7 +121,10 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   }, [refreshTrigger, load]);
 
   const handleLoadMore = () => {
-    if (!loading && hasNext) load(page + 1, true);
+    if (!loading && hasNext) {
+      setLoadMoreError(false);
+      load(page + 1, true);
+    }
   };
 
   const handleSearch = useCallback((q: string) => {
@@ -203,6 +214,7 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
                 <NewsCard
                   article={a}
                   variant={i === 0 ? "featured" : "compact"}
+                  headingLevel={i === 0 ? "h2" : "h3"}
                 />
               </div>
             ))}
@@ -227,15 +239,28 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         )}
 
         {hasNext && articles.length > 0 && category !== "trending" && (
-          <div className="mt-6 flex justify-center">
-            <button
-              type="button"
-              onClick={handleLoadMore}
-              disabled={loading}
-              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-[14px] font-semibold text-text-primary transition-colors hover:bg-surface-hover disabled:opacity-50"
-            >
-              {loading ? "Loading…" : "Load more"}
-            </button>
+          <div className="mt-6 flex flex-col items-center gap-2">
+            {loadMoreError ? (
+              <>
+                <p className="text-center text-[13px] text-text-muted">Couldn&apos;t load more.</p>
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  className="rounded-lg bg-accent-green px-4 py-2 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  Try again
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loading}
+                className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-[14px] font-semibold text-text-primary transition-colors hover:bg-surface-hover disabled:opacity-50"
+              >
+                {loading ? "Loading…" : "Load more"}
+              </button>
+            )}
           </div>
         )}
       </div>

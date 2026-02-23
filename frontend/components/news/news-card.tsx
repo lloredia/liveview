@@ -9,6 +9,8 @@ import { NewsImage } from "./news-image";
 interface NewsCardProps {
   article: NewsArticle;
   variant?: "featured" | "compact";
+  /** Use h2 for the lead card (featured), h3 otherwise */
+  headingLevel?: "h2" | "h3";
 }
 
 function CategoryBadge({ category }: { category: string }) {
@@ -45,8 +47,9 @@ function SourceLogo({ source, logoUrl, className }: { source: string; logoUrl: s
   );
 }
 
-export function NewsCard({ article, variant = "featured" }: NewsCardProps) {
+export function NewsCard({ article, variant = "featured", headingLevel }: NewsCardProps) {
   const logoUrl = SOURCE_LOGOS[article.source];
+  const Heading = headingLevel === "h2" ? "h2" : "h3";
 
   if (variant === "compact") {
     return (
@@ -68,9 +71,9 @@ export function NewsCard({ article, variant = "featured" }: NewsCardProps) {
                 {sportIcon(article.sport)}
               </span>
             ) : null}
-            <h3 className="line-clamp-2 flex-1 text-[13px] font-semibold text-text-primary">
+            <Heading className="line-clamp-2 flex-1 text-[13px] font-semibold text-text-primary">
               {article.title}
-            </h3>
+            </Heading>
           </div>
           {article.teams?.length ? (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -128,9 +131,9 @@ export function NewsCard({ article, variant = "featured" }: NewsCardProps) {
             </span>
           ) : null}
         </div>
-        <h3 className="line-clamp-2 text-[15px] font-semibold text-text-primary">
+        <Heading className="line-clamp-2 text-[15px] font-semibold text-text-primary">
           {article.title}
-        </h3>
+        </Heading>
         {article.teams?.length ? (
           <div className="mt-1 flex flex-wrap gap-1">
             {article.teams.slice(0, 4).map((t) => (

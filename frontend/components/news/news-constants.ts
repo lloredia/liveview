@@ -64,6 +64,8 @@ export const SOURCE_LOGOS: Record<string, string> = {
   "BBC Sport": "https://www.bbc.co.uk/favicon.ico",
   "Sky Sports": "https://www.skysports.com/favicon.ico",
   "The Guardian": "https://www.theguardian.com/favicon.ico",
+  "The Guardian Football": "https://www.theguardian.com/favicon.ico",
+  "The Guardian Sport": "https://www.theguardian.com/favicon.ico",
   "Bleacher Report": "https://bleacherreport.com/favicon.ico",
   "CBS Sports": "https://www.cbssports.com/favicon.ico",
   "Yahoo Sports": "https://s.yimg.com/rz/l/favicon.ico",

@@ -32,6 +32,7 @@ export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         <NewsImage
           src={article.image_url}
           sport={article.sport}
+          alt={article.title}
           containerClassName="absolute inset-0"
           placeholder={
             <div className="h-full w-full bg-gradient-to-br from-accent-green/20 to-surface-hover" />

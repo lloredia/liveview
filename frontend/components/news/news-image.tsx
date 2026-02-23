@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { sportIcon } from "@/lib/utils";
 
 interface NewsImageProps {
@@ -33,6 +33,9 @@ export function NewsImage({
   containerClassName,
 }: NewsImageProps) {
   const [error, setError] = useState(false);
+  useEffect(() => {
+    setError(false);
+  }, [src]);
   const showImage = src && !error;
 
   const content = showImage ? (

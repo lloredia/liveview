@@ -22,7 +22,7 @@ export function NewsTrending() {
   if (articles.length === 0) return null;
 
   return (
-    <div className="mb-6 md:mb-0">
+    <div className="mb-6 md:mb-0" role="region" aria-label="Trending news">
       <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-text-dim">
         Trending
       </h3>
