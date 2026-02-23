@@ -121,6 +121,30 @@ function mapPeriodLabel(statusDetail: string, sport: string): string | null {
     if (detail.includes("extra")) return "Extra Time";
     if (detail.includes("penal")) return "Penalties";
   }
+  if (sport === "baseball") {
+    // ESPN detail e.g. "Top 3rd", "Bottom 5th", "Middle 8th", "End of 9th"
+    if (detail.includes("top") && detail.includes("1st")) return "Top 1st";
+    if (detail.includes("top") && detail.includes("2nd")) return "Top 2nd";
+    if (detail.includes("top") && detail.includes("3rd")) return "Top 3rd";
+    if (detail.includes("top") && detail.includes("4th")) return "Top 4th";
+    if (detail.includes("top") && detail.includes("5th")) return "Top 5th";
+    if (detail.includes("top") && detail.includes("6th")) return "Top 6th";
+    if (detail.includes("top") && detail.includes("7th")) return "Top 7th";
+    if (detail.includes("top") && detail.includes("8th")) return "Top 8th";
+    if (detail.includes("top") && detail.includes("9th")) return "Top 9th";
+    if (detail.includes("bottom") && detail.includes("1st")) return "Bottom 1st";
+    if (detail.includes("bottom") && detail.includes("2nd")) return "Bottom 2nd";
+    if (detail.includes("bottom") && detail.includes("3rd")) return "Bottom 3rd";
+    if (detail.includes("bottom") && detail.includes("4th")) return "Bottom 4th";
+    if (detail.includes("bottom") && detail.includes("5th")) return "Bottom 5th";
+    if (detail.includes("bottom") && detail.includes("6th")) return "Bottom 6th";
+    if (detail.includes("bottom") && detail.includes("7th")) return "Bottom 7th";
+    if (detail.includes("bottom") && detail.includes("8th")) return "Bottom 8th";
+    if (detail.includes("bottom") && detail.includes("9th")) return "Bottom 9th";
+    if (detail.includes("middle")) return statusDetail.trim() || null;
+    if (detail.includes("end of")) return statusDetail.trim() || null;
+    if (detail.includes("top") || detail.includes("bottom")) return statusDetail.trim() || null;
+  }
   return null;
 }
 

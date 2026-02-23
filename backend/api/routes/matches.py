@@ -333,6 +333,37 @@ def _normalize_team_name(name: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
+# Soccer suffixes to strip so "Angers SCO" / "Lille OSC" match "Angers" / "Lille"
+_FD_STRIP_SUFFIXES = (
+    "sco", "osc", "losc", "fc", "cf", "cfc", "sc", "united", "city", "hotspur",
+    "rangers", "athletic", "wanderers", "albion", "rovers", "county", "town",
+)
+
+
+def _team_names_match(our_home: str, our_away: str, fd_home: str, fd_away: str) -> bool:
+    """True if our home/away pair matches Football-Data.org home/away (fuzzy)."""
+    def norm(s: str) -> str:
+        n = _normalize_team_name(s)
+        for suf in _FD_STRIP_SUFFIXES:
+            if len(n) > len(suf) and n.endswith(suf):
+                n = n[: -len(suf)]
+                break
+        return n
+
+    def names_match(a: str, b: str) -> bool:
+        an, bn = norm(a), norm(b)
+        if not an or not bn:
+            return an == bn
+        if an == bn:
+            return True
+        # One contains the other (e.g. "angers" vs "angerssco", "lille" vs "lilleosc")
+        if an in bn or bn in an:
+            return True
+        return False
+
+    return names_match(our_home, fd_home) and names_match(our_away, fd_away)
+
+
 @router.get("/{match_id}/lineup")
 async def get_match_lineup(
     match_id: uuid.UUID,
@@ -398,12 +429,10 @@ async def get_match_lineup(
                 if list_resp.status_code != 200:
                     return {"source": None, "home": None, "away": None, "message": "Football-Data.org request failed"}
                 list_data = list_resp.json()
-            home_norm = _normalize_team_name(row.ht_name)
-            away_norm = _normalize_team_name(row.at_name)
             for m in list_data.get("matches", []):
                 h = (m.get("homeTeam") or {}).get("name", "")
                 a = (m.get("awayTeam") or {}).get("name", "")
-                if _normalize_team_name(h) == home_norm and _normalize_team_name(a) == away_norm:
+                if _team_names_match(row.ht_name or "", row.at_name or "", h, a):
                     fd_match_id = str(m.get("id", ""))
                     break
             if not fd_match_id:
@@ -599,12 +628,10 @@ async def get_match_player_stats(
                 if list_resp.status_code != 200:
                     return {"source": None, "home": None, "away": None, "message": "Football-Data.org request failed"}
                 list_data = list_resp.json()
-            home_norm = _normalize_team_name(row.ht_name)
-            away_norm = _normalize_team_name(row.at_name)
             for m in list_data.get("matches", []):
                 h = (m.get("homeTeam") or {}).get("name", "")
                 a = (m.get("awayTeam") or {}).get("name", "")
-                if _normalize_team_name(h) == home_norm and _normalize_team_name(a) == away_norm:
+                if _team_names_match(row.ht_name or "", row.at_name or "", h, a):
                     fd_match_id = str(m.get("id", ""))
                     break
             if not fd_match_id:

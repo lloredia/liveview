@@ -45,14 +45,31 @@ function LiveClock({
   serverClock,
   startTime,
   phase,
+  period,
 }: {
   serverClock: string | null;
   startTime: string | null;
   phase: string;
+  period: string | null;
 }) {
-  const [display, setDisplay] = useState(serverClock || phaseLabel(phase));
+  // Baseball: show inning (period) instead of clock; MLB has no game clock
+  const isBaseball = phase === "live_inning";
+  const rawPeriod = period?.trim();
+  const inningLabel = isBaseball && rawPeriod
+    ? /^\d+$/.test(rawPeriod)
+      ? `${rawPeriod}${rawPeriod === "1" ? "st" : rawPeriod === "2" ? "nd" : rawPeriod === "3" ? "rd" : "th"}`
+      : rawPeriod
+    : null;
+
+  const [display, setDisplay] = useState(
+    inningLabel ?? serverClock ?? phaseLabel(phase),
+  );
 
   useEffect(() => {
+    if (inningLabel) {
+      setDisplay(inningLabel);
+      return;
+    }
     if (serverClock && /^\d+:\d{2}$/.test(serverClock)) {
       const [m, s] = serverClock.split(":").map(Number);
       const baseSecs = m * 60 + s;
@@ -94,7 +111,7 @@ function LiveClock({
     }
 
     setDisplay(serverClock || phaseLabel(phase));
-  }, [serverClock, startTime, phase]);
+  }, [serverClock, startTime, phase, inningLabel]);
 
   return <>{display}</>;
 }
@@ -164,6 +181,7 @@ export const MatchCard = memo(function MatchCard({
                 serverClock={match.clock}
                 startTime={match.start_time}
                 phase={match.phase}
+                period={match.period}
               />
             </span>
           </>
