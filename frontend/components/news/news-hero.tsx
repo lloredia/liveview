@@ -5,8 +5,9 @@ import { fetchNews } from "@/lib/api";
 import type { NewsArticle } from "@/lib/types";
 import { relativeTime } from "@/lib/utils";
 import { CATEGORY_LABELS } from "./news-constants";
+import { NewsImage } from "./news-image";
 
-export function NewsHero() {
+export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [article, setArticle] = useState<NewsArticle | null>(null);
 
   useEffect(() => {
@@ -14,7 +15,7 @@ export function NewsHero() {
       .then((res) => res.articles[0] ?? null)
       .then(setArticle)
       .catch(() => setArticle(null));
-  }, []);
+  }, [refreshTrigger]);
 
   if (!article) return null;
 
@@ -28,15 +29,15 @@ export function NewsHero() {
       className="group relative mb-6 block overflow-hidden rounded-xl border border-surface-border bg-surface-card md:mb-8"
     >
       <div className="relative h-[200px] w-full md:h-[280px]">
-        {article.image_url ? (
-          <img
-            src={article.image_url}
-            alt=""
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-          />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-accent-green/20 to-surface-hover" />
-        )}
+        <NewsImage
+          src={article.image_url}
+          sport={article.sport}
+          containerClassName="absolute inset-0"
+          placeholder={
+            <div className="h-full w-full bg-gradient-to-br from-accent-green/20 to-surface-hover" />
+          }
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+        />
         <div
           className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
           aria-hidden
