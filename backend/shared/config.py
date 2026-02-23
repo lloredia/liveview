@@ -69,6 +69,24 @@ class Settings(BaseSettings):
             pass
         return self
 
+    @model_validator(mode="after")
+    def normalize_database_url_asyncpg(self) -> "Settings":
+        """Ensure database_url uses asyncpg driver (backend uses asyncpg, not psycopg2)."""
+        raw = str(self.database_url)
+        if "+asyncpg" in raw:
+            return self
+        if raw.startswith("postgres://"):
+            raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
+        elif raw.startswith("postgresql://"):
+            raw = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+        else:
+            return self
+        try:
+            self.database_url = PostgresDsn(raw)
+        except Exception:
+            pass
+        return self
+
     db_pool_max: int = 20
     db_command_timeout: int = 30
 

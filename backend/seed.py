@@ -192,6 +192,18 @@ async def seed() -> None:
         print(f"  Leagues configured: {len(ESPN_LEAGUES)}")
         print()
 
+        # Ensure every configured league exists (e.g. NFL even when no games today)
+        async with db.write_session() as session:
+            for league_cfg in ESPN_LEAGUES:
+                sport_id = sports_db.get(league_cfg["sport"])
+                if sport_id:
+                    await _upsert_league(
+                        session, sport_id, league_cfg["name"],
+                        league_cfg["country"], league_cfg["espn_league"],
+                    )
+        print("  All leagues ensured (including NFL when Football sport exists).")
+        print()
+
         grand_leagues = 0
         grand_teams = 0
         grand_matches = 0

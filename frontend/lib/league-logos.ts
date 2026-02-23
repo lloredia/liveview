@@ -29,6 +29,8 @@ const LEAGUE_LOGOS: Record<string, string> = {
   // Hockey & Baseball
   "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
   "MLB": "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png",
+  // Football (American)
+  "NFL": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png",
 };
 
 export function getLeagueLogo(name: string): string | null {

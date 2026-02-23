@@ -731,6 +731,17 @@ export LV_DATABASE_URL="postgresql+asyncpg://liveview:liveview@localhost:5432/li
 python seed.py
 ```
 
+### Enabling NFL (Football) in the sidebar
+
+The initial migration (`001_initial.sql`) creates Soccer, Basketball, Hockey, and Baseball. A second migration adds **Football** (NFL):
+
+- **Run the Football migration** so the "football" sport exists:
+  ```bash
+  psql $LV_DATABASE_URL -f backend/migrations/002_add_football_sport.sql
+  ```
+  (On Railway, use the DB connection string from your project variables and run the SQL in the Query tab or via `psql`.)
+- Then **re-run the seed** (or let the scheduler ingest) so the NFL league and its matches appear. After that, the **NFL** section will show in the sidebar under Football 🏈.
+
 ---
 
 ## Environment Variables

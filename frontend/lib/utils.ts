@@ -110,15 +110,16 @@ export function relativeTime(iso: string | null | undefined): string {
   }
 }
 
-/** Map sport type to an emoji icon. */
+/** Map sport type to an emoji icon (football = American football 🏈). */
 export function sportIcon(sport: string): string {
   const map: Record<string, string> = {
     soccer: "⚽",
     basketball: "🏀",
     hockey: "🏒",
     baseball: "⚾",
+    football: "🏈",
   };
-  return map[sport] || "🏆";
+  return map[(sport || "").toLowerCase()] || "🏆";
 }
 
 /** Map event_type to a display-friendly label and icon. */
