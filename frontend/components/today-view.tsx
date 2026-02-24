@@ -4,49 +4,11 @@ import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { useESPNLiveMulti } from "@/hooks/use-espn-live";
 import { getLeagueLogo } from "@/lib/league-logos";
+import type { TodayResponse } from "@/lib/types";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
 
-interface TodayTeam {
-  id: string;
-  name: string;
-  short_name: string;
-  logo_url: string | null;
-}
-
-interface TodayMatch {
-  id: string;
-  phase: string;
-  start_time: string | null;
-  venue: string | null;
-  score: { home: number; away: number };
-  clock: string | null;
-  period: string | null;
-  version: number;
-  home_team: TodayTeam;
-  away_team: TodayTeam;
-}
-
-export interface TodayLeagueGroup {
-  league_id: string;
-  league_name: string;
-  league_short_name: string | null;
-  league_country: string;
-  league_logo_url: string | null;
-  sport: string;
-  sport_type: string;
-  matches: TodayMatch[];
-}
-
-export interface TodayResponse {
-  date: string;
-  total_matches: number;
-  live: number;
-  finished: number;
-  scheduled: number;
-  leagues: TodayLeagueGroup[];
-  generated_at: string;
-}
+export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
 
 type MatchFilter = "all" | "live" | "scheduled" | "finished";
 
@@ -110,23 +72,26 @@ export function TodayView({
   const fetcher = useCallback(() => fetchToday(apiDateStr), [apiDateStr]);
 
   const [hasLive, setHasLive] = useState(false);
+  const useHeaderForToday = isUserToday && headerTodayData != null;
   const { data, loading, error } = usePolling({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
     intervalWhenHidden: 60_000,
-    enabled: true,
+    enabled: !useHeaderForToday,
     key: apiDateStr ?? "today",
   });
 
+  const effectiveData = useHeaderForToday ? headerTodayData : data;
+
   const leagueNames = useMemo(
-    () => (data?.leagues || []).map((l) => l.league_name),
-    [data],
+    () => (effectiveData?.leagues || []).map((l) => l.league_name),
+    [effectiveData],
   );
   const { patchMatch } = useESPNLiveMulti(leagueNames, hasLive ? 10000 : 30000);
 
   useEffect(() => {
-    setHasLive((data?.live ?? 0) > 0);
-  }, [data]);
+    setHasLive((effectiveData?.live ?? 0) > 0);
+  }, [effectiveData?.live]);
 
   // Scroll date strip to center "today" on mount
   useEffect(() => {
@@ -170,8 +135,8 @@ export function TodayView({
     );
 
   const filteredLeagues = useMemo(() => {
-    if (!data?.leagues) return [];
-    return data.leagues
+    if (!effectiveData?.leagues) return [];
+    return effectiveData.leagues
       .map((league) => {
         const filtered = league.matches.filter((m) => {
           if (filter === "all") return true;
@@ -190,7 +155,7 @@ export function TodayView({
         return { ...league, matches: patched };
       })
       .filter((league) => league.matches.length > 0);
-  }, [data, filter, patchMatch]);
+  }, [effectiveData, filter, patchMatch]);
 
   const liveCountForTab = useMemo(() => {
     if (isUserToday && headerTodayData != null) return countLiveInResponse(headerTodayData);
@@ -316,12 +281,12 @@ export function TodayView({
       </div>
 
       {/* Loading skeleton */}
-      {loading && !data && (
+      {loading && !effectiveData && (
         <TodayViewSkeleton />
       )}
 
       {/* Error */}
-      {error && !data && (
+      {error && !effectiveData && (
         <div className="px-3 py-4 text-center text-xs text-accent-red">
           Failed to load matches
         </div>

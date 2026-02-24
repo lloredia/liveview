@@ -752,6 +752,22 @@ npm run dev
 
 Open `http://localhost:3000` — the frontend connects to `http://localhost:8000` by default.
 
+### Troubleshooting
+
+- **Run the frontend from `frontend/`** — There is no `package.json` at the repo root. Use `cd frontend` then `npm run dev`. Do not run `npx expo start`; this is a Next.js app, not Expo.
+- **"EMFILE: too many open files"** — The dev server’s file watcher can hit your system’s open-file limit. Raise it before starting:
+  ```bash
+  ulimit -n 10240
+  cd frontend && npm run dev
+  ```
+  On macOS you can make this persistent via `launchctl limit maxfiles` or add `ulimit -n 10240` to your shell profile.
+- **Empty data or failed requests** — The app calls the backend at `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`). If you're **not** running the backend locally, add this to `frontend/.env.local` so the app uses the deployed API:
+  ```
+  NEXT_PUBLIC_API_URL=https://backend-api-production-8b9f.up.railway.app
+  ```
+  Then restart the dev server (`npm run dev` in `frontend/`).
+- **Run from repo root** — From the **liveview-app** root you can run `./run-frontend.sh` to start the frontend (it runs from `frontend/` and raises the file limit automatically).
+
 ### Seed the Database
 
 ```bash
@@ -800,8 +816,12 @@ All backend variables use the `LV_` prefix.
 | `GET` | `/v1/matches/:id` | Match center (score, teams, state) |
 | `GET` | `/v1/matches/:id/timeline` | Event timeline with pagination |
 | `GET` | `/v1/matches/:id/stats` | Team & player statistics |
+| `GET` | `/v1/news` | Paginated news feed (`page`, `limit`, `category`, `sport`, `league`, `q`, `hours`) |
+| `GET` | `/v1/news/trending` | Top trending articles |
+| `GET` | `/v1/news/breaking` | Breaking news (last 6 hours) |
+| `GET` | `/v1/news/:id` | Single article by ID |
 
-All endpoints support `ETag` / `If-None-Match` for conditional requests.
+All endpoints support `ETag` / `If-None-Match` for conditional requests (where applicable).
 
 ---
 

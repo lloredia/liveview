@@ -116,6 +116,42 @@ export interface MatchStatsResponse {
   generated_at: string;
 }
 
+// ── Today (/v1/today) ────────────────────────────────────────────────
+
+export interface TodayMatch {
+  id: string;
+  phase: string;
+  start_time: string | null;
+  venue: string | null;
+  score: { home: number; away: number };
+  clock: string | null;
+  period: string | null;
+  version: number;
+  home_team: Team;
+  away_team: Team;
+}
+
+export interface TodayLeagueGroup {
+  league_id: string;
+  league_name: string;
+  league_short_name: string | null;
+  league_country: string;
+  league_logo_url: string | null;
+  sport: string;
+  sport_type: string;
+  matches: TodayMatch[];
+}
+
+export interface TodayResponse {
+  date: string;
+  total_matches: number;
+  live: number;
+  finished: number;
+  scheduled: number;
+  leagues: TodayLeagueGroup[];
+  generated_at: string;
+}
+
 // ── News ────────────────────────────────────────────────────────────
 
 export interface NewsArticle {

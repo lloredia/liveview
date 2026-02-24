@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import signal
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Union
 
 import httpx
 from fastapi import FastAPI, WebSocket
@@ -510,6 +510,12 @@ async def _connect_with_retry(connect_fn, name: str) -> None:
 
 
 @asynccontextmanager
+async def _noop_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """No-op lifespan for testing without DB/Redis."""
+    yield
+
+
+@asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan manager.
@@ -577,15 +583,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("api_service_stopped")
 
 
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+def create_app(*, use_lifespan: bool = True) -> FastAPI:
+    """Create and configure the FastAPI application. Set use_lifespan=False for testing without DB/Redis."""
     settings = get_settings()
 
     app = FastAPI(
         title="Live View API",
         description="Real-time sports tracking platform",
         version="1.0.0",
-        lifespan=lifespan,
+        lifespan=lifespan if use_lifespan else _noop_lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
     )
@@ -605,7 +611,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "api"}
 
     @app.get("/ready", tags=["system"])
-    async def readiness() -> dict[str, str | bool]:
+    async def readiness() -> Dict[str, Union[str, bool]]:
         """Readiness probe — checks downstream dependencies."""
         redis = get_redis()
         db = get_db()

@@ -7,6 +7,7 @@ import type {
   ScoreboardResponse,
   TimelineResponse,
   LiveTickerResponse,
+  TodayResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -69,9 +70,8 @@ export async function fetchMatch(matchId: string): Promise<MatchDetailResponse> 
   return apiFetch<MatchDetailResponse>(`/v1/matches/${matchId}`);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function fetchLiveCounts(): Promise<any> {
-  return apiFetch("/v1/today");
+export async function fetchLiveCounts(): Promise<TodayResponse> {
+  return apiFetch<TodayResponse>("/v1/today");
 }
 
 export async function fetchStats(matchId: string): Promise<MatchStatsResponse> {
