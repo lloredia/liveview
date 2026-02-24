@@ -10,6 +10,9 @@ export interface Team {
 export interface MatchScore {
   home: number;
   away: number;
+  /** Aggregate score (two-legged ties); present for e.g. Champions League */
+  aggregate_home?: number;
+  aggregate_away?: number;
 }
 
 export interface MatchSummary {
@@ -36,6 +39,9 @@ export interface MatchState {
   period: string | null;
   period_scores: unknown[];
   version: number;
+  /** Aggregate score (two-legged ties) */
+  aggregate_home?: number;
+  aggregate_away?: number;
 }
 
 export interface MatchEvent {
@@ -123,7 +129,7 @@ export interface TodayMatch {
   phase: string;
   start_time: string | null;
   venue: string | null;
-  score: { home: number; away: number };
+  score: MatchScore;
   clock: string | null;
   period: string | null;
   version: number;

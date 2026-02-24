@@ -111,6 +111,7 @@ async def get_today(
                 MatchStateORM.clock,
                 MatchStateORM.period,
                 MatchStateORM.score_breakdown,
+                MatchStateORM.extra_data,
                 MatchStateORM.version,
                 LeagueORM.id.label("league_id_ref"),
                 LeagueORM.name.label("league_name"),
@@ -215,15 +216,23 @@ async def get_today(
             except (json.JSONDecodeError, TypeError):
                 score_breakdown = []
 
+        extra = getattr(row, "extra_data", None) or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        score_obj: dict[str, Any] = {
+            "home": row.score_home if row.score_home is not None else 0,
+            "away": row.score_away if row.score_away is not None else 0,
+        }
+        if "aggregate_home" in extra and "aggregate_away" in extra:
+            score_obj["aggregate_home"] = extra["aggregate_home"]
+            score_obj["aggregate_away"] = extra["aggregate_away"]
+
         match_data = {
             "id": str(row.id),
             "phase": row.phase or "scheduled",
             "start_time": row.start_time.isoformat() if row.start_time else None,
             "venue": row.venue,
-            "score": {
-                "home": row.score_home if row.score_home is not None else 0,
-                "away": row.score_away if row.score_away is not None else 0,
-            },
+            "score": score_obj,
             "clock": row.clock,
             "period": row.period,
             "version": row.version if row.version is not None else 0,

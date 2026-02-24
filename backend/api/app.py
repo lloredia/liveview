@@ -306,6 +306,8 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
 
             score_home = 0
             score_away = 0
+            aggregate_home: int | None = None
+            aggregate_away: int | None = None
             home_stats: dict[str, Any] = {}
             away_stats: dict[str, Any] = {}
 
@@ -314,11 +316,19 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     sc = int(c.get("score", "0"))
                 except (ValueError, TypeError):
                     sc = 0
+                try:
+                    agg = int(c.get("aggregateScore", 0))
+                except (ValueError, TypeError):
+                    agg = 0
                 if c.get("homeAway") == "home":
                     score_home = sc
+                    if "aggregateScore" in c:
+                        aggregate_home = agg
                     home_stats = _extract_team_stats(c)
                 else:
                     score_away = sc
+                    if "aggregateScore" in c:
+                        aggregate_away = agg
                     away_stats = _extract_team_stats(c)
 
             status_obj = comp.get("status", event.get("status", {}))
@@ -334,16 +344,24 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
             if match_obj:
                 match_obj.phase = phase.value
 
-            # Update match state (scores, clock, period)
+            # Update match state (scores, clock, period, aggregate for two-legged ties)
             state_obj = (await session.execute(
                 select(MatchStateORM).where(MatchStateORM.match_id == match_id)
             )).scalar_one_or_none()
             if state_obj:
+                extra = dict(state_obj.extra_data or {})
+                if aggregate_home is not None and aggregate_away is not None:
+                    extra["aggregate_home"] = aggregate_home
+                    extra["aggregate_away"] = aggregate_away
+                else:
+                    extra.pop("aggregate_home", None)
+                    extra.pop("aggregate_away", None)
                 changed = (
                     state_obj.score_home != score_home
                     or state_obj.score_away != score_away
                     or state_obj.clock != clock
                     or state_obj.phase != phase.value
+                    or state_obj.extra_data != extra
                 )
                 if changed:
                     state_obj.score_home = score_home
@@ -351,6 +369,7 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     state_obj.clock = clock
                     state_obj.phase = phase.value
                     state_obj.period = str(period_num) if period_num else state_obj.period
+                    state_obj.extra_data = extra
                     state_obj.version = (state_obj.version or 0) + 1
                     count += 1
 

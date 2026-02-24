@@ -41,6 +41,29 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/v1/matches", tags=["matches"])
 
 
+def _state_payload(row: Any, state: Any) -> dict[str, Any]:
+    """Build state payload including optional aggregate from extra_data."""
+    extra = row.extra_data if state and getattr(row, "extra_data", None) else {}
+    if not isinstance(extra, dict):
+        extra = {}
+    out: dict[str, Any] = {
+        "score_home": row.score_home if state else 0,
+        "score_away": row.score_away if state else 0,
+        "clock": row.clock if state else None,
+        "period": row.period if state else None,
+        "period_scores": (
+            json.loads(row.score_breakdown)
+            if state and isinstance(row.score_breakdown, str)
+            else (row.score_breakdown if state and row.score_breakdown else [])
+        ),
+        "version": row.version if state else 0,
+    }
+    if "aggregate_home" in extra and "aggregate_away" in extra:
+        out["aggregate_home"] = extra["aggregate_home"]
+        out["aggregate_away"] = extra["aggregate_away"]
+    return out
+
+
 @router.get("/{match_id}")
 async def get_match_center(
     match_id: uuid.UUID,
@@ -80,6 +103,7 @@ async def get_match_center(
                 MatchStateORM.clock,
                 MatchStateORM.period,
                 MatchStateORM.score_breakdown,
+                MatchStateORM.extra_data,
                 MatchStateORM.version,
                 ht.c.id.label("ht_id"),
                 ht.c.name.label("ht_name"),
@@ -129,18 +153,7 @@ async def get_match_center(
             "home_team": home_team,
             "away_team": away_team,
         },
-        "state": {
-            "score_home": row.score_home if state else 0,
-            "score_away": row.score_away if state else 0,
-            "clock": row.clock if state else None,
-            "period": row.period if state else None,
-            "period_scores": (
-                json.loads(row.score_breakdown)
-                if state and isinstance(row.score_breakdown, str)
-                else (row.score_breakdown if state and row.score_breakdown else [])
-            ),
-            "version": row.version if state else 0,
-        } if state else None,
+        "state": _state_payload(row, state) if state else None,
         "recent_events": recent_events,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),

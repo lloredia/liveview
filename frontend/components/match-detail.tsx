@@ -643,6 +643,11 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
             <div className="mt-0.5 text-[11px] text-text-muted">{match.away_team?.short_name}</div>
           </div>
         </div>
+        {state?.aggregate_home != null && state?.aggregate_away != null && (
+          <div className="mt-3 text-sm font-semibold text-text-muted">
+            Aggregate: {state.aggregate_home}-{state.aggregate_away}
+          </div>
+        )}
         {match.venue && <div className="mt-5 text-[11px] text-text-muted">📍 {match.venue} · {formatDate(match.start_time)} {formatTime(match.start_time)}</div>}
       </div>
 

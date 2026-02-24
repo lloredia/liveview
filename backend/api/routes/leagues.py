@@ -128,6 +128,7 @@ async def league_scoreboard(
                 MatchStateORM.score_away,
                 MatchStateORM.clock,
                 MatchStateORM.period,
+                MatchStateORM.extra_data,
                 MatchStateORM.version,
                 home_team.c.id.label("ht_id"),
                 home_team.c.name.label("ht_name"),
@@ -156,15 +157,22 @@ async def league_scoreboard(
 
         matches = []
         for row in match_rows:
+            extra = row.extra_data if getattr(row, "extra_data", None) else {}
+            if not isinstance(extra, dict):
+                extra = {}
+            score_obj: dict[str, Any] = {
+                "home": row.score_home or 0,
+                "away": row.score_away or 0,
+            }
+            if "aggregate_home" in extra and "aggregate_away" in extra:
+                score_obj["aggregate_home"] = extra["aggregate_home"]
+                score_obj["aggregate_away"] = extra["aggregate_away"]
             matches.append({
                 "id": str(row.id),
                 "phase": row.phase,
                 "start_time": row.start_time.isoformat() if row.start_time else None,
                 "venue": row.venue,
-                "score": {
-                    "home": row.score_home or 0,
-                    "away": row.score_away or 0,
-                },
+                "score": score_obj,
                 "clock": row.clock,
                 "period": row.period,
                 "version": row.version or 0,

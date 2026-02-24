@@ -639,6 +639,8 @@ class ScheduleSyncService:
         competitors = comp.get("competitors", [])
         home_team_id = away_team_id = None
         score_home = score_away = 0
+        aggregate_home: int | None = None
+        aggregate_away: int | None = None
 
         for competitor in competitors:
             td = competitor.get("team", {})
@@ -650,10 +652,18 @@ class ScheduleSyncService:
                 score = int(competitor.get("score", "0"))
             except (ValueError, TypeError):
                 pass
+            try:
+                agg = int(competitor.get("aggregateScore", 0))
+            except (ValueError, TypeError):
+                agg = 0
             if competitor.get("homeAway") == "home":
                 home_team_id, score_home = team_id, score
+                if "aggregateScore" in competitor:
+                    aggregate_home = agg
             else:
                 away_team_id, score_away = team_id, score
+                if "aggregateScore" in competitor:
+                    aggregate_away = agg
 
         if not home_team_id or not away_team_id:
             return False
@@ -695,9 +705,21 @@ class ScheduleSyncService:
                 state_obj.clock = clock
                 state_obj.phase = phase.value
                 state_obj.version += 1
+                extra = dict(state_obj.extra_data or {})
+                if aggregate_home is not None and aggregate_away is not None:
+                    extra["aggregate_home"] = aggregate_home
+                    extra["aggregate_away"] = aggregate_away
+                else:
+                    extra.pop("aggregate_home", None)
+                    extra.pop("aggregate_away", None)
+                state_obj.extra_data = extra
             return False
 
         match_id = uuid.uuid4()
+        extra_data: dict[str, Any] = {}
+        if aggregate_home is not None and aggregate_away is not None:
+            extra_data["aggregate_home"] = aggregate_home
+            extra_data["aggregate_away"] = aggregate_away
         session.add(MatchORM(
             id=match_id, league_id=league_id, home_team_id=home_team_id,
             away_team_id=away_team_id, start_time=start_time,
@@ -706,7 +728,7 @@ class ScheduleSyncService:
         await session.flush()
         session.add(MatchStateORM(
             match_id=match_id, score_home=score_home, score_away=score_away,
-            clock=clock, phase=phase.value,
+            clock=clock, phase=phase.value, extra_data=extra_data,
         ))
         await session.flush()
         session.add(ProviderMappingORM(

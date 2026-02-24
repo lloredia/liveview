@@ -218,22 +218,31 @@ export const MatchCard = memo(function MatchCard({
       </div>
 
       {/* Score */}
-      <div className="flex w-[56px] shrink-0 items-center justify-center gap-1">
-        {scheduled ? (
-          <span className="text-[11px] text-text-muted">vs</span>
-        ) : (
-          <>
-            <AnimatedScore
-              value={match.score.home}
-              live={live || (finished && match.score.home > match.score.away)}
-            />
-            <span className="text-[10px] text-text-dim">-</span>
-            <AnimatedScore
-              value={match.score.away}
-              live={live || (finished && match.score.away > match.score.home)}
-            />
-          </>
-        )}
+      <div className="flex shrink-0 flex-col items-center justify-center gap-0">
+        <div className="flex items-center justify-center gap-1">
+          {scheduled ? (
+            <span className="text-[11px] text-text-muted">vs</span>
+          ) : (
+            <>
+              <AnimatedScore
+                value={match.score.home}
+                live={live || (finished && match.score.home > match.score.away)}
+              />
+              <span className="text-[10px] text-text-dim">-</span>
+              <AnimatedScore
+                value={match.score.away}
+                live={live || (finished && match.score.away > match.score.home)}
+              />
+            </>
+          )}
+        </div>
+        {!scheduled &&
+          match.score.aggregate_home != null &&
+          match.score.aggregate_away != null && (
+            <span className="text-[9px] font-medium text-text-muted tabular-nums">
+              {match.score.aggregate_home}-{match.score.aggregate_away} agg
+            </span>
+          )}
       </div>
 
       {/* Away team */}
