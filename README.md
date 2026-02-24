@@ -68,6 +68,7 @@
 - [Project Structure](#project-structure)
 - [Data Flow](#data-flow)
 - [Deployment](#deployment)
+- [Apple App Store](#apple-app-store)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
@@ -716,6 +717,12 @@ graph LR
 | Backend API | Railway | [backend-api-production-8b9f.up.railway.app](https://backend-api-production-8b9f.up.railway.app) |
 | PostgreSQL | Railway | Internal: `postgres.railway.internal:5432` |
 | Redis | Railway | Internal: `redis.railway.internal:6379` |
+
+### Apple App Store
+
+The frontend can be published as a native iOS app using **Capacitor**. The app loads your live Vercel URL (no embedded build), so it always shows the latest version. Full steps: **[docs/APP_STORE.md](docs/APP_STORE.md)**.
+
+Quick start from `frontend/`: `npm install` → `npm run cap:add:ios` → `npm run cap:open:ios`, then in Xcode set your Team and Bundle ID, and archive for App Store Connect.
 
 ---
 

@@ -342,6 +342,9 @@ async def _process_event(
     score_home = 0
     score_away = 0
 
+    aggregate_home: int | None = None
+    aggregate_away: int | None = None
+
     for competitor in competitors:
         team_data = competitor.get("team", {})
         if not team_data:
@@ -366,13 +369,21 @@ async def _process_event(
             score = int(score_str)
         except (ValueError, TypeError):
             score = 0
+        try:
+            agg = int(competitor.get("aggregateScore", 0))
+        except (ValueError, TypeError):
+            agg = 0
 
         if home_away == "home":
             home_team_id = team_id
             score_home = score
+            if "aggregateScore" in competitor:
+                aggregate_home = agg
         else:
             away_team_id = team_id
             score_away = score
+            if "aggregateScore" in competitor:
+                aggregate_away = agg
 
     if not home_team_id or not away_team_id:
         return teams_created
@@ -413,7 +424,7 @@ async def _process_event(
         match = (await session.execute(match_stmt)).scalar_one_or_none()
         if match:
             match.phase = phase.value
-        # Update state
+        # Update state (including aggregate for two-legged ties)
         state_stmt = select(MatchStateORM).where(MatchStateORM.match_id == existing_match_id)
         state = (await session.execute(state_stmt)).scalar_one_or_none()
         if state:
@@ -422,6 +433,14 @@ async def _process_event(
             state.clock = clock
             state.phase = phase.value
             state.version += 1
+            extra = dict(state.extra_data or {})
+            if aggregate_home is not None and aggregate_away is not None:
+                extra["aggregate_home"] = aggregate_home
+                extra["aggregate_away"] = aggregate_away
+            else:
+                extra.pop("aggregate_home", None)
+                extra.pop("aggregate_away", None)
+            state.extra_data = extra
         return teams_created
 
     # Create new match
@@ -437,6 +456,11 @@ async def _process_event(
     ))
     await session.flush()
 
+    extra_data: dict[str, Any] = {}
+    if aggregate_home is not None and aggregate_away is not None:
+        extra_data["aggregate_home"] = aggregate_home
+        extra_data["aggregate_away"] = aggregate_away
+
     # Create match state
     session.add(MatchStateORM(
         match_id=match_id,
@@ -444,6 +468,7 @@ async def _process_event(
         score_away=score_away,
         clock=clock,
         phase=phase.value,
+        extra_data=extra_data,
     ))
     await session.flush()
 

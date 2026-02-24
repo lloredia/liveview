@@ -237,9 +237,9 @@ export const MatchCard = memo(function MatchCard({
           )}
         </div>
         {!scheduled &&
-          match.score.aggregate_home != null &&
-          match.score.aggregate_away != null && (
-            <span className="text-[9px] font-medium text-text-muted tabular-nums">
+          typeof match.score.aggregate_home === "number" &&
+          typeof match.score.aggregate_away === "number" && (
+            <span className="text-[9px] font-semibold tabular-nums text-text-secondary" title="Aggregate score (two legs)">
               {match.score.aggregate_home}-{match.score.aggregate_away} agg
             </span>
           )}

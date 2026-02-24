@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # ignore extra .env vars (e.g. POSTGRES_HOST, LOG_FORMAT) not on Settings
     )
 
     # ── General ──────────────────────────────────────────────
