@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { useESPNLiveMulti } from "@/hooks/use-espn-live";
 import { getLeagueLogo } from "@/lib/league-logos";
-import type { TodayResponse } from "@/lib/types";
+import type { TodayMatch, TodayResponse } from "@/lib/types";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
 
