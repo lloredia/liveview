@@ -74,4 +74,5 @@ Connect an iPhone or choose a simulator. Select the **App** scheme and run (⌘R
 
 - **White screen / won’t load:** Confirm `server.url` in `capacitor.config.ts` is correct and the URL is reachable (HTTPS). Check the Vercel deployment and that **NEXT_PUBLIC_API_URL** points to the Railway API.
 - **“Untrusted Enterprise Developer”:** On a real device, go to **Settings → General → VPN & Device Management** and trust your developer certificate.
+- **"Failed to load matches":** Set **NEXT_PUBLIC_API_URL** in Vercel (Settings → Environment Variables) to your production API base URL (e.g. `https://your-api.railway.app`), then redeploy. Ensure your API allows CORS from your Vercel origin (and, if needed, `capacitor://localhost`).
 - **Capacitor sync:** After changing `capacitor.config.ts` or adding plugins, run `npm run cap:sync` in `frontend/`.

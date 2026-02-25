@@ -73,7 +73,7 @@ export function TodayView({
 
   const [hasLive, setHasLive] = useState(false);
   const useHeaderForToday = isUserToday && headerTodayData != null;
-  const { data, loading, error } = usePolling({
+  const { data, loading, error, refresh } = usePolling({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
     intervalWhenHidden: 60_000,
@@ -287,8 +287,18 @@ export function TodayView({
 
       {/* Error */}
       {error && !effectiveData && (
-        <div className="px-3 py-4 text-center text-xs text-accent-red">
-          Failed to load matches
+        <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
+          <p className="text-xs text-accent-red">Failed to load matches</p>
+          <p className="text-[11px] text-text-dim">
+            Check your connection. The app needs access to the scores API.
+          </p>
+          <button
+            type="button"
+            onClick={() => refresh()}
+            className="rounded-xl bg-accent-blue px-4 py-2 text-xs font-semibold text-white hover:brightness-110 active:scale-[0.98]"
+          >
+            Try again
+          </button>
         </div>
       )}
 

@@ -4,7 +4,7 @@ Use this checklist so LiveView meets Apple’s App Store Review Guidelines and r
 
 ## 1. Export compliance
 
-- **ITSAppUsesNonExemptEncryption** is set to **false** in `frontend/ios/App/App/Info.plist`.
+- **ITSAppUsesNonExemptEncryption** is set to **false** in `ios/App/App/Info.plist`.
 - The app only uses standard HTTPS (exempt encryption). When submitting in App Store Connect, you can answer the export compliance questions accordingly (no proprietary encryption).
 
 ## 2. Privacy and data use
@@ -46,8 +46,8 @@ Use this checklist so LiveView meets Apple’s App Store Review Guidelines and r
 
 ## 7. Technical
 
-- **Minimum iOS version:** The Xcode project uses **IPHONEOS_DEPLOYMENT_TARGET = 13.0**. Apple generally supports recent OS versions; 13.0 is acceptable. You can raise it (e.g. 14.0 or 15.0) if you want to use newer APIs only.
-- **Capabilities:** The app does not request special capabilities (e.g. Health, Location, Notifications) in the current setup. If you add push notifications or other capabilities later, add the required usage descriptions in Info.plist and in App Store Connect.
+- **Minimum iOS version:** The Xcode project uses **IPHONEOS_DEPLOYMENT_TARGET = 16.2** (required for Live Activities). Devices on iOS 16.2+ can run the app.
+- **Capabilities:** The app uses **Live Activities** (Dynamic Island / Lock Screen). No push notifications, Health, or Location. If you add other capabilities later, add the required usage descriptions in Info.plist and in App Store Connect.
 
 ## 8. Before you submit
 

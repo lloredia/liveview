@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchMatch } from "@/lib/api";
 import { setPinnedMatches, togglePinned, MAX_PINNED } from "@/lib/pinned-matches";
 import { usePolling } from "@/hooks/use-polling";
 import { isLive, phaseLabel } from "@/lib/utils";
+import { endLiveActivity, updateLiveActivity } from "@/lib/live-activity";
 import { TeamLogo } from "./team-logo";
 import type { MatchDetailResponse } from "@/lib/types";
 
@@ -16,6 +17,32 @@ interface MultiTrackerProps {
 
 export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect }: MultiTrackerProps) {
   const [expanded, setExpanded] = useState(false);
+
+  // Sync tracked games to iOS Dynamic Island / Live Activity
+  useEffect(() => {
+    if (pinnedIds.length === 0) {
+      endLiveActivity();
+      return;
+    }
+    const sync = async () => {
+      const results = await Promise.all(pinnedIds.map((id) => fetchMatch(id)));
+      const games = results
+        .filter((r): r is MatchDetailResponse => r != null)
+        .map((r) => ({
+          matchId: r.match.id,
+          homeName: r.match.home_team?.short_name ?? r.match.home_team?.name ?? "Home",
+          awayName: r.match.away_team?.short_name ?? r.match.away_team?.name ?? "Away",
+          scoreHome: r.state?.score_home ?? 0,
+          scoreAway: r.state?.score_away ?? 0,
+          isLive: isLive(r.match.phase),
+          phaseLabel: phaseLabel(r.match.phase),
+        }));
+      await updateLiveActivity(games);
+    };
+    sync();
+    const interval = setInterval(sync, 15000);
+    return () => clearInterval(interval);
+  }, [pinnedIds]);
 
   if (pinnedIds.length === 0) return null;
 
