@@ -50,7 +50,7 @@ In Xcode:
 
 ## 4. Icons and display name (optional)
 
-- **App icon:** Replace assets in `ios/App/App/Assets.xcassets/AppIcon.appiconset/` with your 1024×1024 icon and generated sizes, or use Xcode’s single-asset app icon with the 1024px image.
+- **App icon:** The correct LiveView icon (dark background, white "L", green "V" and dot) is generated from `frontend/public/icons/icon-app-icon.svg`. From the repo root run: `node frontend/scripts/export-app-icon.mjs` — this writes a 1024×1024 PNG to the iOS AppIcon set. Re-run after changing the SVG.
 - **Display name:** In the App target → **General** → **Display Name** (e.g. “LiveView”).
 
 ## 5. Build and run on a device

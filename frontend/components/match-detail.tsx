@@ -32,6 +32,10 @@ interface MatchDetailProps {
   matchId: string;
   onBack: () => void;
   leagueName?: string;
+  /** Whether this match is in the tracker (pinned). */
+  pinned?: boolean;
+  /** Callback to add/remove this match from the tracker. When provided, a Track/Untrack button is shown. */
+  onTogglePin?: (matchId: string) => void;
 }
 
 type Tab = "play_by_play" | "player_stats" | "lineup" | "team_stats";
@@ -472,7 +476,7 @@ export type SoccerPlayerSelection = {
   side: "home" | "away";
 };
 
-export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailProps) {
+export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, onTogglePin }: MatchDetailProps) {
   const [activeTab, setActiveTab] = useState<Tab>("play_by_play");
   const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
@@ -598,6 +602,20 @@ export function MatchDetail({ matchId, onBack, leagueName = "" }: MatchDetailPro
           ← Back to scoreboard
         </button>
         <div className="flex items-center gap-2">
+          {onTogglePin && (
+            <button
+              type="button"
+              onClick={() => onTogglePin(matchId)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                pinned
+                  ? "bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-accent-blue"
+              }`}
+              aria-label={pinned ? "Untrack this game" : "Track this game"}
+            >
+              {pinned ? "★ Tracked" : "☆ Track game"}
+            </button>
+          )}
           <CalendarButton match={{ id: matchId, phase: effectivePhase, start_time: match.start_time, venue: match.venue, score: { home: effectiveScoreHome, away: effectiveScoreAway }, clock: effectiveClock, period: effectivePeriod, version: 0, home_team: match.home_team as any, away_team: match.away_team as any }} leagueName={leagueName} />
           <ShareButton title={`${match.home_team?.name} vs ${match.away_team?.name}`} text={`${match.home_team?.short_name} ${effectiveScoreHome} - ${effectiveScoreAway} ${match.away_team?.short_name}`} url={`/match/${matchId}`} />
         </div>

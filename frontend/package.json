@@ -11,7 +11,8 @@
     "test:watch": "jest --watch",
     "cap:add:ios": "cap add ios",
     "cap:open:ios": "cap open ios",
-    "cap:sync": "cap sync"
+    "cap:sync": "cap sync",
+    "export:app-icon": "node scripts/export-app-icon.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^6.1.2",

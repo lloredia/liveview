@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { fetchMatch } from "@/lib/api";
-import { setPinnedMatches, togglePinned } from "@/lib/pinned-matches";
+import { setPinnedMatches, togglePinned, MAX_PINNED } from "@/lib/pinned-matches";
 import { usePolling } from "@/hooks/use-polling";
 import { isLive, phaseLabel } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
@@ -32,7 +32,7 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect }: Multi
               Tracking
             </span>
             <span className="rounded-full bg-accent-blue/15 px-2 py-0.5 text-[10px] font-bold text-accent-blue">
-              {pinnedIds.length}
+              {pinnedIds.length}/{MAX_PINNED}
             </span>
           </div>
           <div className="flex items-center gap-2">

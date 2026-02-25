@@ -5,10 +5,12 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchScoreboard } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
 import { isLive } from "@/lib/utils";
+import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { MatchDetail } from "@/components/match-detail";
 import { LiveTicker } from "@/components/live-ticker";
+import { MultiTracker } from "@/components/multi-tracker";
 
 export default function MatchPage() {
   const params = useParams();
@@ -20,9 +22,14 @@ export default function MatchPage() {
   const [leagues, setLeagues] = useState<LeagueGroup[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+
+  useEffect(() => {
+    setPinnedIds(getPinnedMatches());
+  }, []);
 
   useEffect(() => {
     fetchLeagues()
@@ -85,6 +92,11 @@ export default function MatchPage() {
     router.back();
   }, [router]);
 
+  const handleTogglePin = useCallback((matchId: string) => {
+    const next = togglePinned(matchId);
+    setPinnedIds(next);
+  }, []);
+
   useEffect(() => {
     const handleResize = () => {
       setSidebarOpen(window.innerWidth >= 768);
@@ -123,9 +135,21 @@ export default function MatchPage() {
         />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-7">
-          <MatchDetail matchId={matchId} onBack={handleBack} leagueName={leagueName} />
+          <MatchDetail
+            matchId={matchId}
+            onBack={handleBack}
+            leagueName={leagueName}
+            pinned={pinnedIds.includes(matchId)}
+            onTogglePin={handleTogglePin}
+          />
         </main>
       </div>
+
+      <MultiTracker
+        pinnedIds={pinnedIds}
+        onPinnedChange={setPinnedIds}
+        onMatchSelect={(id) => handleMatchSelect(id)}
+      />
     </div>
   );
 }
