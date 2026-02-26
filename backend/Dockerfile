@@ -36,6 +36,11 @@ ENV SERVICE_TYPE=builder
 EXPOSE 9093
 CMD ["./entrypoint.sh"]
 
+FROM base AS verifier
+ENV SERVICE_TYPE=verifier
+EXPOSE 9091
+CMD ["./entrypoint.sh"]
+
 # Default target for Railway / single-service deploy (must be last)
 FROM base AS api
 ENV SERVICE_TYPE=api
