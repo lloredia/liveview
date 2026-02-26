@@ -180,7 +180,22 @@ export async function fetchESPNScoreboard(
       const statusDetail = status.type?.detail || "";
       const displayClock = status.displayClock || null;
 
-      const phase = mapEspnPhase(statusName, statusDetail, info.sport);
+      let phase = mapEspnPhase(statusName, statusDetail, info.sport);
+      // Soccer: if we defaulted to first half but clock shows >45', correct to second half or extra time
+      if (info.sport === "soccer" && phase === "live_first_half") {
+        const clockStr = (displayClock ?? statusDetail ?? "").toString().trim();
+        const plusMatch = clockStr.match(/^(\d+)\s*\+\s*(\d+)\s*'?/);
+        const minute = plusMatch
+          ? parseInt(plusMatch[1], 10) + parseInt(plusMatch[2], 10)
+          : (() => {
+              const m = clockStr.match(/(\d+)\s*'?/);
+              return m ? parseInt(m[1], 10) : null;
+            })();
+        if (minute != null) {
+          if (minute > 90) phase = "live_extra_time";
+          else if (minute > 45) phase = "live_second_half";
+        }
+      }
       const isLive = phase.startsWith("live_") || phase === "break";
       const isFinished = phase === "finished";
 

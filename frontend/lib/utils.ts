@@ -1,3 +1,13 @@
+/** Parse minute from a soccer-style clock (e.g. "111'", "45+3'", "HT"). Returns null if unparseable. */
+export function parseSoccerClockMinute(clock: string | null | undefined): number | null {
+  if (!clock || typeof clock !== "string") return null;
+  const trimmed = clock.trim();
+  const plusMatch = trimmed.match(/^(\d+)\s*\+\s*(\d+)\s*'?/);
+  if (plusMatch) return parseInt(plusMatch[1], 10) + parseInt(plusMatch[2], 10);
+  const simpleMatch = trimmed.match(/(\d+)\s*'?/);
+  return simpleMatch ? parseInt(simpleMatch[1], 10) : null;
+}
+
 /** Map a phase string to a human-readable label. */
 export function phaseLabel(phase: string): string {
   const map: Record<string, string> = {
@@ -24,6 +34,23 @@ export function phaseLabel(phase: string): string {
     cancelled: "Cancelled",
   };
   return map[phase] || phase;
+}
+
+/**
+ * Phase label that never shows "1st Half" when the clock indicates a later period (soccer).
+ * Use when displaying phase + clock together to avoid e.g. "1st Half · 111'".
+ */
+export function phaseLabelWithClock(
+  phase: string,
+  clock: string | null | undefined,
+): string {
+  const base = phaseLabel(phase);
+  if (phase !== "live_first_half") return base;
+  const minute = parseSoccerClockMinute(clock);
+  if (minute == null) return base;
+  if (minute > 90) return "Extra Time";
+  if (minute > 45) return "2nd Half";
+  return base;
 }
 
 /** Returns true if the match is currently in play. */

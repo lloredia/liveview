@@ -11,6 +11,7 @@ import {
   isLive,
   phaseColor,
   phaseLabel,
+  phaseLabelWithClock,
 } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
 import { ShareButton } from "./share-button";
@@ -654,7 +655,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         <div className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1" style={{ background: live ? "rgba(239,68,68,0.1)" : `${color}15` }}>
           {live && (<div className="relative h-1.5 w-1.5"><div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" /><div className="relative h-1.5 w-1.5 rounded-full bg-red-500" /></div>)}
           <span className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: live ? "#f87171" : color }}>
-            {phaseLabel(effectivePhase)}{effectiveClock ? ` · ${effectiveClock}` : ""}
+            {phaseLabelWithClock(effectivePhase, effectiveClock)}{effectiveClock ? ` · ${effectiveClock}` : ""}
           </span>
         </div>
         <div className="flex items-center justify-center gap-4 md:gap-8">
