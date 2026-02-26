@@ -80,6 +80,12 @@ async def get_today(
     day_end = day_start + timedelta(days=1)
     is_today_utc = target_date == datetime.now(timezone.utc).date()
 
+    # When viewing "today", also include yesterday's finished and tomorrow's scheduled
+    yesterday_start = day_start - timedelta(days=1)
+    yesterday_end = day_start
+    tomorrow_start = day_end
+    tomorrow_end = tomorrow_start + timedelta(days=1)
+
     # Optional filters (when set, we skip Redis cache and filter after query)
     filter_league_ids: set[str] | None = None
     if league_ids:
@@ -104,15 +110,37 @@ async def get_today(
             MatchORM.start_time >= day_start,
             MatchORM.start_time < day_end,
         )
-        # When viewing "today", also include all currently live matches (e.g. started yesterday, still in progress)
+        # Always include ongoing (live) matches regardless of selected date
+        live_condition = or_(
+            MatchORM.phase.like("live%"),
+            MatchORM.phase == "break",
+        )
         if is_today_utc:
-            live_condition = or_(
-                MatchORM.phase.like("live%"),
-                MatchORM.phase == "break",
+            yesterday_finished = and_(
+                MatchORM.start_time >= yesterday_start,
+                MatchORM.start_time < yesterday_end,
+                or_(
+                    MatchORM.phase == "finished",
+                    MatchORM.phase == "postponed",
+                    MatchORM.phase == "cancelled",
+                ),
             )
-            where_clause = or_(date_condition, live_condition)
+            tomorrow_scheduled = and_(
+                MatchORM.start_time >= tomorrow_start,
+                MatchORM.start_time < tomorrow_end,
+                or_(
+                    MatchORM.phase == "scheduled",
+                    MatchORM.phase == "pre_match",
+                ),
+            )
+            where_clause = or_(
+                date_condition,
+                live_condition,
+                yesterday_finished,
+                tomorrow_scheduled,
+            )
         else:
-            where_clause = date_condition
+            where_clause = or_(date_condition, live_condition)
 
         # Fetch all matches for the date with their state, teams, and league info.
         # Use outerjoin for MatchStateORM so live matches without a state row yet still appear.
