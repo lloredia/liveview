@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
-import { phaseShortLabel } from "@/lib/utils";
+import { phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
@@ -57,7 +57,7 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
       </span>
       <span className="font-medium">{match.away_team.short_name}</span>
       <span className="rounded bg-accent-red/15 px-1 py-px text-[8px] font-bold text-accent-red">
-        {phaseShortLabel(match.phase)}
+        {phaseShortLabelWithClock(match.phase, match.clock)}
       </span>
       {match.clock && (
         <span className="text-[9px] font-semibold tabular-nums text-accent-green">{match.clock}</span>

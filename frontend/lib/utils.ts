@@ -81,6 +81,22 @@ export function phaseShortLabel(phase: string): string {
   return map[phase] || "LIVE";
 }
 
+/**
+ * Short phase label that never shows "1H" when clock indicates 2nd half or extra time (soccer).
+ * Use for list/card badges so we don't show "1H 120'".
+ */
+export function phaseShortLabelWithClock(
+  phase: string,
+  clock: string | null | undefined,
+): string {
+  if (phase !== "live_first_half") return phaseShortLabel(phase);
+  const minute = parseSoccerClockMinute(clock);
+  if (minute == null) return phaseShortLabel(phase);
+  if (minute > 90) return "ET";
+  if (minute > 45) return "2H";
+  return "1H";
+}
+
 /** Returns a Tailwind-friendly CSS class for the phase color. */
 export function phaseColorClass(phase: string): string {
   if (isLive(phase)) return "text-accent-green";

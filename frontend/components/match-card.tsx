@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { memo, useEffect, useRef, useState } from "react";
 import type { MatchSummary } from "@/lib/types";
-import { formatTime, isLive, phaseLabel, phaseShortLabel } from "@/lib/utils";
+import { formatTime, isLive, phaseLabel, phaseShortLabel, phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
 
@@ -174,7 +174,7 @@ export const MatchCard = memo(function MatchCard({
         {live ? (
           <>
             <span className="rounded bg-accent-red/15 px-1.5 py-px text-[9px] font-extrabold leading-tight text-accent-red">
-              {phaseShortLabel(match.phase)}
+              {phaseShortLabelWithClock(match.phase, match.clock)}
             </span>
             <span className="mt-0.5 font-mono text-[10px] font-bold leading-tight text-accent-green tabular-nums">
               <LiveClock
