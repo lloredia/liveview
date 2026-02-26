@@ -143,17 +143,17 @@ export function TodayView({
   );
 
   const [hasLive, setHasLive] = useState(false);
-  const useHeaderForToday = isUserToday && headerTodayData != null;
+  // Always fetch with the selected date so the list matches the date the user sees (no UTC vs local mismatch from header data).
   const { data, loading, error, refresh } = usePolling<TodayResult>({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
     intervalWhenHidden: 60_000,
-    enabled: !useHeaderForToday,
-    key: apiDateStr ?? "today",
+    enabled: true,
+    key: apiDateStr,
   });
 
-  const effectiveData = useHeaderForToday ? headerTodayData : normalizeTodayResult(data);
-  const { fromCache, savedAt: cacheSavedAt } = getCacheMeta(useHeaderForToday ? null : data);
+  const effectiveData = normalizeTodayResult(data);
+  const { fromCache, savedAt: cacheSavedAt } = getCacheMeta(data);
 
   const leagueNames = useMemo(
     () => (effectiveData?.leagues || []).map((l) => l.league_name),
@@ -231,9 +231,8 @@ export function TodayView({
   }, [effectiveData, filter, pinnedIds, patchMatch]);
 
   const liveCountForTab = useMemo(() => {
-    if (isUserToday && headerTodayData != null) return countLiveInResponse(headerTodayData);
-    return headerLiveCount ?? effectiveData?.live ?? 0;
-  }, [isUserToday, headerTodayData, headerLiveCount, effectiveData?.live]);
+    return effectiveData?.live ?? headerLiveCount ?? 0;
+  }, [effectiveData?.live, headerLiveCount]);
 
   const trackedCount = useMemo(() => {
     if (!effectiveData?.leagues || pinnedIds.length === 0) return 0;
@@ -241,20 +240,7 @@ export function TodayView({
     return effectiveData.leagues.flatMap((l) => l.matches).filter((m) => ids.has(m.id)).length;
   }, [effectiveData?.leagues, pinnedIds]);
 
-  const effectiveLeagues = useMemo(() => {
-    if (filter !== "live") return filteredLeagues;
-    if (isUserToday && headerTodayData?.leagues?.length) {
-      const fromHeader = headerTodayData.leagues
-        .map((league) => {
-          const liveOnly = league.matches.filter((m) => isLivePhase(m));
-          const patched = liveOnly.map((m) => patchMatch(m));
-          return { ...league, matches: patched };
-        })
-        .filter((league) => league.matches.length > 0);
-      return fromHeader;
-    }
-    return filteredLeagues;
-  }, [filter, isUserToday, filteredLeagues, headerTodayData, patchMatch]);
+  const effectiveLeagues = filteredLeagues;
 
   const groupedBySport = useMemo(() => {
     const groups: { sport: string; sportType: string; leagues: typeof effectiveLeagues }[] = [];

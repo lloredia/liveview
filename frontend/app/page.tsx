@@ -212,6 +212,11 @@ function HomeContent() {
                 <div role="alert" className="mx-3 mb-3 rounded border border-accent-red/20 bg-accent-red/5 px-3 py-2 text-[12px] text-accent-red md:mx-0">
                   Cannot connect to API
                   <span className="block text-[10px] opacity-60">{error}</span>
+                  {error.includes("404") && (
+                    <span className="mt-2 block text-[11px] text-text-secondary">
+                      In Vercel (or your host), set <strong>NEXT_PUBLIC_API_URL</strong> to your backend base URL (e.g. https://your-api.railway.app), then redeploy.
+                    </span>
+                  )}
                 </div>
               )}
 
