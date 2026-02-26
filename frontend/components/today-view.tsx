@@ -134,7 +134,8 @@ export function TodayView({
     selectedDate.getFullYear() === new Date().getFullYear() &&
     selectedDate.getMonth() === new Date().getMonth() &&
     selectedDate.getDate() === new Date().getDate();
-  const apiDateStr = isUserToday ? undefined : dateStr;
+  // Always send the selected date so API returns matches for the day the user sees (avoids UTC "today" vs local today mismatch).
+  const apiDateStr = dateStr;
 
   const fetcher = useCallback(
     () => fetchTodayWithCache(apiDateStr, pinnedIds.length > 0 ? pinnedIds : undefined),
@@ -463,6 +464,11 @@ export function TodayView({
             : filter === "tracked"
               ? "No tracked matches on this date"
               : `No ${filter} matches`}
+          {isUserToday && filter === "all" && (
+            <p className="mt-2 text-xs text-text-dim">
+              New matches appear throughout the day. Pull down to refresh.
+            </p>
+          )}
           {filter !== "all" && (
             <button
               onClick={() => setFilter("all")}
