@@ -16,6 +16,9 @@ COPY . .
 
 RUN chmod +x entrypoint.sh
 
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
+USER appuser
+
 # Default when no build target: run API (Railway often builds first stage only)
 ENV SERVICE_TYPE=api
 EXPOSE 8000

@@ -98,11 +98,12 @@ class WebSocketManager:
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
 
+        total = len(self._connections)
         # Close all connections
         for conn in list(self._connections.values()):
             await self._close_connection(conn, code=1001, reason="server_shutdown")
 
-        logger.info("ws_manager_stopped", total_connections_served=len(self._connections))
+        logger.info("ws_manager_stopped", total_connections_closed=total)
 
     async def handle_connection(self, ws: WebSocket) -> None:
         """
@@ -323,18 +324,24 @@ class WebSocketManager:
             except json.JSONDecodeError:
                 pass
 
-        # For events tier, also send the event stream
+        # For events tier, also send the event stream (Redis Streams, not LIST)
         if tier == 1:
-            events_key = f"stream:match:{match_id}:events"
             try:
-                events_raw = await self._redis.client.lrange(events_key, 0, 99)
-                if events_raw:
-                    events = []
-                    for raw in events_raw:
+                stream_entries = await self._redis.read_event_stream(
+                    match_id, last_id="0", count=100
+                )
+                if stream_entries:
+                    events: list[dict[str, Any]] = []
+                    for _entry_id, fields in stream_entries:
                         try:
+                            raw = fields.get("data")
+                            if isinstance(raw, bytes):
+                                raw = raw.decode("utf-8")
+                            if not raw or not isinstance(raw, str):
+                                continue
                             evt = json.loads(raw)
                             events.append(evt)
-                        except json.JSONDecodeError:
+                        except (json.JSONDecodeError, TypeError):
                             continue
                     if events:
                         await self._send(conn, {

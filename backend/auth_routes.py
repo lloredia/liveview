@@ -24,7 +24,14 @@ favorites_router = APIRouter(prefix="/v1/user", tags=["user"])
 
 # ── Config ────────────────────────────────────────────────────────────
 
-JWT_SECRET = os.getenv("JWT_SECRET", "liveview-dev-secret-change-in-production")
+JWT_DEFAULT_DEV = "liveview-dev-secret-change-in-production"
+JWT_SECRET = os.getenv("JWT_SECRET", JWT_DEFAULT_DEV)
+
+
+def _is_production() -> bool:
+    return os.getenv("LV_ENV", "").lower() in ("production", "prod")
+
+
 JWT_EXPIRY = 60 * 60 * 24 * 30  # 30 days
 
 
@@ -83,6 +90,8 @@ def verify_password(password: str, stored: str) -> bool:
 
 def create_token(user_id: str, email: str) -> str:
     """Create a simple HMAC-based JWT-like token."""
+    if _is_production() and (not JWT_SECRET or JWT_SECRET == JWT_DEFAULT_DEV):
+        raise RuntimeError("JWT_SECRET must be set explicitly in production (LV_ENV=production)")
     payload = {
         "sub": user_id,
         "email": email,

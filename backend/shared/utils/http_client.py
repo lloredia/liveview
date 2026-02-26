@@ -4,6 +4,7 @@ Includes retry logic, timeout management, and metrics collection.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -110,7 +111,6 @@ class ProviderHTTPClient:
                     )
                     if attempt < self._max_retries:
                         retry_after = float(resp.headers.get("Retry-After", "2"))
-                        import asyncio
                         await asyncio.sleep(min(retry_after, 10.0))
                         continue
                     resp.raise_for_status()
@@ -124,7 +124,6 @@ class ProviderHTTPClient:
                         status=resp.status_code,
                         attempt=attempt,
                     )
-                    import asyncio
                     await asyncio.sleep(1.0 * attempt)
                     continue
 
@@ -157,7 +156,6 @@ class ProviderHTTPClient:
                     attempt=attempt,
                 )
                 if attempt < self._max_retries:
-                    import asyncio
                     await asyncio.sleep(1.0 * attempt)
                     continue
 

@@ -108,6 +108,20 @@ websocat ws://localhost:8000/v1/ws
 # → {"type": "state", "connection_id": "abc123...", ...}
 ```
 
+### Getting matches to show (Today view)
+
+The **Today** view shows matches from the database. If you see "No matches on this date":
+
+1. **Run migrations** so `sports` and `leagues` exist (see migrations in `migrations/`).
+2. **Load match data** in one of these ways:
+   - **One-time seed (recommended for local/dev):**  
+     `cd backend && python seed.py`  
+     This fetches from ESPN and inserts today’s matches (and next few days with `--days-ahead`).
+   - **Scheduler (for production):**  
+     Run the **scheduler** service (e.g. `SERVICE_TYPE=scheduler` or `docker compose` with the scheduler). It syncs the next 7 days from ESPN on startup (after ~10s) and every 4 hours. No seed needed.
+
+If the frontend shows "Showing cached matches" and no matches, the last API request may have failed (e.g. wrong `NEXT_PUBLIC_API_URL`, network, or backend down). Use **Try again** to refetch.
+
 ## REST API
 
 ### `GET /v1/leagues`

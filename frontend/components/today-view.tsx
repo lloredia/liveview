@@ -444,15 +444,31 @@ export function TodayView({
 
       {/* Empty state */}
       {effectiveData && effectiveLeagues.length === 0 && (
-        <div className="py-16 text-center text-sm text-text-muted">
+        <div className="py-16 px-4 text-center text-sm text-text-muted">
           {filter === "all"
             ? "No matches on this date"
             : filter === "tracked"
               ? "No tracked matches on this date"
               : `No ${filter} matches`}
           {isUserToday && filter === "all" && (
+            <>
+              <p className="mt-2 text-xs text-text-dim">
+                {fromCache
+                  ? "The last fetch failed, so you're seeing cached data. Tap below to retry loading from the server."
+                  : "New matches appear throughout the day. If you just set up the app, the backend may need to load match data (run the seed script or start the scheduler)."}
+              </p>
+              <button
+                type="button"
+                onClick={() => refresh()}
+                className="mt-4 rounded-xl bg-accent-green px-4 py-2 text-xs font-semibold text-white hover:brightness-110 active:scale-[0.98]"
+              >
+                {fromCache ? "Try again" : "Refresh"}
+              </button>
+            </>
+          )}
+          {!isUserToday && filter === "all" && (
             <p className="mt-2 text-xs text-text-dim">
-              New matches appear throughout the day. Pull down to refresh.
+              Pull down or tap Refresh to check for new data.
             </p>
           )}
           {filter !== "all" && (

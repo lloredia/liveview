@@ -430,6 +430,14 @@ class SchedulerService:
                 logger.error("scheduler_loop_error", error=str(exc), exc_info=True)
                 await asyncio.sleep(2.0)
 
+        # Release leadership on shutdown for fast failover
+        if self._is_leader:
+            released = await self._redis.release_leader("scheduler", self._instance_id)
+            if released:
+                logger.info("scheduler_leader_released", instance_id=self._instance_id)
+            self._is_leader = False
+        await self._stop_all_tasks()
+
     def request_shutdown(self) -> None:
         self._shutdown.set()
 
