@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBase } from "@/lib/api";
 const TOKEN_KEY = "lv_token";
 const USER_KEY = "lv_user";
 
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(async (email: string, username: string, password: string) => {
-    const res = await fetch(`${API_BASE}/v1/auth/signup`, {
+    const res = await fetch(`${getApiBase()}/v1/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, username, password }),
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [saveSession]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch(`${API_BASE}/v1/auth/login`, {
+    const res = await fetch(`${getApiBase()}/v1/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers.set("Authorization", `Bearer ${token}`);
     }
     headers.set("Content-Type", "application/json");
-    return fetch(`${API_BASE}${path}`, { ...options, headers });
+    return fetch(`${getApiBase()}${path}`, { ...options, headers });
   }, [token]);
 
   return (

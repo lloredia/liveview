@@ -42,6 +42,14 @@ async def get_today(
         alias="date",
         description="Date in YYYY-MM-DD format. Defaults to today (UTC).",
     ),
+    league_ids: Optional[str] = Query(
+        None,
+        description="Comma-separated league IDs to limit response. Omit for all leagues.",
+    ),
+    match_ids: Optional[str] = Query(
+        None,
+        description="Comma-separated match IDs (e.g. tracked). Omit for all matches.",
+    ),
     db: DatabaseManager = Depends(get_db),
     redis: RedisManager = Depends(get_redis),
 ) -> dict[str, Any]:
@@ -72,9 +80,18 @@ async def get_today(
     day_end = day_start + timedelta(days=1)
     is_today_utc = target_date == datetime.now(timezone.utc).date()
 
-    # Try Redis cache first (short TTL for live data)
+    # Optional filters (when set, we skip Redis cache and filter after query)
+    filter_league_ids: set[str] | None = None
+    if league_ids:
+        filter_league_ids = {s.strip() for s in league_ids.split(",") if s.strip()}
+    filter_match_ids: set[str] | None = None
+    if match_ids:
+        filter_match_ids = {s.strip() for s in match_ids.split(",") if s.strip()}
+    use_cache = not (filter_league_ids or filter_match_ids)
+
+    # Try Redis cache first (short TTL for live data); skip when filtering
     cache_key = f"today:{target_date.isoformat()}"
-    cached = await redis.client.get(cache_key)
+    cached = await redis.client.get(cache_key) if use_cache else None
     if cached:
         etag = _compute_etag(cached)
         if_none_match = request.headers.get("if-none-match")
@@ -250,6 +267,14 @@ async def get_today(
         return (-live_count, -len(group["matches"]))
 
     sorted_groups = sorted(league_groups.values(), key=league_sort_key)
+
+    # Apply optional filters (smaller payload for mobile)
+    if filter_league_ids:
+        sorted_groups = [g for g in sorted_groups if g["league_id"] in filter_league_ids]
+    if filter_match_ids:
+        for g in sorted_groups:
+            g["matches"] = [m for m in g["matches"] if m["id"] in filter_match_ids]
+        sorted_groups = [g for g in sorted_groups if g["matches"]]
 
     # Summary stats
     all_matches = [m for g in sorted_groups for m in g["matches"]]

@@ -5,20 +5,78 @@ import { usePolling } from "@/hooks/use-polling";
 import { useESPNLiveMulti } from "@/hooks/use-espn-live";
 import { getLeagueLogo } from "@/lib/league-logos";
 import type { TodayMatch, TodayResponse } from "@/lib/types";
+import { getApiBase, API_REQUEST_TIMEOUT_MS } from "@/lib/api";
+import { getTodayCache, setTodayCache } from "@/lib/today-cache";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
 
 export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
 
-type MatchFilter = "all" | "live" | "scheduled" | "finished";
+type MatchFilter = "all" | "tracked" | "live" | "scheduled" | "finished";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/** Result from fetcher: fresh data or cached with metadata */
+export type TodayResult =
+  | TodayResponse
+  | { data: TodayResponse; fromCache: true; savedAt: string };
 
-async function fetchToday(dateStr: string | undefined): Promise<TodayResponse> {
-  const url = dateStr ? `${API_BASE}/v1/today?date=${dateStr}` : `${API_BASE}/v1/today`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+async function fetchToday(
+  dateStr: string | undefined,
+  matchIds?: string[],
+): Promise<TodayResponse> {
+  const params = new URLSearchParams();
+  if (dateStr) params.set("date", dateStr);
+  if (matchIds?.length) params.set("match_ids", matchIds.join(","));
+  const qs = params.toString();
+  const url = `${getApiBase()}/v1/today${qs ? `?${qs}` : ""}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
+/** Fetcher that returns fresh data or falls back to cache on network failure. */
+async function fetchTodayWithCache(
+  dateStr: string | undefined,
+  matchIds?: string[],
+): Promise<TodayResult> {
+  try {
+    const data = await fetchToday(dateStr, matchIds);
+    setTodayCache(dateStr, data);
+    return data;
+  } catch {
+    const cached = getTodayCache(dateStr);
+    if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+    throw new Error("Connection failed");
+  }
+}
+
+function normalizeTodayResult(raw: TodayResult | null): TodayResponse | null {
+  if (!raw) return null;
+  if (typeof raw === "object" && "fromCache" in raw) return raw.data;
+  return raw;
+}
+
+function getCacheMeta(raw: TodayResult | null): { fromCache: boolean; savedAt: string | null } {
+  if (!raw || typeof raw !== "object" || !("fromCache" in raw)) return { fromCache: false, savedAt: null };
+  return { fromCache: true, savedAt: (raw as { savedAt: string }).savedAt ?? null };
+}
+
+function formatCacheTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function formatDateISO(d: Date): string {
@@ -61,6 +119,15 @@ export function TodayView({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [filter, setFilter] = useState<MatchFilter>("all");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hasDefaultedToTracked = useRef(false);
+
+  // When user has pinned matches, default to "Tracked" view once
+  useEffect(() => {
+    if (pinnedIds.length > 0 && !hasDefaultedToTracked.current) {
+      setFilter("tracked");
+      hasDefaultedToTracked.current = true;
+    }
+  }, [pinnedIds.length]);
 
   const dateStr = formatDateISO(selectedDate);
   const isUserToday =
@@ -69,11 +136,14 @@ export function TodayView({
     selectedDate.getDate() === new Date().getDate();
   const apiDateStr = isUserToday ? undefined : dateStr;
 
-  const fetcher = useCallback(() => fetchToday(apiDateStr), [apiDateStr]);
+  const fetcher = useCallback(
+    () => fetchTodayWithCache(apiDateStr, pinnedIds.length > 0 ? pinnedIds : undefined),
+    [apiDateStr, pinnedIds],
+  );
 
   const [hasLive, setHasLive] = useState(false);
   const useHeaderForToday = isUserToday && headerTodayData != null;
-  const { data, loading, error, refresh } = usePolling({
+  const { data, loading, error, refresh } = usePolling<TodayResult>({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
     intervalWhenHidden: 60_000,
@@ -81,7 +151,8 @@ export function TodayView({
     key: apiDateStr ?? "today",
   });
 
-  const effectiveData = useHeaderForToday ? headerTodayData : data;
+  const effectiveData = useHeaderForToday ? headerTodayData : normalizeTodayResult(data);
+  const { fromCache, savedAt: cacheSavedAt } = getCacheMeta(useHeaderForToday ? null : data);
 
   const leagueNames = useMemo(
     () => (effectiveData?.leagues || []).map((l) => l.league_name),
@@ -139,6 +210,7 @@ export function TodayView({
     return effectiveData.leagues
       .map((league) => {
         const filtered = league.matches.filter((m) => {
+          if (filter === "tracked") return pinnedIds.includes(m.id);
           if (filter === "all") return true;
           if (filter === "live") return isLivePhase(m);
           if (filter === "scheduled")
@@ -155,12 +227,18 @@ export function TodayView({
         return { ...league, matches: patched };
       })
       .filter((league) => league.matches.length > 0);
-  }, [effectiveData, filter, patchMatch]);
+  }, [effectiveData, filter, pinnedIds, patchMatch]);
 
   const liveCountForTab = useMemo(() => {
     if (isUserToday && headerTodayData != null) return countLiveInResponse(headerTodayData);
-    return headerLiveCount ?? data?.live ?? 0;
-  }, [isUserToday, headerTodayData, headerLiveCount, data?.live]);
+    return headerLiveCount ?? effectiveData?.live ?? 0;
+  }, [isUserToday, headerTodayData, headerLiveCount, effectiveData?.live]);
+
+  const trackedCount = useMemo(() => {
+    if (!effectiveData?.leagues || pinnedIds.length === 0) return 0;
+    const ids = new Set(pinnedIds);
+    return effectiveData.leagues.flatMap((l) => l.matches).filter((m) => ids.has(m.id)).length;
+  }, [effectiveData?.leagues, pinnedIds]);
 
   const effectiveLeagues = useMemo(() => {
     if (filter !== "live") return filteredLeagues;
@@ -242,15 +320,18 @@ export function TodayView({
         })}
       </div>
 
-      {/* Filter tabs: when viewing today, use header live count so it matches the header */}
+      {/* Filter tabs: Tracked first when user has pins */}
       <div className="mb-4 flex border-b border-surface-border">
         {(
           [
-            { key: "all", label: "All", count: data?.total_matches },
-            { key: "live", label: "Live", count: liveCountForTab },
-            { key: "scheduled", label: "Upcoming", count: data?.scheduled },
-            { key: "finished", label: "Finished", count: data?.finished },
-          ] as const
+            ...(pinnedIds.length > 0
+              ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
+              : []),
+            { key: "all" as const, label: "All", count: effectiveData?.total_matches },
+            { key: "live" as const, label: "Live", count: liveCountForTab },
+            { key: "scheduled" as const, label: "Upcoming", count: effectiveData?.scheduled },
+            { key: "finished" as const, label: "Finished", count: effectiveData?.finished },
+          ]
         ).map(({ key, label, count }) => (
           <button
             key={key}
@@ -279,6 +360,24 @@ export function TodayView({
           </button>
         ))}
       </div>
+
+      {/* Stale/cached banner: show when we have data but fetch failed or we're showing cache */}
+      {effectiveData && (fromCache || error) && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px]">
+          <span className="text-amber-700 dark:text-amber-400">
+            {fromCache
+              ? `Showing cached matches${cacheSavedAt ? ` • Updated ${formatCacheTime(cacheSavedAt)}` : ""}`
+              : "Updates paused"}
+          </span>
+          <button
+            type="button"
+            onClick={() => refresh()}
+            className="shrink-0 font-semibold text-amber-700 underline hover:no-underline dark:text-amber-400"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Loading skeleton */}
       {loading && !effectiveData && (
@@ -357,11 +456,13 @@ export function TodayView({
       ))}
 
       {/* Empty state */}
-      {data && effectiveLeagues.length === 0 && (
+      {effectiveData && effectiveLeagues.length === 0 && (
         <div className="py-16 text-center text-sm text-text-muted">
           {filter === "all"
             ? "No matches on this date"
-            : `No ${filter} matches`}
+            : filter === "tracked"
+              ? "No tracked matches on this date"
+              : `No ${filter} matches`}
           {filter !== "all" && (
             <button
               onClick={() => setFilter("all")}

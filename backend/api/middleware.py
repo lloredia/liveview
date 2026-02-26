@@ -159,6 +159,8 @@ _PRODUCTION_ORIGINS = [
     "https://liveview-tracker.com",
     "https://frontend-lloredias-projects.vercel.app",
     "http://localhost:3000",
+    "http://localhost",
+    "capacitor://localhost",
 ]
 
 
@@ -178,7 +180,7 @@ def setup_cors(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=False,
-        allow_methods=["GET", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["ETag", "X-Request-ID", "Cache-Control", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     )

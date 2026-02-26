@@ -481,7 +481,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
   const matchFetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data: matchData, loading: matchLoading, lastError: matchError } = usePolling<MatchDetailResponse>({
+  const { data: matchData, loading: matchLoading, lastError: matchError, refresh: refreshMatch } = usePolling<MatchDetailResponse>({
     fetcher: matchFetcher, interval: 15000, key: matchId,
   });
 
@@ -569,8 +569,27 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
 
   if (!matchData) {
     return (
-      <div className="rounded-lg border border-accent-red/20 bg-accent-red/5 px-4 py-3 text-sm text-accent-red">
-        Failed to load match
+      <div className="mx-auto flex min-h-[280px] max-w-md flex-col items-center justify-center gap-5 rounded-xl border border-accent-red/25 bg-accent-red/10 px-6 py-8 text-center">
+        <p className="text-base font-semibold text-accent-red">Failed to load match</p>
+        <p className="text-sm text-text-secondary">
+          Check your connection. You can try again or go back to the scoreboard.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => refreshMatch()}
+            className="rounded-xl bg-accent-blue px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 active:scale-[0.98]"
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-surface-border bg-surface-raised px-5 py-2.5 text-sm font-semibold text-text-primary hover:bg-surface-hover active:scale-[0.98]"
+          >
+            Back to scoreboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -611,9 +630,9 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
                   ? "bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25"
                   : "text-text-secondary hover:bg-surface-hover hover:text-accent-blue"
               }`}
-              aria-label={pinned ? "Untrack this game" : "Track this game"}
+              aria-label={pinned ? "Untrack this match" : "Track this match"}
             >
-              {pinned ? "★ Tracked" : "☆ Track game"}
+              {pinned ? "★ Tracked" : "☆ Track match"}
             </button>
           )}
           <CalendarButton match={{ id: matchId, phase: effectivePhase, start_time: match.start_time, venue: match.venue, score: { home: effectiveScoreHome, away: effectiveScoreAway }, clock: effectiveClock, period: effectivePeriod, version: 0, home_team: match.home_team as any, away_team: match.away_team as any }} leagueName={leagueName} />

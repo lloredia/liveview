@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBase } from "@/lib/api";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -11,7 +11,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
 
   try {
-    const res = await fetch(`${API_BASE}/v1/matches/${id}`, {
+    const res = await fetch(`${getApiBase()}/v1/matches/${id}`, {
       next: { revalidate: 30 },
     });
     if (!res.ok) throw new Error("Not found");

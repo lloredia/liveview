@@ -12,6 +12,14 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const REQUEST_TIMEOUT_MS = 10_000;
+
+/** Single source of truth for API base URL (used by all API calls and env docs). */
+export function getApiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+}
+
+/** Timeout in ms for API requests (exported for use in non-apiFetch callers e.g. today cache). */
+export const API_REQUEST_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = 1_000;
 

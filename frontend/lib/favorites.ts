@@ -1,5 +1,7 @@
 "use client";
 
+import { getApiBase } from "@/lib/api";
+
 const STORAGE_KEY_LEAGUES = "lv_fav_leagues";
 
 function getStored(key: string): string[] {
@@ -52,7 +54,7 @@ function syncFavoriteToCloud(targetId: string, type: string, add: boolean): void
     const token = localStorage.getItem("lv_token");
     if (!token) return;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const apiBase = getApiBase();
 
     if (add) {
       fetch(`${apiBase}/v1/user/favorites`, {
@@ -81,8 +83,7 @@ export async function loadCloudFavorites(): Promise<void> {
     const token = localStorage.getItem("lv_token");
     if (!token) return;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const res = await fetch(`${apiBase}/v1/user/favorites`, {
+    const res = await fetch(`${getApiBase()}/v1/user/favorites`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
