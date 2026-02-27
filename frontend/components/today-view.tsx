@@ -40,6 +40,9 @@ async function fetchToday(
     return res.json();
   } catch (e) {
     clearTimeout(timeout);
+    const err = e instanceof Error ? e : new Error(String(e));
+    const isAbort = err.name === "AbortError" || /aborted|signal is aborted/i.test(err.message);
+    if (isAbort) throw new Error("Request timed out or backend not reachable");
     throw e;
   }
 }

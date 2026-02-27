@@ -51,7 +51,15 @@ async function apiFetch<T>(path: string, retries = MAX_RETRIES): Promise<T> {
       return res.json();
     } catch (err) {
       clearTimeout(timeout);
-      lastError = err instanceof Error ? err : new Error(String(err));
+      const isAbort =
+        err instanceof Error &&
+        (err.name === "AbortError" || /aborted|signal is aborted/i.test(err.message));
+      lastError =
+        isAbort
+          ? new Error("Request timed out or backend not reachable")
+          : err instanceof Error
+            ? err
+            : new Error(String(err));
 
       if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
         throw err;

@@ -1,80 +1,136 @@
-//
-//  LiveViewWidgetLiveActivity.swift
-//  LiveViewWidget
-//
-//  Created by Lesley Oredia on 2/24/26.
-//
-
 import ActivityKit
 import WidgetKit
 import SwiftUI
-
-struct LiveViewWidgetAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        // Dynamic stateful properties about your activity go here!
-        var emoji: String
-    }
-
-    // Fixed non-changing properties about your activity go here!
-    var name: String
-}
+import LiveViewLiveActivity
 
 struct LiveViewWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: LiveViewWidgetAttributes.self) { context in
-            // Lock screen/banner UI goes here
-            VStack {
-                Text("Hello \(context.state.emoji)")
-            }
-            .activityBackgroundTint(Color.cyan)
-            .activitySystemActionForegroundColor(Color.black)
-
+        ActivityConfiguration(for: LiveGameAttributes.self) { context in
+            LockScreenView(state: context.state)
         } dynamicIsland: { context in
             DynamicIsland {
-                // Expanded UI goes here.  Compose the expanded UI through
-                // various regions, like leading/trailing/center/bottom
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Leading")
+                    Text("Tracked")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("Trailing")
+                    Text("\(context.state.games.count) live")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("Bottom \(context.state.emoji)")
-                    // more content
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(context.state.games.enumerated()), id: \.element.matchId) { _, game in
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack {
+                                    Text(game.homeName)
+                                        .lineLimit(1)
+                                        .font(.caption)
+                                    Spacer()
+                                    Text("\(game.scoreHome)–\(game.scoreAway)")
+                                        .font(.caption.monospacedDigit().bold())
+                                    if game.isLive {
+                                        Circle()
+                                            .fill(.red)
+                                            .frame(width: 5, height: 5)
+                                    }
+                                    Spacer()
+                                    Text(game.awayName)
+                                        .lineLimit(1)
+                                        .font(.caption)
+                                }
+
+                                if !game.phaseLabel.isEmpty {
+                                    Text(game.phaseLabel)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(Color.primary.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                    .padding(.top, 4)
                 }
             } compactLeading: {
-                Text("L")
+                if let first = context.state.games.first {
+                    Text("\(shortName(first.homeName)) \(first.scoreHome)–\(first.scoreAway)")
+                        .lineLimit(1)
+                        .font(.caption2.monospacedDigit())
+                } else {
+                    Text("LiveView")
+                        .font(.caption2)
+                }
             } compactTrailing: {
-                Text("T \(context.state.emoji)")
+                if let first = context.state.games.first {
+                    Text(shortName(first.awayName))
+                        .lineLimit(1)
+                        .font(.caption2)
+                }
             } minimal: {
-                Text(context.state.emoji)
+                if context.state.games.first?.isLive == true {
+                    Image(systemName: "sportscourt.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                } else {
+                    Image(systemName: "sportscourt.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .widgetURL(URL(string: "http://www.apple.com"))
-            .keylineTint(Color.red)
         }
     }
 }
 
-extension LiveViewWidgetAttributes {
-    fileprivate static var preview: LiveViewWidgetAttributes {
-        LiveViewWidgetAttributes(name: "World")
+private struct LockScreenView: View {
+    let state: LiveGameAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(state.games, id: \.matchId) { game in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(shortName(game.homeName))
+                            .lineLimit(1)
+                            .font(.caption)
+                        Spacer()
+                        Text("\(game.scoreHome)–\(game.scoreAway)")
+                            .font(.subheadline.monospacedDigit().bold())
+                        if game.isLive {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 6, height: 6)
+                        }
+                        Spacer()
+                        Text(shortName(game.awayName))
+                            .lineLimit(1)
+                            .font(.caption)
+                    }
+
+                    if !game.phaseLabel.isEmpty {
+                        Text(game.phaseLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .padding()
     }
 }
 
-extension LiveViewWidgetAttributes.ContentState {
-    fileprivate static var smiley: LiveViewWidgetAttributes.ContentState {
-        LiveViewWidgetAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: LiveViewWidgetAttributes.ContentState {
-         LiveViewWidgetAttributes.ContentState(emoji: "🤩")
-     }
-}
+private func shortName(_ name: String) -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "—" }
 
-#Preview("Notification", as: .content, using: LiveViewWidgetAttributes.preview) {
-   LiveViewWidgetLiveActivity()
-} contentStates: {
-    LiveViewWidgetAttributes.ContentState.smiley
-    LiveViewWidgetAttributes.ContentState.starEyes
+    let parts = trimmed.split(separator: " ")
+    if let last = parts.last, last.count >= 3 {
+        return String(last.prefix(3)).uppercased()
+    }
+
+    return String(trimmed.prefix(3)).uppercased()
 }

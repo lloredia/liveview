@@ -19,7 +19,14 @@ enum LiveActivityManager {
         }
 
         if #available(iOS 16.2, *) {
-            if let current = Activity<LiveGameAttributes>.activities.first {
+            let activities = Activity<LiveGameAttributes>.activities
+            if let current = activities.first {
+                if activities.count > 1 {
+                    for extra in activities.dropFirst() {
+                        await extra.end(nil, dismissalPolicy: .immediate)
+                    }
+                }
+
                 await current.update(ActivityContent(state: state, staleDate: nil))
             } else {
                 _ = try? Activity.request(

@@ -12,7 +12,6 @@ import SwiftUI
 struct LiveViewWidgetBundle: WidgetBundle {
     var body: some Widget {
         LiveViewWidget()
-        LiveViewWidgetControl()
         LiveViewWidgetLiveActivity()
     }
 }
