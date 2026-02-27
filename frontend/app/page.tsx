@@ -101,16 +101,30 @@ function HomeContent() {
   }, [leagues, tabVisible, totalLive]);
 
   useEffect(() => {
+    const HEALTH_TIMEOUT_MS = 25_000;
     const check = async () => {
       try {
         const { getHealthUrl } = await import("@/lib/api");
-        const res = await fetch(getHealthUrl());
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+        const res = await fetch(getHealthUrl(), { signal: controller.signal });
+        clearTimeout(t);
         setConnected(res.ok);
-        if (res.ok) setError(null);
+        if (res.ok) {
+          setError(null);
+          // Re-fetch leagues when backend becomes reachable (e.g. after cold start)
+          fetchLeagues()
+            .then((data) => {
+              setLeagues(data);
+              setConnected(true);
+            })
+            .catch(() => {});
+        }
       } catch {
         setConnected(false);
       }
     };
+    check();
     const timer = setInterval(check, 30000);
     return () => clearInterval(timer);
   }, []);

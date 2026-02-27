@@ -11,7 +11,8 @@ import type {
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const REQUEST_TIMEOUT_MS = 10_000;
+/** Long enough for Railway cold starts (~15–30s); local backend responds in <1s. */
+const REQUEST_TIMEOUT_MS = 25_000;
 
 /** Single source of truth for API base URL (used by all API calls and env docs). */
 export function getApiBase(): string {
