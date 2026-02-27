@@ -49,7 +49,25 @@ Use this checklist so LiveView meets Apple’s App Store Review Guidelines and r
 - **Minimum iOS version:** The Xcode project uses **IPHONEOS_DEPLOYMENT_TARGET = 16.2** (required for Live Activities). Devices on iOS 16.2+ can run the app.
 - **Capabilities:** The app uses **Live Activities** (Dynamic Island / Lock Screen). No push notifications, Health, or Location. If you add other capabilities later, add the required usage descriptions in Info.plist and in App Store Connect.
 
-## 8. Before you submit
+## 8. App Store Connect validation (upload errors)
+
+### Launch screen missing for iPad (Invalid Bundle)
+
+If you see: *"The app supports Multitasking on iPad, but the LaunchScreen.storyboard launch storyboard file is missing from the bundle"*:
+
+- **Done in this repo:** `Info.plist` uses **UILaunchScreen** (iOS 14+) with `UIColorName` and `UIImageName` (Splash) instead of relying only on `UILaunchStoryboardName`. This satisfies the requirement without the storyboard having to be present in the bundle. Minimum OS is 16.2, so UILaunchScreen is supported.
+
+### App icon has alpha / transparency (Invalid Large App Icon)
+
+If you see: *"The large app icon in the asset catalog cannot be transparent or contain an alpha channel"*:
+
+- **Fix:** Remove transparency from the 1024×1024 app icon.
+- **Option A (script):** From repo root run:  
+  `pip install Pillow` then `python3 scripts/ios-strip-app-icon-alpha.py`  
+  This overwrites `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` with a flattened (no alpha) version.
+- **Option B (manual):** In Preview or an image editor, open the icon, flatten/composite onto a white background, and export as PNG without transparency. Replace `AppIcon-512@2x.png` in the AppIcon appiconset.
+
+## 9. Before you submit
 
 - [ ] Privacy policy URL set in App Store Connect and linked from your site or app if needed.
 - [ ] App Privacy form completed in App Store Connect.
@@ -57,5 +75,6 @@ Use this checklist so LiveView meets Apple’s App Store Review Guidelines and r
 - [ ] Screenshots and metadata filled in.
 - [ ] Support URL and contact info set.
 - [ ] Test the build on a real device; confirm the WebView loads your Vercel URL and the API responds (CORS allows the app).
+- [ ] If you hit the “Invalid Large App Icon” (alpha channel) error, run `python3 scripts/ios-strip-app-icon-alpha.py` and re-archive.
 
 After submission, if Apple requests a **privacy manifest** (PrivacyInfo.xcprivacy), add one to the Xcode project describing the data practices and any required-reason API use. The current app uses standard networking and storage; Capacitor may already provide or require a manifest in newer SDKs.

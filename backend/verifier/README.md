@@ -54,8 +54,8 @@ Verifier-specific (optional, prefix `LV_VERIFIER_`):
 
 ```bash
 cd backend
-export LV_REDIS_URL=redis://localhost:6379/0
-export LV_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/liveview
+export LV_REDIS_URL=redis://default:MsTyLPnUMmTBwiIIhCAiodAsjPBoDIbv@yamanote.proxy.rlwy.net:52334
+export LV_DATABASE_URL=postgresql://postgres:BsIvdZpwjowemkdoWxLNAQRpDRBzwWJz@trolley.proxy.rlwy.net:41893/railway
 python3 -m verifier.main
 ```
 

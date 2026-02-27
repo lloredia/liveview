@@ -45,8 +45,14 @@
 			</array>
 		</dict>
 	</dict>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen.storyboard</string>
+	<!-- Use UILaunchScreen (iOS 14+) so launch works for iPad multitasking without requiring storyboard in bundle. Min OS is 16.2. -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>systemBackgroundColor</string>
+		<key>UIImageName</key>
+		<string>Splash</string>
+	</dict>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
