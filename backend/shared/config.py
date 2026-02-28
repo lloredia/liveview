@@ -116,7 +116,10 @@ class Settings(BaseSettings):
     scheduler_leader_renew_s: int = 10
 
     # ── Provider ─────────────────────────────────────────────
-    provider_order: list[str] = Field(default=["sportradar", "espn", "thesportsdb"])
+    provider_order: list[str] = Field(
+        default=["sportradar", "espn", "football_data", "thesportsdb"],
+        description="Provider cascade for ingest; first available per match is used.",
+    )
     provider_health_window_s: int = 300
     provider_health_threshold: float = 0.4
     provider_flap_ttl_s: int = 60

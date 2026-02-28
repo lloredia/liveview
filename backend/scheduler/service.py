@@ -87,7 +87,7 @@ SCHEDULE_SYNC_LEAGUES: list[dict[str, str]] = [
     {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA"},
 ]
 
-SCHEDULE_SYNC_INTERVAL_S = 4 * 3600  # 4 hours
+SCHEDULE_SYNC_INTERVAL_S = 3600  # 1 hour — discover new matches more often (was 4h)
 
 # Phases that require active polling
 ACTIVE_PHASES = [p.value for p in MatchPhase if p.is_live or p == MatchPhase.PRE_MATCH]
@@ -442,14 +442,23 @@ class SchedulerService:
         self._shutdown.set()
 
 
+PIPELINE_LAST_SCHEDULE_SYNC_KEY = "pipeline:last_schedule_sync"
+
+
 class ScheduleSyncService:
     """
     Periodically discovers new matches from ESPN and upserts them into the database.
     Runs alongside the main scheduler so the DB always has upcoming matches.
     """
 
-    def __init__(self, db: DatabaseManager, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        db: DatabaseManager,
+        redis: RedisManager | None = None,
+        settings: Settings | None = None,
+    ) -> None:
         self._db = db
+        self._redis = redis
         self._settings = settings or get_settings()
         self._shutdown = asyncio.Event()
         self._sports_cache: dict[str, uuid.UUID] = {}
@@ -463,9 +472,9 @@ class ScheduleSyncService:
         return self._sports_cache
 
     async def run(self) -> None:
-        """Run the schedule sync loop: fetch today + tomorrow every SCHEDULE_SYNC_INTERVAL_S."""
-        # Initial sync on startup (after a short delay to let DB connect settle)
-        await asyncio.sleep(10)
+        """Run the schedule sync loop: fetch today + next 7 days every SCHEDULE_SYNC_INTERVAL_S."""
+        # Initial sync soon so matches appear quickly after deploy
+        await asyncio.sleep(2)
         await self._sync_once()
 
         while not self._shutdown.is_set():
@@ -516,6 +525,15 @@ class ScheduleSyncService:
             updated_matches=total_updated,
             dates=[d.isoformat() for d in dates_to_sync],
         )
+        if self._redis:
+            try:
+                await self._redis.client.set(
+                    PIPELINE_LAST_SCHEDULE_SYNC_KEY,
+                    datetime.now(timezone.utc).isoformat(),
+                    ex=86400 * 2,
+                )
+            except Exception as e:
+                logger.debug("schedule_sync_redis_write_failed", error=str(e))
 
     async def _sync_league_date(
         self,
@@ -767,7 +785,7 @@ async def main() -> None:
     health_scorer = HealthScorer(redis, settings)
 
     service = SchedulerService(redis, db, polling_engine, health_scorer, settings)
-    sync_service = ScheduleSyncService(db, settings)
+    sync_service = ScheduleSyncService(db, redis=redis, settings=settings)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

@@ -19,7 +19,7 @@ from typing import Any, AsyncGenerator, Dict, Union
 
 import httpx
 from fastapi import FastAPI, WebSocket
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select, text
 
 from shared.config import get_settings
 from shared.models.enums import MatchPhase
@@ -660,7 +660,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
 
     @app.get("/v1/status", tags=["system"])
     async def system_status() -> dict[str, Any]:
-        """Public status endpoint showing service health and provider status."""
+        """Public status endpoint showing service health, provider status, and pipeline hints."""
         redis = get_redis()
         db = get_db()
 
@@ -678,6 +678,30 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
         except Exception:
             pass
 
+        pipeline: dict[str, Any] = {}
+        if db_ok:
+            try:
+                from datetime import datetime, timedelta, timezone
+                now = datetime.now(timezone.utc)
+                day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+                async with db.read_session() as session:
+                    r = await session.execute(
+                        select(func.count()).select_from(MatchORM).where(
+                            MatchORM.start_time >= day_start,
+                            MatchORM.start_time < day_end,
+                        )
+                    )
+                    pipeline["matches_today"] = r.scalar() or 0
+            except Exception:
+                pipeline["matches_today"] = None
+        if redis_ok:
+            try:
+                last_sync = await redis.client.get("pipeline:last_schedule_sync")
+                pipeline["last_schedule_sync"] = last_sync if isinstance(last_sync, str) else (last_sync.decode() if last_sync else None)
+            except Exception:
+                pipeline["last_schedule_sync"] = None
+
         return {
             "status": "ok" if (redis_ok and db_ok) else "degraded",
             "services": {
@@ -687,6 +711,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
             "providers": {
                 "espn": espn_circuit_breaker.stats,
             },
+            "pipeline": pipeline,
         }
 
     # WebSocket endpoint

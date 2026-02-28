@@ -225,12 +225,12 @@ def build_provider_registry(redis: RedisManager, settings: Settings) -> Provider
             rpm_limit=settings.thesportsdb_rpm_limit,
         )
 
-    if settings.football_data_api_key:
-        providers[ProviderName.FOOTBALL_DATA] = FootballDataProvider(
-            redis=redis,
-            api_key=settings.football_data_api_key,
-            rpm_limit=settings.football_data_rpm_limit,
-        )
+    # Football-Data.org: free tier works without key (fewer RPM); with key = higher quota
+    providers[ProviderName.FOOTBALL_DATA] = FootballDataProvider(
+        redis=redis,
+        api_key=settings.football_data_api_key or "",
+        rpm_limit=settings.football_data_rpm_limit,
+    )
 
     scorer = HealthScorer(redis=redis, settings=settings)
     return ProviderRegistry(
