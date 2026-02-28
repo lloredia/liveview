@@ -23,9 +23,10 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 favorites_router = APIRouter(prefix="/v1/user", tags=["user"])
 
 # ── Config ────────────────────────────────────────────────────────────
+# Prefer LV_ prefix for consistency with rest of backend (see shared/config.py).
 
 JWT_DEFAULT_DEV = "liveview-dev-secret-change-in-production"
-JWT_SECRET = os.getenv("JWT_SECRET", JWT_DEFAULT_DEV)
+JWT_SECRET = os.getenv("LV_JWT_SECRET") or os.getenv("JWT_SECRET") or JWT_DEFAULT_DEV
 
 
 def _is_production() -> bool:
@@ -146,10 +147,20 @@ def _b64_decode(data: str) -> str:
 _pool: Optional[asyncpg.Pool] = None
 
 
+def _get_database_url() -> str:
+    """Database URL for asyncpg (no +asyncpg driver suffix). Prefers LV_DATABASE_URL."""
+    raw = os.getenv("LV_DATABASE_URL") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or "postgresql://liveview:liveview@postgres:5432/liveview"
+    if "+asyncpg" in raw:
+        raw = raw.replace("postgresql+asyncpg://", "postgresql://", 1)
+    elif raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[11:]
+    return raw
+
+
 async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
-        database_url = os.getenv("DATABASE_URL", "postgresql://liveview:liveview@postgres:5432/liveview")
+        database_url = _get_database_url()
         _pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
     return _pool
 

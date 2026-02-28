@@ -48,8 +48,8 @@ export default function PrivacyPage() {
             <p className="text-text-secondary">
               We do not collect personal data that identifies you. Preferences
               such as theme and pinned matches are stored locally on your device.
-              If you use optional features (e.g. push notifications or account
-              features in the future), we would only use the minimum data needed
+              If you use optional features (e.g. push notifications), we would
+              only use the minimum data needed
               to provide those features and would describe it here or in the app.
             </p>
           </section>

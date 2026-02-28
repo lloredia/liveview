@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
-import { AuthProvider } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { GlobalErrorHandler } from "@/components/global-error-handler";
 
 export const metadata: Metadata = {
   title: "LiveView — Real-Time Sports Tracker",
@@ -44,10 +44,9 @@ export default function RootLayout({
         >
           Skip to content
         </a>
+        <GlobalErrorHandler />
         <ErrorBoundary>
-          <AuthProvider>
-            <ThemeProvider>{children}</ThemeProvider>
-          </AuthProvider>
+          <ThemeProvider>{children}</ThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

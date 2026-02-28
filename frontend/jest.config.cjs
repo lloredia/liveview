@@ -1,6 +1,4 @@
-import type { Config } from "jest";
-
-const config: Config = {
+module.exports = {
   testEnvironment: "jsdom",
   roots: ["<rootDir>"],
   modulePaths: ["<rootDir>"],
@@ -17,5 +15,3 @@ const config: Config = {
     ],
   },
 };
-
-export default config;
