@@ -92,7 +92,7 @@ export function Highlights({
             : sport + "/" + slug;
 
         const sbUrl =
-          "https://site.api.espn.com/apis/site/v2/sports/" +
+          "/api/espn/site/" +
           prefix +
           "/scoreboard";
 
@@ -142,7 +142,7 @@ export function Highlights({
         }
 
         const sumUrl =
-          "https://site.api.espn.com/apis/site/v2/sports/" +
+          "/api/espn/site/" +
           prefix +
           "/summary?event=" +
           evt.id;

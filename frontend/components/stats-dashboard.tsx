@@ -100,7 +100,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
         const { sport, slug } = info;
         const prefix = sport === "soccer" ? "soccer/" + slug : sport + "/" + slug;
 
-        const sbUrl = "https://site.api.espn.com/apis/site/v2/sports/" + prefix + "/scoreboard";
+        const sbUrl = "/api/espn/site/" + prefix + "/scoreboard";
         const sbRes = await fetch(sbUrl);
         const sbData = sbRes.ok ? await sbRes.json() : { events: [] };
         const events: any[] = sbData.events || [];
@@ -187,7 +187,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
         }
 
         // Team form from standings
-        const standUrl = "https://site.api.espn.com/apis/v2/sports/" + prefix + "/standings";
+        const standUrl = "/api/espn/v2/" + prefix + "/standings";
         const standRes = await fetch(standUrl);
         const standData = standRes.ok ? await standRes.json() : null;
 

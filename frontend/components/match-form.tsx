@@ -75,7 +75,7 @@ async function fetchTeamFormByName(
 ): Promise<TeamForm> {
   try {
     // Search for team in ESPN
-    const searchUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${leagueSlug}/teams?limit=100`;
+    const searchUrl = `/api/espn/site/${sport}/${leagueSlug}/teams?limit=100`;
     const searchRes = await fetch(searchUrl);
     if (!searchRes.ok) return { teamName, results: [] };
 

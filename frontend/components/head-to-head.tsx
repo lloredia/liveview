@@ -48,7 +48,7 @@ async function findTeamId(
   slug: string,
 ): Promise<string | null> {
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/teams?limit=100`;
+    const url = `/api/espn/site/${sport}/${slug}/teams?limit=100`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
@@ -84,7 +84,7 @@ async function fetchH2H(
   if (!homeId) return empty;
 
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/teams/${homeId}/schedule?season=2025`;
+    const url = `/api/espn/site/${sport}/${slug}/teams/${homeId}/schedule?season=2025`;
     const res = await fetch(url);
     if (!res.ok) return empty;
 

@@ -277,7 +277,7 @@ async function findEspnEventId(
 ): Promise<string | null> {
   try {
     const prefix = sport === "soccer" ? `soccer/${slug}` : `${sport}/${slug}`;
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${prefix}/scoreboard`);
+    const res = await fetch(`/api/espn/site/${prefix}/scoreboard`);
     if (!res.ok) return null;
     const data = await res.json();
     const events: any[] = data.events || [];
@@ -352,7 +352,7 @@ async function fetchESPNSummary(
 
   try {
     const prefix = mapping.sport === "soccer" ? `soccer/${mapping.slug}` : `${mapping.sport}/${mapping.slug}`;
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${prefix}/summary?event=${eventId}`);
+    const res = await fetch(`/api/espn/site/${prefix}/summary?event=${eventId}`);
     if (!res.ok) return null;
     const data = await res.json();
 

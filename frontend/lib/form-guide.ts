@@ -31,7 +31,7 @@ export async function fetchTeamForm(
 ): Promise<TeamForm> {
   try {
     const espnSport = ESPN_TEAM_SCHEDULE_MAP[sport] || sport;
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${espnSport}/${leagueSlug}/teams/${teamId}/schedule`;
+    const url = `/api/espn/site/${espnSport}/${leagueSlug}/teams/${teamId}/schedule`;
     const res = await fetch(url);
     if (!res.ok) return { teamName, results: [] };
 

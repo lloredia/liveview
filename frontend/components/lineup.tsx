@@ -59,7 +59,7 @@ async function findTeamId(
   slug: string,
 ): Promise<string | null> {
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/teams?limit=100`;
+    const url = `/api/espn/site/${sport}/${slug}/teams?limit=100`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
@@ -95,7 +95,7 @@ async function fetchTeamRoster(
 
   try {
     // Fetch roster
-    const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/teams/${teamId}/roster`;
+    const rosterUrl = `/api/espn/site/${sport}/${slug}/teams/${teamId}/roster`;
     const rosterRes = await fetch(rosterUrl);
 
     const players: Player[] = [];

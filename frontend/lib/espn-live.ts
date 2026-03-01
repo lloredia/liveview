@@ -4,7 +4,7 @@
  * and clocks directly from ESPN's public scoreboard API.
  */
 
-const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
+const ESPN_BASE = "/api/espn/site";
 
 export interface ESPNLiveMatch {
   espnId: string;
