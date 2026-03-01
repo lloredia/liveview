@@ -82,8 +82,12 @@ function formatCacheTime(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+/** Format date as YYYY-MM-DD in **local** time (not UTC) so "TODAY" in the UI matches the API date. */
 function formatDateISO(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function LeagueLogo({ name }: { name: string }) {
@@ -356,8 +360,8 @@ export function TodayView({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px]">
           <span className="text-amber-700 dark:text-amber-400">
             {fromCache
-              ? `Showing cached matches${cacheSavedAt ? ` • Updated ${formatCacheTime(cacheSavedAt)}` : ""}`
-              : "Updates paused"}
+              ? `Scores temporarily delayed — showing last data${cacheSavedAt ? ` (${formatCacheTime(cacheSavedAt)})` : ""}`
+              : "Scores temporarily delayed — updates paused"}
           </span>
           <button
             type="button"
@@ -449,15 +453,17 @@ export function TodayView({
       {effectiveData && effectiveLeagues.length === 0 && (
         <div className="py-16 px-4 text-center text-sm text-text-muted">
           {filter === "all"
-            ? "No matches on this date"
+            ? (error || fromCache
+                ? "Scores temporarily unavailable"
+                : "No matches on this date")
             : filter === "tracked"
               ? "No tracked matches on this date"
               : `No ${filter} matches`}
           {isUserToday && filter === "all" && (
             <>
               <p className="mt-2 text-xs text-text-dim">
-                {fromCache
-                  ? "The last fetch failed, so you're seeing cached data. Tap below to retry loading from the server."
+                {error || fromCache
+                  ? "The server could not be reached. Scores will resume automatically when the connection is restored."
                   : "New matches appear throughout the day. If you just set up the app, the backend may need to load match data (run the seed script or start the scheduler)."}
               </p>
               <button

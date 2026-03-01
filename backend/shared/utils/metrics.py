@@ -99,6 +99,25 @@ SCHEDULER_ACTIVE_TASKS = Gauge(
     "lv_scheduler_active_tasks",
     "Number of active polling tasks in the scheduler",
 )
+LIVE_REFRESH_ERRORS = Counter(
+    "lv_live_refresh_errors_total",
+    "Provider errors in API live refresh loop",
+    ["provider", "league"],
+)
+LIVE_REFRESH_FALLBACKS = Counter(
+    "lv_live_refresh_fallbacks_total",
+    "Fallback provider activations in API live refresh",
+    ["fallback_provider", "league"],
+)
+LIVE_REFRESH_UPDATES = Counter(
+    "lv_live_refresh_updates_total",
+    "Matches updated by API live refresh (per provider)",
+    ["provider"],
+)
+LIVE_GAMES_DETECTED = Gauge(
+    "lv_live_games_detected",
+    "Number of live/active leagues detected in last refresh cycle",
+)
 
 # ── Info ────────────────────────────────────────────────────────────────
 SERVICE_INFO = Info("lv_service", "Service build information")

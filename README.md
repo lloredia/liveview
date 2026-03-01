@@ -773,6 +773,7 @@ Open `http://localhost:3000` — the frontend connects to `http://localhost:8000
   NEXT_PUBLIC_API_URL=https://backend-api-production-8b9f.up.railway.app
   ```
   Then restart the dev server (`npm run dev` in `frontend/`).
+- **Wrong or missing match info on the live site** — (1) Ensure the **production** frontend (e.g. [liveview-tracker.com](https://www.liveview-tracker.com/)) is built with the correct `NEXT_PUBLIC_API_URL` in Vercel (Settings → Environment Variables). (2) The backend must be **seeded** and the **scheduler** (or a cron) must run so matches are ingested from Football-Data.org / ESPN. (3) Dates use the user's **local** date so "TODAY" matches their timezone. To verify the API directly: `curl https://your-api-url/v1/leagues` and `curl "https://your-api-url/v1/today?date=YYYY-MM-DD"`.
 - **Run from repo root** — From the **liveview-app** root you can run `./run-frontend.sh` to start the frontend (it runs from `frontend/` and raises the file limit automatically).
 
 ### Seed the Database

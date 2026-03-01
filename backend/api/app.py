@@ -33,7 +33,13 @@ from shared.models.orm import (
 )
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
-from shared.utils.metrics import start_metrics_server
+from shared.utils.metrics import (
+    start_metrics_server,
+    LIVE_REFRESH_ERRORS,
+    LIVE_REFRESH_FALLBACKS,
+    LIVE_REFRESH_UPDATES,
+    LIVE_GAMES_DETECTED,
+)
 from shared.utils.redis_manager import RedisManager
 
 from api.dependencies import get_db, get_redis, init_dependencies
@@ -45,6 +51,7 @@ from api.routes.today import router as today_router
 from ingest.news_fetcher import fetch_and_store_news
 from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.ws.manager import WebSocketManager
+from api.live_fallback import espn_retry, tsdb_fallback_for_league
 
 logger = get_logger(__name__)
 
@@ -83,7 +90,7 @@ ESPN_LEAGUE_SPORT: dict[str, str] = {
     "nba": "basketball", "wnba": "basketball",
     "mens-college-basketball": "basketball",
     "womens-college-basketball": "basketball",
-    "nhl": "hockey", "mlb": "baseball",
+    "nhl": "hockey", "mlb": "baseball", "nfl": "football",
 }
 
 ESPN_STAT_NAME_MAP: dict[str, str] = {
@@ -121,6 +128,7 @@ SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "womens-college-basketball": "basketball/womens-college-basketball",
     "nhl": "hockey/nhl",
     "mlb": "baseball/mlb",
+    "nfl": "football/nfl",
 }
 
 # Module-level reference for the WS manager (accessed by the ws endpoint)
@@ -142,6 +150,10 @@ async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> N
     Uses a circuit breaker to avoid hammering ESPN when it's unresponsive.
     """
     await asyncio.sleep(5)  # let startup settle
+    settings = get_settings()
+    if not settings.espn_live_refresh_enabled:
+        logger.info("live_score_refresh_disabled_by_flag")
+        return
     logger.info("live_score_refresh_started")
 
     async with httpx.AsyncClient(timeout=12.0) as client:
@@ -190,23 +202,55 @@ async def _refresh_live_scores(
         league_ids = [row.espn_league_id for row in result.all()]
 
     if not league_ids:
+        LIVE_GAMES_DETECTED.set(0)
         return
+
+    LIVE_GAMES_DETECTED.set(len(league_ids))
+    settings = get_settings()
+    use_fallback = getattr(settings, "live_refresh_use_fallback", True)
 
     updated = 0
     for espn_league_id in league_ids:
         path = SPORT_LEAGUE_ESPN_PATHS.get(espn_league_id)
         if not path:
             continue
+        sport = ESPN_LEAGUE_SPORT.get(espn_league_id, "soccer")
+        espn_ok = False
         try:
             url = f"{ESPN_BASE}/{path}/scoreboard"
             resp = await client.get(url, timeout=10.0)
             resp.raise_for_status()
             data = resp.json()
             events = data.get("events", [])
-            sport = ESPN_LEAGUE_SPORT.get(espn_league_id, "soccer")
             updated += await _apply_espn_events(db, events, sport)
+            espn_ok = True
         except Exception as exc:
-            logger.debug("live_refresh_league_error", league=espn_league_id, error=str(exc))
+            LIVE_REFRESH_ERRORS.labels(provider="espn", league=espn_league_id).inc()
+            logger.warning("live_refresh_espn_failed", league=espn_league_id, error=str(exc))
+
+            retry_data = await espn_retry(client, path, backoff_s=2.0)
+            if retry_data:
+                events = retry_data.get("events", [])
+                espn_count = await _apply_espn_events(db, events, sport)
+                updated += espn_count
+                espn_ok = True
+                LIVE_REFRESH_UPDATES.labels(provider="espn").inc(espn_count)
+                logger.info("live_refresh_espn_retry_ok", league=espn_league_id)
+
+        if espn_ok:
+            LIVE_REFRESH_UPDATES.labels(provider="espn").inc(updated)
+
+        if not espn_ok and use_fallback:
+            LIVE_REFRESH_FALLBACKS.labels(fallback_provider="thesportsdb", league=espn_league_id).inc()
+            try:
+                fb_count = await tsdb_fallback_for_league(client, db, espn_league_id, sport)
+                updated += fb_count
+                LIVE_REFRESH_UPDATES.labels(provider="thesportsdb").inc(fb_count)
+                if fb_count:
+                    logger.info("live_refresh_fallback_used", league=espn_league_id, provider="thesportsdb", matches=fb_count)
+            except Exception as fb_exc:
+                LIVE_REFRESH_ERRORS.labels(provider="thesportsdb", league=espn_league_id).inc()
+                logger.warning("live_refresh_fallback_error", league=espn_league_id, error=str(fb_exc))
 
     if updated > 0:
         logger.info("live_scores_refreshed", matches_updated=updated)
@@ -244,9 +288,13 @@ def _resolve_phase(espn_status: str, period_num: int, sport: str) -> MatchPhase:
         if period_num > 3:
             return MatchPhase.LIVE_OT
         return HOCKEY_PERIOD_PHASE.get(period_num, MatchPhase.LIVE_P1)
+    if sport == "football":
+        if period_num > 4:
+            return MatchPhase.LIVE_OT
+        return BASKETBALL_QUARTER_PHASE.get(period_num, MatchPhase.LIVE_Q1)
     if sport == "baseball":
         return MatchPhase.LIVE_INNING
-    # Soccer
+    # Soccer (default)
     if period_num == 1:
         return MatchPhase.LIVE_FIRST_HALF
     if period_num == 2:
@@ -288,111 +336,131 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
     count = 0
     async with db.write_session() as session:
         for event in events:
-            espn_id = str(event.get("id", ""))
-            if not espn_id:
-                continue
+            try:
+                espn_id = str(event.get("id", ""))
+                if not espn_id:
+                    continue
 
-            mapping_stmt = select(ProviderMappingORM.canonical_id).where(
-                ProviderMappingORM.entity_type == "match",
-                ProviderMappingORM.provider == "espn",
-                ProviderMappingORM.provider_id == espn_id,
-            )
-            match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
-            if not match_id:
-                continue
-
-            comp = event.get("competitions", [{}])[0]
-            competitors = comp.get("competitors", [])
-
-            score_home = 0
-            score_away = 0
-            aggregate_home: int | None = None
-            aggregate_away: int | None = None
-            home_stats: dict[str, Any] = {}
-            away_stats: dict[str, Any] = {}
-
-            for c in competitors:
-                try:
-                    sc = int(c.get("score", "0"))
-                except (ValueError, TypeError):
-                    sc = 0
-                try:
-                    agg = int(c.get("aggregateScore", 0))
-                except (ValueError, TypeError):
-                    agg = 0
-                if c.get("homeAway") == "home":
-                    score_home = sc
-                    if "aggregateScore" in c:
-                        aggregate_home = agg
-                    home_stats = _extract_team_stats(c)
-                else:
-                    score_away = sc
-                    if "aggregateScore" in c:
-                        aggregate_away = agg
-                    away_stats = _extract_team_stats(c)
-
-            status_obj = comp.get("status", event.get("status", {}))
-            espn_status = status_obj.get("type", {}).get("name", "STATUS_SCHEDULED")
-            period_num = status_obj.get("period", 0)
-            phase = _resolve_phase(espn_status, period_num, sport)
-            clock = status_obj.get("displayClock")
-
-            # Update match phase
-            match_obj = (await session.execute(
-                select(MatchORM).where(MatchORM.id == match_id)
-            )).scalar_one_or_none()
-            if match_obj:
-                match_obj.phase = phase.value
-
-            # Update match state (scores, clock, period, aggregate for two-legged ties)
-            state_obj = (await session.execute(
-                select(MatchStateORM).where(MatchStateORM.match_id == match_id)
-            )).scalar_one_or_none()
-            if state_obj:
-                extra = dict(state_obj.extra_data or {})
-                if aggregate_home is not None and aggregate_away is not None:
-                    extra["aggregate_home"] = aggregate_home
-                    extra["aggregate_away"] = aggregate_away
-                else:
-                    extra.pop("aggregate_home", None)
-                    extra.pop("aggregate_away", None)
-                changed = (
-                    state_obj.score_home != score_home
-                    or state_obj.score_away != score_away
-                    or state_obj.clock != clock
-                    or state_obj.phase != phase.value
-                    or state_obj.extra_data != extra
+                mapping_stmt = select(ProviderMappingORM.canonical_id).where(
+                    ProviderMappingORM.entity_type == "match",
+                    ProviderMappingORM.provider == "espn",
+                    ProviderMappingORM.provider_id == espn_id,
                 )
-                if changed:
-                    state_obj.score_home = score_home
-                    state_obj.score_away = score_away
-                    state_obj.clock = clock
-                    state_obj.phase = phase.value
-                    state_obj.period = str(period_num) if period_num else state_obj.period
-                    state_obj.extra_data = extra
-                    state_obj.version = (state_obj.version or 0) + 1
-                    count += 1
+                match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
+                if not match_id:
+                    continue
 
-            # Upsert team statistics
-            if home_stats or away_stats:
-                stats_obj = (await session.execute(
-                    select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
+                competitions = event.get("competitions")
+                if not competitions or not isinstance(competitions, list):
+                    logger.debug("espn_event_no_competitions", espn_id=espn_id)
+                    continue
+                comp = competitions[0]
+                competitors = comp.get("competitors", [])
+
+                score_home = 0
+                score_away = 0
+                aggregate_home: int | None = None
+                aggregate_away: int | None = None
+                home_stats: dict[str, Any] = {}
+                away_stats: dict[str, Any] = {}
+
+                for c in competitors:
+                    try:
+                        sc = int(c.get("score", "0"))
+                    except (ValueError, TypeError):
+                        sc = 0
+                    try:
+                        agg = int(c.get("aggregateScore", 0))
+                    except (ValueError, TypeError):
+                        agg = 0
+                    if c.get("homeAway") == "home":
+                        score_home = sc
+                        if "aggregateScore" in c:
+                            aggregate_home = agg
+                        home_stats = _extract_team_stats(c)
+                    else:
+                        score_away = sc
+                        if "aggregateScore" in c:
+                            aggregate_away = agg
+                        away_stats = _extract_team_stats(c)
+
+                status_obj = comp.get("status", event.get("status", {}))
+                if not isinstance(status_obj, dict):
+                    status_obj = {}
+                type_obj = status_obj.get("type", {})
+                if not isinstance(type_obj, dict):
+                    type_obj = {}
+                espn_status = type_obj.get("name", "STATUS_SCHEDULED")
+                try:
+                    period_num = int(status_obj.get("period", 0))
+                except (ValueError, TypeError):
+                    period_num = 0
+                phase = _resolve_phase(espn_status, period_num, sport)
+                clock = status_obj.get("displayClock")
+
+                # Update match phase
+                match_obj = (await session.execute(
+                    select(MatchORM).where(MatchORM.id == match_id)
                 )).scalar_one_or_none()
+                if match_obj:
+                    match_obj.phase = phase.value
 
-                if stats_obj:
-                    stats_obj.home_stats = home_stats
-                    stats_obj.away_stats = away_stats
-                    stats_obj.version = (stats_obj.version or 0) + 1
-                else:
-                    import uuid as _uuid
-                    session.add(MatchStatsORM(
-                        id=_uuid.uuid4(),
-                        match_id=match_id,
-                        home_stats=home_stats,
-                        away_stats=away_stats,
-                        version=1,
-                        seq=0,
-                    ))
+                # Update match state (scores, clock, period, aggregate for two-legged ties)
+                state_obj = (await session.execute(
+                    select(MatchStateORM).where(MatchStateORM.match_id == match_id)
+                )).scalar_one_or_none()
+                if state_obj:
+                    extra = dict(state_obj.extra_data or {})
+                    if aggregate_home is not None and aggregate_away is not None:
+                        extra["aggregate_home"] = aggregate_home
+                        extra["aggregate_away"] = aggregate_away
+                    else:
+                        extra.pop("aggregate_home", None)
+                        extra.pop("aggregate_away", None)
+                    changed = (
+                        state_obj.score_home != score_home
+                        or state_obj.score_away != score_away
+                        or state_obj.clock != clock
+                        or state_obj.phase != phase.value
+                        or state_obj.extra_data != extra
+                    )
+                    if changed:
+                        state_obj.score_home = score_home
+                        state_obj.score_away = score_away
+                        state_obj.clock = clock
+                        state_obj.phase = phase.value
+                        state_obj.period = str(period_num) if period_num else state_obj.period
+                        state_obj.extra_data = extra
+                        state_obj.version = (state_obj.version or 0) + 1
+                        count += 1
+
+                # Upsert team statistics
+                if home_stats or away_stats:
+                    stats_obj = (await session.execute(
+                        select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
+                    )).scalar_one_or_none()
+
+                    if stats_obj:
+                        stats_obj.home_stats = home_stats
+                        stats_obj.away_stats = away_stats
+                        stats_obj.version = (stats_obj.version or 0) + 1
+                    else:
+                        import uuid as _uuid
+                        session.add(MatchStatsORM(
+                            id=_uuid.uuid4(),
+                            match_id=match_id,
+                            home_stats=home_stats,
+                            away_stats=away_stats,
+                            version=1,
+                            seq=0,
+                        ))
+            except Exception as evt_exc:
+                logger.warning(
+                    "espn_event_parse_error",
+                    espn_id=event.get("id", "?"),
+                    sport=sport,
+                    error=str(evt_exc),
+                )
 
     return count
 
@@ -702,6 +770,25 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
             except Exception:
                 pipeline["last_schedule_sync"] = None
 
+        # Live refresh debug info
+        live_refresh_info: dict[str, Any] = {}
+        settings = get_settings()
+        live_refresh_info["espn_enabled"] = settings.espn_live_refresh_enabled
+        live_refresh_info["fallback_enabled"] = settings.live_refresh_use_fallback
+        live_refresh_info["interval_s"] = LIVE_REFRESH_INTERVAL_S
+
+        if db_ok:
+            try:
+                async with db.read_session() as session:
+                    live_count_r = await session.execute(
+                        select(func.count()).select_from(MatchORM).where(
+                            or_(MatchORM.phase.like("live%"), MatchORM.phase == "break")
+                        )
+                    )
+                    live_refresh_info["live_matches_now"] = live_count_r.scalar() or 0
+            except Exception:
+                live_refresh_info["live_matches_now"] = None
+
         return {
             "status": "ok" if (redis_ok and db_ok) else "degraded",
             "services": {
@@ -709,8 +796,15 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
                 "database": db_ok,
             },
             "providers": {
-                "espn": espn_circuit_breaker.stats,
+                "espn": {
+                    **espn_circuit_breaker.stats,
+                    "live_refresh_enabled": settings.espn_live_refresh_enabled,
+                },
+                "thesportsdb_fallback": {
+                    "enabled": settings.live_refresh_use_fallback,
+                },
             },
+            "live_refresh": live_refresh_info,
             "pipeline": pipeline,
         }
 

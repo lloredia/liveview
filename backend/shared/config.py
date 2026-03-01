@@ -141,6 +141,10 @@ class Settings(BaseSettings):
     builder_reconciliation_interval_s: float = 10.0
     builder_synthetic_confidence_min: float = 0.3
 
+    # ── Feature flags ────────────────────────────────────────
+    espn_live_refresh_enabled: bool = True
+    live_refresh_use_fallback: bool = True
+
     # ── Observability ────────────────────────────────────────
     metrics_enabled: bool = True
     metrics_port: int = 9090
