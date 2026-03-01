@@ -54,6 +54,14 @@ const nextConfig = {
     return [
       { source: "/robots.txt", destination: "/api/robots" },
       { source: "/sitemap.xml", destination: "/api/sitemap" },
+      {
+        source: "/api/espn/v2/:path*",
+        destination: "https://site.api.espn.com/apis/v2/sports/:path*",
+      },
+      {
+        source: "/api/espn/site/:path*",
+        destination: "https://site.api.espn.com/apis/site/v2/sports/:path*",
+      },
     ];
   },
 };

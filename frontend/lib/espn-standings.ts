@@ -57,8 +57,8 @@ export function isSoccerCompetition(leagueName: string): boolean {
 
 // ── ESPN API base URLs ──────────────────────────────────────────────
 
-const ESPN_V2 = "https://site.api.espn.com/apis/v2/sports";
-const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports";
+const ESPN_V2 = "/api/espn/v2";
+const ESPN_SITE = "/api/espn/site";
 
 // ── Table standings ─────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ export async function fetchOtherStandings(
   sport: string,
   league: string,
 ): Promise<StandingsRow[]> {
-  const url = `${ESPN_V2}/sports/${sport}/${league}/standings`;
+  const url = `${ESPN_V2}/${sport}/${league}/standings`;
   const res = await fetch(url);
   if (!res.ok) return [];
 
