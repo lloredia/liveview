@@ -223,7 +223,10 @@ function parseKnockoutTeam(competitor: Record<string, unknown>): KnockoutTeam {
     id: (competitor.id as string) || (team.id as string) || "",
     name,
     abbreviation: (team.abbreviation as string) || name.slice(0, 3).toUpperCase(),
-    logo: ((team.logos as Array<{ href: string }>) ?? [])[0]?.href ?? null,
+    logo:
+      (team.logo as string) ||
+      ((team.logos as Array<{ href: string }>) ?? [])[0]?.href ||
+      null,
     isTBD: isTBDTeam(team),
   };
 }
