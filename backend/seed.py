@@ -75,7 +75,7 @@ ESPN_LEAGUES: list[dict[str, str]] = [
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland",
      "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/45.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia",
-     "logo_url": "https://a.espncdn.com/combiner/i?img=/i/leaguelogos/soccer/500/4710.png"},
+     "logo_url": "https://media.api-sports.io/football/leagues/307.png"},
     # Basketball
     {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA",
      "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png"},

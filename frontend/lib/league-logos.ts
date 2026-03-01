@@ -18,7 +18,7 @@ const LEAGUE_LOGOS: Record<string, string> = {
   "Liga Portugal": "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png",
   "Turkish Super Lig": "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png",
   "Scottish Premiership": "https://a.espncdn.com/i/leaguelogos/soccer/500/45.png",
-  "Saudi Pro League": "https://a.espncdn.com/combiner/i?img=/i/leaguelogos/soccer/500/4710.png",
+  "Saudi Pro League": "https://media.api-sports.io/football/leagues/307.png",
   "Liga MX": "https://a.espncdn.com/i/leaguelogos/soccer/500/22.png",
   "Brasileirao": "https://a.espncdn.com/i/leaguelogos/soccer/500/85.png",
   "Argentine Liga": "https://a.espncdn.com/i/leaguelogos/soccer/500/1.png",
