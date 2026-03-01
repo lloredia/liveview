@@ -59,13 +59,13 @@ ESPN_LEAGUES: list[dict[str, str]] = [
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa", "name": "Europa League", "country": "Europe",
      "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/2310.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa.conf", "name": "Conference League", "country": "Europe",
-     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/20001.png"},
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/20296.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.2", "name": "Championship", "country": "England",
      "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/24.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.fa", "name": "FA Cup", "country": "England",
-     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/34.png"},
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/40.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.league_cup", "name": "EFL Cup", "country": "England",
-     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/35.png"},
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/41.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ned.1", "name": "Eredivisie", "country": "Netherlands",
      "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "por.1", "name": "Liga Portugal", "country": "Portugal",
@@ -73,9 +73,9 @@ ESPN_LEAGUES: list[dict[str, str]] = [
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "tur.1", "name": "Turkish Super Lig", "country": "Turkey",
      "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland",
-     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/29.png"},
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/45.png"},
     {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia",
-     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/2369.png"},
+     "logo_url": "https://a.espncdn.com/combiner/i?img=/i/leaguelogos/soccer/500/4710.png"},
     # Basketball
     {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA",
      "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png"},
@@ -191,7 +191,7 @@ async def seed_date(
 
             total_matches += match_count
             status_summary = _summarize_statuses(events)
-            print(f"  ✓ {league_cfg['name']:25s} — {match_count} matches ({status_summary})")
+            print(f"  + {league_cfg['name']:25s} - {match_count} matches ({status_summary})")
 
     return total_leagues, total_teams, total_matches
 
@@ -219,7 +219,7 @@ async def seed() -> None:
             sports_db = {s.sport_type: s.id for s in result.scalars().all()}
 
         print(f"\n{'='*60}")
-        print(f"  Live View Seed — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+        print(f"  Live View Seed - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         print(f"{'='*60}")
         print(f"  Sports in DB: {list(sports_db.keys())}")
         print(f"  Leagues configured: {len(ESPN_LEAGUES)}")
@@ -259,7 +259,7 @@ async def seed() -> None:
             grand_teams += teams
             grand_matches += matches
             if matches == 0:
-                print(f"  · No matches found for {target_date.isoformat()}")
+                print(f"  . No matches found for {target_date.isoformat()}")
             print()
 
         print(f"  Summary: {grand_leagues} league-days, {grand_teams} new teams, {grand_matches} matches")
@@ -558,7 +558,7 @@ def _summarize_statuses(events: list[dict[str, Any]]) -> str:
 
     parts = []
     for state, count in sorted(counts.items()):
-        label = {"in": "🟢 live", "pre": "⏳ upcoming", "post": "✅ final"}.get(state, state)
+        label = {"in": "LIVE", "pre": "upcoming", "post": "final"}.get(state, state)
         parts.append(f"{count} {label}")
     return ", ".join(parts) if parts else "unknown"
 
