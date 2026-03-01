@@ -187,6 +187,80 @@ export interface NewsResponse {
   has_next: boolean;
 }
 
+// ── Soccer Standings + Knockout Bracket ──────────────────────────────
+
+export type CompetitionType = "league" | "cup" | "hybrid";
+
+export interface StandingsRow {
+  position: number;
+  teamName: string;
+  teamLogo: string | null;
+  teamAbbr: string;
+  gamesPlayed: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface StandingsGroup {
+  name: string;
+  rows: StandingsRow[];
+}
+
+export interface StandingsResult {
+  groups: StandingsGroup[];
+  competitionName: string;
+  fetchedAt: number;
+}
+
+export interface KnockoutTeam {
+  id: string;
+  name: string;
+  abbreviation: string;
+  logo: string | null;
+  isTBD: boolean;
+}
+
+export interface KnockoutLeg {
+  eventId: string;
+  date: string;
+  homeTeam: KnockoutTeam;
+  awayTeam: KnockoutTeam;
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  statusDetail: string;
+  legNumber: number;
+}
+
+export interface KnockoutTie {
+  teamA: KnockoutTeam;
+  teamB: KnockoutTeam;
+  legs: KnockoutLeg[];
+  aggregateA: number | null;
+  aggregateB: number | null;
+  winner: "A" | "B" | null;
+  completed: boolean;
+  isTwoLegged: boolean;
+}
+
+export interface KnockoutRound {
+  slug: string;
+  displayName: string;
+  order: number;
+  ties: KnockoutTie[];
+}
+
+export interface KnockoutBracket {
+  rounds: KnockoutRound[];
+  competitionName: string;
+  fetchedAt: number;
+}
+
 // ── WebSocket message types ─────────────────────────────────────────
 
 export interface WSMessage {
