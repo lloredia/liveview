@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLeagues, fetchScoreboard } from "@/lib/api";
 import type { LeagueGroup, MatchSummary } from "@/lib/types";
+import { getLeagueLogo } from "@/lib/league-logos";
 import { TeamLogo } from "./team-logo";
 import { isLive, phaseLabel } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
             id: league.id,
             title: league.name,
             subtitle: group.sport,
-            logoUrl: null,
+            logoUrl: getLeagueLogo(league.short_name || league.name, league.logo_url),
           });
         }
       }

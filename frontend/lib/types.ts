@@ -65,6 +65,7 @@ export interface LeagueInfo {
   name: string;
   short_name: string | null;
   country: string;
+  logo_url: string | null;
 }
 
 export interface LeagueGroup {

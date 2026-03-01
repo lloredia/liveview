@@ -50,6 +50,7 @@ async def list_leagues(
                 LeagueORM.name,
                 LeagueORM.short_name,
                 LeagueORM.country,
+                LeagueORM.logo_url,
                 SportORM.sport_type,
                 SportORM.name.label("sport_display"),
             )
@@ -73,6 +74,7 @@ async def list_leagues(
             "name": row.name,
             "short_name": row.short_name,
             "country": row.country,
+            "logo_url": row.logo_url,
         })
 
     return list(sports.values())

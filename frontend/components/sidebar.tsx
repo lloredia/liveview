@@ -19,9 +19,9 @@ interface SidebarProps {
   onTodayClick?: () => void;
 }
 
-function LeagueLogo({ name, size = 16 }: { name: string; size?: number }) {
+function LeagueLogo({ name, apiLogoUrl, size = 16 }: { name: string; apiLogoUrl?: string | null; size?: number }) {
   const [err, setErr] = useState(false);
-  const url = getLeagueLogo(name);
+  const url = getLeagueLogo(name, apiLogoUrl);
   if (!url || err) return null;
   return (
     <img
@@ -163,7 +163,7 @@ function LeagueButton({
         }
       `}
     >
-      <LeagueLogo name={league.short_name || league.name} />
+      <LeagueLogo name={league.short_name || league.name} apiLogoUrl={league.logo_url} />
       <span className="flex-1 truncate text-[12px]">{league.short_name || league.name}</span>
 
       {liveCount > 0 && (

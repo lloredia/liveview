@@ -90,9 +90,9 @@ function formatDateISO(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function LeagueLogo({ name }: { name: string }) {
+function LeagueLogo({ name, apiLogoUrl }: { name: string; apiLogoUrl?: string | null }) {
   const [err, setErr] = useState(false);
-  const url = getLeagueLogo(name);
+  const url = getLeagueLogo(name, apiLogoUrl);
   if (!url || err) return null;
   return (
     <img
@@ -420,7 +420,7 @@ export function TodayView({
                 onClick={() => onLeagueSelect(league.league_id)}
                 className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
               >
-                <LeagueLogo name={league.league_name} />
+                <LeagueLogo name={league.league_name} apiLogoUrl={league.league_logo_url} />
                 <span className="text-[12px] font-bold text-text-secondary">
                   {league.league_name}
                 </span>

@@ -6,6 +6,7 @@ import { fetchLiveMatches } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
+import { TeamLogo } from "./team-logo";
 import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
 interface LiveTickerProps {
@@ -49,6 +50,7 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
       className="flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
       aria-label={`${match.home_team.short_name} ${match.score.home} ${match.score.away} ${match.away_team.short_name}, live`}
     >
+      <TeamLogo url={match.home_team.logo_url} name={match.home_team.short_name} size={14} />
       <span className="font-medium">{match.home_team.short_name}</span>
       <span className={scoreClass}>
         <TickerScore value={match.score.home} />
@@ -56,6 +58,7 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
         <TickerScore value={match.score.away} />
       </span>
       <span className="font-medium">{match.away_team.short_name}</span>
+      <TeamLogo url={match.away_team.logo_url} name={match.away_team.short_name} size={14} />
       <span className="rounded bg-accent-red/15 px-1 py-px text-[8px] font-bold text-accent-red">
         {phaseShortLabelWithClock(match.phase, match.clock)}
       </span>

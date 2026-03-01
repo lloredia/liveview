@@ -42,34 +42,58 @@ logger = get_logger(__name__)
 # ESPN league slugs mapped to our sport types
 ESPN_LEAGUES: list[dict[str, str]] = [
     # Soccer
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.1", "name": "Premier League", "country": "England"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "usa.1", "name": "MLS", "country": "USA"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "esp.1", "name": "La Liga", "country": "Spain"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ger.1", "name": "Bundesliga", "country": "Germany"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ita.1", "name": "Serie A", "country": "Italy"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "fra.1", "name": "Ligue 1", "country": "France"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.champions", "name": "Champions League", "country": "Europe"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa", "name": "Europa League", "country": "Europe"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa.conf", "name": "Conference League", "country": "Europe"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.2", "name": "Championship", "country": "England"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.fa", "name": "FA Cup", "country": "England"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.league_cup", "name": "EFL Cup", "country": "England"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ned.1", "name": "Eredivisie", "country": "Netherlands"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "por.1", "name": "Liga Portugal", "country": "Portugal"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "tur.1", "name": "Turkish Super Lig", "country": "Turkey"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland"},
-    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.1", "name": "Premier League", "country": "England",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "usa.1", "name": "MLS", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/19.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "esp.1", "name": "La Liga", "country": "Spain",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ger.1", "name": "Bundesliga", "country": "Germany",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ita.1", "name": "Serie A", "country": "Italy",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "fra.1", "name": "Ligue 1", "country": "France",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.champions", "name": "Champions League", "country": "Europe",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa", "name": "Europa League", "country": "Europe",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/2310.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "uefa.europa.conf", "name": "Conference League", "country": "Europe",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/20001.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.2", "name": "Championship", "country": "England",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/24.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.fa", "name": "FA Cup", "country": "England",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/34.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "eng.league_cup", "name": "EFL Cup", "country": "England",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/35.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "ned.1", "name": "Eredivisie", "country": "Netherlands",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "por.1", "name": "Liga Portugal", "country": "Portugal",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "tur.1", "name": "Turkish Super Lig", "country": "Turkey",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sco.1", "name": "Scottish Premiership", "country": "Scotland",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/29.png"},
+    {"sport": "soccer", "espn_sport": "soccer", "espn_league": "sau.1", "name": "Saudi Pro League", "country": "Saudi Arabia",
+     "logo_url": "https://a.espncdn.com/i/leaguelogos/soccer/500/2369.png"},
     # Basketball
-    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA"},
-    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "wnba", "name": "WNBA", "country": "USA"},
-    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "mens-college-basketball", "name": "NCAAM", "country": "USA"},
-    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "womens-college-basketball", "name": "NCAAW", "country": "USA"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "nba", "name": "NBA", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "wnba", "name": "WNBA", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/wnba.png"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "mens-college-basketball", "name": "NCAAM", "country": "USA",
+     "logo_url": "https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-basketball.png"},
+    {"sport": "basketball", "espn_sport": "basketball", "espn_league": "womens-college-basketball", "name": "NCAAW", "country": "USA",
+     "logo_url": "https://a.espncdn.com/redesign/assets/img/icons/ESPN-icon-basketball.png"},
     # Hockey
-    {"sport": "hockey", "espn_sport": "hockey", "espn_league": "nhl", "name": "NHL", "country": "USA"},
+    {"sport": "hockey", "espn_sport": "hockey", "espn_league": "nhl", "name": "NHL", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png"},
     # Baseball
-    {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA"},
+    {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png"},
     # Football
-    {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA"},
+    {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA",
+     "logo_url": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"},
 ]
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
@@ -133,10 +157,19 @@ async def seed_date(
         if not events:
             continue
 
+        # Try to extract league logo from ESPN API response as fallback
+        league_logo = league_cfg.get("logo_url", "")
+        api_leagues = data.get("leagues", [])
+        if api_leagues and not league_logo:
+            logos = api_leagues[0].get("logos", [])
+            if logos and isinstance(logos, list) and isinstance(logos[0], dict):
+                league_logo = logos[0].get("href", league_logo)
+
         async with db.write_session() as session:
             league_id = await _upsert_league(
                 session, sport_id, league_cfg["name"],
                 league_cfg["country"], league_cfg["espn_league"],
+                logo_url=league_logo,
             )
             total_leagues += 1
 
@@ -200,6 +233,7 @@ async def seed() -> None:
                     await _upsert_league(
                         session, sport_id, league_cfg["name"],
                         league_cfg["country"], league_cfg["espn_league"],
+                        logo_url=league_cfg.get("logo_url", ""),
                     )
         print("  All leagues ensured (including NFL when Football sport exists).")
         print()
@@ -240,9 +274,9 @@ async def _upsert_league(
     name: str,
     country: str,
     espn_league_id: str,
+    logo_url: str = "",
 ) -> uuid.UUID:
     """Create or get an existing league. Returns league UUID."""
-    # Check if exists
     stmt = select(LeagueORM).where(
         LeagueORM.sport_id == sport_id,
         LeagueORM.name == name,
@@ -251,6 +285,8 @@ async def _upsert_league(
     existing = result.scalar_one_or_none()
     if existing:
         league_id = existing.id
+        if logo_url and not existing.logo_url:
+            existing.logo_url = logo_url
     else:
         league_id = uuid.uuid4()
         session.add(LeagueORM(
@@ -259,6 +295,7 @@ async def _upsert_league(
             name=name,
             short_name=name,
             country=country,
+            logo_url=logo_url or None,
         ))
         await session.flush()
 
@@ -301,6 +338,11 @@ async def _upsert_team(
     existing_id = mapping_result.scalar_one_or_none()
 
     if existing_id:
+        if logo_url:
+            team_stmt = select(TeamORM).where(TeamORM.id == existing_id)
+            team = (await session.execute(team_stmt)).scalar_one_or_none()
+            if team and not team.logo_url:
+                team.logo_url = logo_url
         return existing_id
 
     team_id = uuid.uuid4()
