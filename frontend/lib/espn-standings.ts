@@ -60,6 +60,26 @@ export function isSoccerCompetition(leagueName: string): boolean {
 const ESPN_V2 = "/api/espn/v2";
 const ESPN_SITE = "/api/espn/site";
 
+// ── Team logo resolution ────────────────────────────────────────────
+
+const ESPN_CDN = "https://a.espncdn.com/i/teamlogos/soccer/500";
+
+function resolveTeamLogo(
+  team: Record<string, unknown>,
+  teamId?: string,
+): string | null {
+  const directLogo = team.logo as string | undefined;
+  if (directLogo) return directLogo;
+
+  const logosArr = (team.logos as Array<{ href: string }>) ?? [];
+  if (logosArr.length > 0 && logosArr[0]?.href) return logosArr[0].href;
+
+  const id = teamId || (team.id as string) || "";
+  if (id) return `${ESPN_CDN}/${id}.png`;
+
+  return null;
+}
+
 // ── Table standings ─────────────────────────────────────────────────
 
 function parseStandingsEntry(entry: Record<string, unknown>): StandingsRow {
@@ -73,7 +93,7 @@ function parseStandingsEntry(entry: Record<string, unknown>): StandingsRow {
   return {
     position: 0,
     teamName: (team.displayName as string) || (team.name as string) || "Unknown",
-    teamLogo: ((team.logos as Array<{ href: string }>) ?? [])[0]?.href ?? null,
+    teamLogo: resolveTeamLogo(team),
     teamAbbr: (team.abbreviation as string) || "",
     gamesPlayed: stats["gamesPlayed"] ?? stats["GP"] ?? 0,
     wins: stats["wins"] ?? stats["W"] ?? 0,
@@ -219,14 +239,12 @@ function isTBDTeam(team: Record<string, unknown>): boolean {
 function parseKnockoutTeam(competitor: Record<string, unknown>): KnockoutTeam {
   const team = (competitor.team ?? {}) as Record<string, unknown>;
   const name = (team.displayName as string) || (team.name as string) || "TBD";
+  const teamId = (competitor.id as string) || (team.id as string) || "";
   return {
-    id: (competitor.id as string) || (team.id as string) || "",
+    id: teamId,
     name,
     abbreviation: (team.abbreviation as string) || name.slice(0, 3).toUpperCase(),
-    logo:
-      (team.logo as string) ||
-      ((team.logos as Array<{ href: string }>) ?? [])[0]?.href ||
-      null,
+    logo: resolveTeamLogo(team, teamId),
     isTBD: isTBDTeam(team),
   };
 }
