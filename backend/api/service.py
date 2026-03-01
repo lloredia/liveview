@@ -28,7 +28,6 @@ def main() -> None:
         ws_ping_timeout=10.0,
         timeout_keep_alive=30,
         limit_concurrency=1000,
-        limit_max_requests=50000,
     )
 
 
