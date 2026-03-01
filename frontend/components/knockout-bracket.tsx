@@ -13,11 +13,11 @@ import type {
 
 // ── Layout constants ────────────────────────────────────────────────
 
-const CARD_H = 82;
-const BASE_GAP = 16;
-const COL_W = 240;
+const CARD_H = 84;
+const BASE_GAP = 14;
+const COL_W = 220;
 const CONN_W = 44;
-const HEADER_H = 38;
+const HEADER_H = 32;
 
 // ── Position computation ────────────────────────────────────────────
 
@@ -42,9 +42,7 @@ function computePositions(rounds: KnockoutRound[]): number[][] {
       for (let i = 0; i < curr; i++) {
         const topIdx = i * 2;
         const bottomIdx = Math.min(i * 2 + 1, prevCount - 1);
-        const topY = prev[topIdx];
-        const bottomY = prev[bottomIdx];
-        p.push((topY + bottomY) / 2);
+        p.push((prev[topIdx] + prev[bottomIdx]) / 2);
       }
       positions.push(p);
     } else {
@@ -92,10 +90,13 @@ export function KnockoutBracket({ bracket, leagueName }: KnockoutBracketProps) {
         {bracket.rounds.map((round, ri) => {
           const roundPos = positions[ri] ?? [];
           const isFinal = ri === bracket.rounds.length - 1;
-          const xOffset = ri * (COL_W + CONN_W);
 
           return (
-            <div key={round.slug} className="flex-shrink-0" style={{ width: COL_W + (ri < bracket.rounds.length - 1 ? CONN_W : 0) }}>
+            <div
+              key={round.slug}
+              className="flex-shrink-0"
+              style={{ width: COL_W + (ri < bracket.rounds.length - 1 ? CONN_W : 0) }}
+            >
               {/* Round header */}
               <div className="mb-1 text-center" style={{ width: COL_W }}>
                 <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-tertiary">
@@ -103,45 +104,41 @@ export function KnockoutBracket({ bracket, leagueName }: KnockoutBracketProps) {
                 </div>
               </div>
 
-              <div className="relative flex" style={{ width: COL_W + (ri < bracket.rounds.length - 1 ? CONN_W : 0) }}>
+              <div
+                className="relative flex"
+                style={{ width: COL_W + (ri < bracket.rounds.length - 1 ? CONN_W : 0) }}
+              >
                 {/* Cards */}
                 <div className="relative" style={{ width: COL_W, height: totalH - HEADER_H }}>
                   {round.ties.length > 0 ? (
-                    round.ties.map((tie, ti) => {
-                      const top = roundPos[ti] ?? 0;
-                      return (
-                        <div
-                          key={ti}
-                          className="absolute left-0 right-0"
-                          style={{ top, height: CARD_H }}
-                        >
-                          <MatchCard
-                            tie={tie}
-                            leagueName={leagueName}
-                            isFinal={isFinal}
-                            prevRoundName={ri > 0 ? bracket.rounds[ri - 1].displayName : undefined}
-                          />
-                        </div>
-                      );
-                    })
+                    round.ties.map((tie, ti) => (
+                      <div
+                        key={ti}
+                        className="absolute left-0 right-0"
+                        style={{ top: roundPos[ti] ?? 0, height: CARD_H }}
+                      >
+                        <VsCard
+                          tie={tie}
+                          leagueName={leagueName}
+                          isFinal={isFinal}
+                          prevRoundName={ri > 0 ? bracket.rounds[ri - 1].displayName : undefined}
+                        />
+                      </div>
+                    ))
                   ) : (
                     <div
                       className="absolute left-0 right-0"
                       style={{ top: roundPos[0] ?? 0, height: CARD_H }}
                     >
-                      <TBDCard
-                        prevRoundName={ri > 0 ? bracket.rounds[ri - 1].displayName : undefined}
-                        index={0}
-                      />
+                      <TBDCard prevRoundName={ri > 0 ? bracket.rounds[ri - 1].displayName : undefined} index={0} />
                     </div>
                   )}
 
-                  {/* Trophy for final */}
                   {isFinal && (
                     <div
                       className="absolute flex items-center justify-center"
                       style={{
-                        top: (roundPos[0] ?? 0) - 56,
+                        top: (roundPos[0] ?? 0) - 52,
                         left: "50%",
                         transform: "translateX(-50%)",
                       }}
@@ -190,7 +187,6 @@ function BracketConnector({
   const midY = (pos: number) => pos + CARD_H / 2;
   const w = CONN_W;
   const halfW = w / 2;
-
   const paths: string[] = [];
 
   if (rightCount > 0 && leftCount > 0) {
@@ -210,8 +206,6 @@ function BracketConnector({
         if (topIdx < leftPositions.length && bottomIdx < leftPositions.length) {
           const topY = midY(leftPositions[topIdx]);
           const bottomY = midY(leftPositions[bottomIdx]);
-
-          // Top card → horizontal → vertical → horizontal to next
           paths.push(`M 0 ${topY} L ${halfW} ${topY} L ${halfW} ${bottomY} L 0 ${bottomY}`);
           paths.push(`M ${halfW} ${rightY} L ${w} ${rightY}`);
         } else if (topIdx < leftPositions.length) {
@@ -223,29 +217,17 @@ function BracketConnector({
   }
 
   return (
-    <svg
-      width={w}
-      height={height}
-      viewBox={`0 0 ${w} ${height}`}
-      fill="none"
-      className="block"
-    >
+    <svg width={w} height={height} viewBox={`0 0 ${w} ${height}`} fill="none" className="block">
       {paths.map((d, i) => (
-        <path
-          key={i}
-          d={d}
-          stroke="#d1d5db"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
+        <path key={i} d={d} stroke="#d1d5db" strokeWidth={1.5} strokeLinecap="round" />
       ))}
     </svg>
   );
 }
 
-// ── Match card (UEFA-style) ─────────────────────────────────────────
+// ── VS card (icon vs icon) ──────────────────────────────────────────
 
-function MatchCard({
+function VsCard({
   tie,
   leagueName,
   isFinal,
@@ -257,12 +239,24 @@ function MatchCard({
   prevRoundName?: string;
 }) {
   const bothTBD = tie.teamA.isTBD && tie.teamB.isTBD;
+  if (bothTBD) return <TBDCard prevRoundName={prevRoundName} index={0} />;
 
-  if (bothTBD) {
-    return <TBDCard prevRoundName={prevRoundName} index={0} />;
-  }
+  const scoreA = getTeamScore(tie, "A");
+  const scoreB = getTeamScore(tie, "B");
+  const hasScore = scoreA !== null && scoreB !== null;
+  const winnerA = tie.completed && tie.winner === "A";
+  const winnerB = tie.completed && tie.winner === "B";
 
-  return (
+  const canLink =
+    tie.legs.length > 0 &&
+    !tie.teamA.isTBD &&
+    !tie.teamB.isTBD &&
+    tie.legs.some((l) => l.status !== "STATUS_SCHEDULED");
+
+  const statusInfo = getStatusInfo(tie);
+  const aggLabel = buildAggLabel(tie);
+
+  const card = (
     <div
       className={`flex h-full flex-col overflow-hidden rounded-lg border bg-surface-card ${
         isFinal
@@ -270,140 +264,80 @@ function MatchCard({
           : "border-surface-border shadow-sm"
       } transition-shadow hover:shadow-md`}
     >
-      <CardHeader tie={tie} />
-      <div className="flex flex-1 flex-col">
-        <TeamRow team={tie.teamA} side="A" tie={tie} leagueName={leagueName} />
-        <div className="mx-2 h-px bg-surface-border/50" />
-        <TeamRow team={tie.teamB} side="B" tie={tie} leagueName={leagueName} />
-      </div>
-    </div>
-  );
-}
-
-// ── Card header ─────────────────────────────────────────────────────
-
-function CardHeader({ tie }: { tie: KnockoutTie }) {
-  const anyLive = tie.legs.some(
-    (l) => l.status === "STATUS_IN_PROGRESS" || l.status === "STATUS_HALFTIME",
-  );
-  const allScheduled = tie.legs.every((l) => l.status === "STATUS_SCHEDULED");
-  const hasAggregate = tie.isTwoLegged && tie.aggregateA != null && tie.aggregateB != null;
-
-  let statusLabel: string;
-  let statusColor: string;
-
-  if (anyLive) {
-    statusLabel = "Live";
-    statusColor = "text-accent-red";
-  } else if (tie.completed) {
-    statusLabel = "Full time";
-    statusColor = "text-text-muted";
-  } else if (allScheduled && tie.legs.length > 0) {
-    const next = tie.legs.find((l) => l.status === "STATUS_SCHEDULED");
-    statusLabel = next ? formatDate(next.date) : "Scheduled";
-    statusColor = "text-text-secondary";
-  } else if (tie.legs.some((l) => l.status === "STATUS_FULL_TIME")) {
-    statusLabel = tie.isTwoLegged ? "1st leg played" : "Full time";
-    statusColor = "text-text-muted";
-  } else {
-    statusLabel = "";
-    statusColor = "text-text-muted";
-  }
-
-  const aggLabel = buildAggLabel(tie);
-
-  return (
-    <div className="flex items-start justify-between px-2.5 py-1">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          {anyLive && (
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
-            </span>
-          )}
-          <span className={`text-[10px] font-medium ${statusColor}`}>{statusLabel}</span>
+      {/* Main: Logo vs Logo */}
+      <div className="flex flex-1 items-center justify-center gap-3 px-3">
+        {/* Team A */}
+        <div className="flex flex-col items-center gap-0.5" style={{ minWidth: 56 }}>
+          <div className={`rounded-full p-0.5 ${winnerA ? "ring-2 ring-accent-green/50" : ""}`}>
+            <TeamLogo url={tie.teamA.logo} name={tie.teamA.abbreviation} size={34} />
+          </div>
+          <span
+            className={`max-w-[64px] truncate text-center text-[10px] leading-tight ${
+              winnerA ? "font-bold text-text-primary" : winnerB ? "text-text-muted" : "font-medium text-text-primary"
+            }`}
+          >
+            {tie.teamA.isTBD ? "TBD" : tie.teamA.abbreviation}
+          </span>
         </div>
+
+        {/* Score / VS */}
+        <div className="flex flex-col items-center">
+          {hasScore ? (
+            <div className="flex items-center gap-1">
+              <span
+                className={`text-[18px] tabular-nums ${
+                  winnerA ? "font-bold text-text-primary" : "font-semibold text-text-secondary"
+                }`}
+              >
+                {scoreA}
+              </span>
+              <span className="text-[12px] text-text-muted">-</span>
+              <span
+                className={`text-[18px] tabular-nums ${
+                  winnerB ? "font-bold text-text-primary" : "font-semibold text-text-secondary"
+                }`}
+              >
+                {scoreB}
+              </span>
+            </div>
+          ) : (
+            <span className="text-[12px] font-semibold uppercase text-text-muted">vs</span>
+          )}
+        </div>
+
+        {/* Team B */}
+        <div className="flex flex-col items-center gap-0.5" style={{ minWidth: 56 }}>
+          <div className={`rounded-full p-0.5 ${winnerB ? "ring-2 ring-accent-green/50" : ""}`}>
+            <TeamLogo url={tie.teamB.logo} name={tie.teamB.abbreviation} size={34} />
+          </div>
+          <span
+            className={`max-w-[64px] truncate text-center text-[10px] leading-tight ${
+              winnerB ? "font-bold text-text-primary" : winnerA ? "text-text-muted" : "font-medium text-text-primary"
+            }`}
+          >
+            {tie.teamB.isTBD ? "TBD" : tie.teamB.abbreviation}
+          </span>
+        </div>
+      </div>
+
+      {/* Footer: status + aggregate */}
+      <div className="flex items-center justify-center gap-1.5 border-t border-surface-border/40 bg-surface-hover/30 px-2 py-1">
+        {statusInfo.isLive && (
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+          </span>
+        )}
+        <span className={`text-[10px] font-medium ${statusInfo.color}`}>
+          {statusInfo.label}
+        </span>
         {aggLabel && (
-          <div className="text-[9px] font-semibold text-text-tertiary">{aggLabel}</div>
+          <>
+            <span className="text-[10px] text-text-muted">·</span>
+            <span className="text-[10px] font-semibold text-text-tertiary">{aggLabel}</span>
+          </>
         )}
       </div>
-      {/* Info dot */}
-      <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-accent-blue/10">
-        <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-          <circle cx="4" cy="2" r="0.8" fill="currentColor" className="text-accent-blue" />
-          <rect x="3.2" y="3.2" width="1.6" height="3.2" rx="0.4" fill="currentColor" className="text-accent-blue" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function buildAggLabel(tie: KnockoutTie): string | null {
-  if (!tie.isTwoLegged || tie.aggregateA == null || tie.aggregateB == null) return null;
-
-  const agg = `Agg: ${tie.aggregateA}-${tie.aggregateB}`;
-  if (!tie.completed || !tie.winner) return agg;
-
-  const winnerTeam = tie.winner === "A" ? tie.teamA : tie.teamB;
-  const shortName = winnerTeam.abbreviation || winnerTeam.name.split(" ").pop() || "";
-  return `${agg} ${shortName} win`;
-}
-
-// ── Team row ────────────────────────────────────────────────────────
-
-function TeamRow({
-  team,
-  side,
-  tie,
-  leagueName,
-}: {
-  team: KnockoutTeam;
-  side: "A" | "B";
-  tie: KnockoutTie;
-  leagueName: string;
-}) {
-  const isWinner = tie.completed && tie.winner === side;
-  const isLoser = tie.completed && tie.winner !== null && tie.winner !== side;
-  const score = getTeamScore(tie, side);
-  const canLink =
-    tie.legs.length > 0 &&
-    !team.isTBD &&
-    tie.legs.some(
-      (l) => l.status !== "STATUS_SCHEDULED",
-    );
-
-  const row = (
-    <div
-      className={`flex items-center gap-2 px-2.5 py-1.5 transition-colors ${
-        canLink ? "cursor-pointer hover:bg-surface-hover/40" : ""
-      }`}
-    >
-      <TeamLogo url={team.logo} name={team.abbreviation} size={22} />
-      <span
-        className={`flex-1 truncate text-[12px] leading-tight ${
-          team.isTBD
-            ? "italic text-text-muted"
-            : isWinner
-              ? "font-bold text-text-primary"
-              : isLoser
-                ? "font-normal text-text-muted"
-                : "font-medium text-text-primary"
-        }`}
-      >
-        {team.name}
-      </span>
-      <span
-        className={`min-w-[20px] text-right font-mono text-[13px] tabular-nums ${
-          isWinner
-            ? "font-bold text-text-primary"
-            : isLoser
-              ? "text-text-muted"
-              : "font-medium text-text-secondary"
-        }`}
-      >
-        {score ?? "-"}
-      </span>
     </div>
   );
 
@@ -411,14 +345,14 @@ function TeamRow({
     return (
       <Link
         href={`/match/${tie.legs[0].eventId}?league=${encodeURIComponent(leagueName)}`}
-        className="block"
+        className="block h-full"
       >
-        {row}
+        {card}
       </Link>
     );
   }
 
-  return row;
+  return card;
 }
 
 // ── TBD placeholder card ────────────────────────────────────────────
@@ -430,18 +364,31 @@ function TBDCard({
   prevRoundName?: string;
   index: number;
 }) {
-  const label1 = prevRoundName
-    ? `Winners of ${prevRoundName} ${index * 2 + 1}`
-    : "TBD";
-  const label2 = prevRoundName
-    ? `Winners of ${prevRoundName} ${index * 2 + 2}`
-    : "TBD";
-
   return (
-    <div className="flex h-full flex-col items-stretch justify-center rounded-lg border-2 border-dashed border-indigo-300/40 bg-surface-card/50 px-3">
-      <div className="truncate py-1.5 text-[11px] text-text-muted">{label1}</div>
-      <div className="mx-1 h-px bg-surface-border/30" />
-      <div className="truncate py-1.5 text-[11px] text-text-muted">{label2}</div>
+    <div className="flex h-full items-center justify-center rounded-lg border-2 border-dashed border-indigo-300/40 bg-surface-card/50 px-3">
+      <div className="flex items-center gap-3">
+        {/* Placeholder A */}
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full border-2 border-dashed border-surface-border/50 bg-surface-hover/40">
+            <span className="text-[10px] text-text-muted">?</span>
+          </div>
+          <span className="max-w-[56px] truncate text-center text-[9px] text-text-muted">
+            {prevRoundName ? `W${index * 2 + 1}` : "TBD"}
+          </span>
+        </div>
+
+        <span className="text-[11px] font-medium text-text-muted">vs</span>
+
+        {/* Placeholder B */}
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full border-2 border-dashed border-surface-border/50 bg-surface-hover/40">
+            <span className="text-[10px] text-text-muted">?</span>
+          </div>
+          <span className="max-w-[56px] truncate text-center text-[9px] text-text-muted">
+            {prevRoundName ? `W${index * 2 + 2}` : "TBD"}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -451,8 +398,8 @@ function TBDCard({
 function TrophyIcon() {
   return (
     <svg
-      width="48"
-      height="48"
+      width="44"
+      height="44"
       viewBox="0 0 48 48"
       fill="none"
       className="text-amber-400 drop-shadow-lg"
@@ -474,10 +421,50 @@ function TrophyIcon() {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+function getStatusInfo(tie: KnockoutTie): { label: string; color: string; isLive: boolean } {
+  const anyLive = tie.legs.some(
+    (l) => l.status === "STATUS_IN_PROGRESS" || l.status === "STATUS_HALFTIME",
+  );
+  const allScheduled = tie.legs.every((l) => l.status === "STATUS_SCHEDULED");
+
+  if (anyLive) {
+    const live = tie.legs.find(
+      (l) => l.status === "STATUS_IN_PROGRESS" || l.status === "STATUS_HALFTIME",
+    );
+    return { label: live?.statusDetail || "LIVE", color: "text-accent-red", isLive: true };
+  }
+  if (tie.completed) {
+    return { label: "Full time", color: "text-text-muted", isLive: false };
+  }
+  if (allScheduled && tie.legs.length > 0) {
+    const next = tie.legs.find((l) => l.status === "STATUS_SCHEDULED");
+    return {
+      label: next ? formatDate(next.date) : "Scheduled",
+      color: "text-text-secondary",
+      isLive: false,
+    };
+  }
+  if (tie.legs.some((l) => l.status === "STATUS_FULL_TIME")) {
+    return {
+      label: tie.isTwoLegged ? "1st leg played" : "Full time",
+      color: "text-text-muted",
+      isLive: false,
+    };
+  }
+  return { label: "TBD", color: "text-text-muted", isLive: false };
+}
+
+function buildAggLabel(tie: KnockoutTie): string | null {
+  if (!tie.isTwoLegged || tie.aggregateA == null || tie.aggregateB == null) return null;
+  const agg = `Agg ${tie.aggregateA}-${tie.aggregateB}`;
+  if (!tie.completed || !tie.winner) return agg;
+  const winner = tie.winner === "A" ? tie.teamA : tie.teamB;
+  return `${agg} ${winner.abbreviation} win`;
+}
+
 function getTeamScore(tie: KnockoutTie, side: "A" | "B"): string | null {
   if (tie.legs.length === 0) return null;
-  const allScheduled = tie.legs.every((l) => l.status === "STATUS_SCHEDULED");
-  if (allScheduled) return null;
+  if (tie.legs.every((l) => l.status === "STATUS_SCHEDULED")) return null;
 
   if (tie.isTwoLegged && tie.aggregateA != null && tie.aggregateB != null) {
     return side === "A" ? String(tie.aggregateA) : String(tie.aggregateB);
@@ -485,7 +472,6 @@ function getTeamScore(tie: KnockoutTie, side: "A" | "B"): string | null {
 
   const leg = tie.legs[0];
   if (!leg || leg.status === "STATUS_SCHEDULED") return null;
-
   const team = side === "A" ? tie.teamA : tie.teamB;
   if (leg.homeTeam.id === team.id) return String(leg.homeScore);
   if (leg.awayTeam.id === team.id) return String(leg.awayScore);
