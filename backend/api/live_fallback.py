@@ -49,6 +49,7 @@ TSDB_STATUS_TO_PHASE: dict[str, MatchPhase] = {
     "postponed": MatchPhase.POSTPONED, "cancelled": MatchPhase.CANCELLED,
     "q1": MatchPhase.LIVE_Q1, "q2": MatchPhase.LIVE_Q2,
     "q3": MatchPhase.LIVE_Q3, "q4": MatchPhase.LIVE_Q4,
+    "h1": MatchPhase.LIVE_H1, "h2": MatchPhase.LIVE_H2,
     "p1": MatchPhase.LIVE_P1, "p2": MatchPhase.LIVE_P2,
     "p3": MatchPhase.LIVE_P3, "ot": MatchPhase.LIVE_OT,
 }

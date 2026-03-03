@@ -24,6 +24,8 @@ class MatchPhase(str, Enum):
     LIVE_Q2 = "live_q2"
     LIVE_Q3 = "live_q3"
     LIVE_Q4 = "live_q4"
+    LIVE_H1 = "live_h1"
+    LIVE_H2 = "live_h2"
     LIVE_OT = "live_ot"
     LIVE_P1 = "live_p1"
     LIVE_P2 = "live_p2"

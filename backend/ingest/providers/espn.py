@@ -83,8 +83,12 @@ def _parse_soccer_clock_minute(clock: str) -> Optional[int]:
     return int(simple.group(1)) if simple else None
 
 
+HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
+
+
 def _parse_espn_phase(
-    status_type: str, status_detail: str, sport: Sport, display_clock: Optional[str] = None
+    status_type: str, status_detail: str, sport: Sport, display_clock: Optional[str] = None,
+    league_id: str = "",
 ) -> MatchPhase:
     """Map ESPN status codes to canonical MatchPhase."""
     status_type = status_type.lower()
@@ -112,7 +116,6 @@ def _parse_espn_phase(
                 return MatchPhase.LIVE_EXTRA_TIME
             if "penal" in detail:
                 return MatchPhase.LIVE_PENALTIES
-            # Default first half only if clock does not indicate a later period
             minute = _parse_soccer_clock_minute(display_clock or status_detail)
             if minute is not None:
                 if minute > 90:
@@ -122,6 +125,17 @@ def _parse_espn_phase(
             return MatchPhase.LIVE_FIRST_HALF
 
         if sport == Sport.BASKETBALL:
+            is_halves = league_id in HALVES_BASKETBALL_LEAGUES
+            if is_halves:
+                if "ot" in detail or "overtime" in detail:
+                    return MatchPhase.LIVE_OT
+                if "half" in detail and "time" in detail:
+                    return MatchPhase.LIVE_HALFTIME
+                if "half" in detail:
+                    return MatchPhase.BREAK
+                if "2nd" in detail:
+                    return MatchPhase.LIVE_H2
+                return MatchPhase.LIVE_H1
             if "1st" in detail:
                 return MatchPhase.LIVE_Q1
             if "2nd" in detail:
@@ -408,7 +422,7 @@ class ESPNProvider(BaseProvider):
         status_type = status.get("type", {}).get("name", "pre")
         status_detail = status.get("type", {}).get("detail", "")
         clock = status.get("displayClock", "")
-        phase = _parse_espn_phase(status_type, status_detail, sport, display_clock=clock)
+        phase = _parse_espn_phase(status_type, status_detail, sport, display_clock=clock, league_id=league_id)
 
         start_str = event.get("date", "")
         try:

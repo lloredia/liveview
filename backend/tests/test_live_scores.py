@@ -92,6 +92,41 @@ class TestResolvePhase:
     def test_soccer_extra_time(self) -> None:
         assert _resolve_phase("STATUS_IN_PROGRESS", 3, "soccer") == MatchPhase.LIVE_EXTRA_TIME
 
+    # NCAA Men's Basketball (halves)
+    def test_ncaam_h1(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 1, "basketball", "mens-college-basketball") == MatchPhase.LIVE_H1
+
+    def test_ncaam_h2(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 2, "basketball", "mens-college-basketball") == MatchPhase.LIVE_H2
+
+    def test_ncaam_ot(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 3, "basketball", "mens-college-basketball") == MatchPhase.LIVE_OT
+
+    def test_ncaam_halftime(self) -> None:
+        assert _resolve_phase("STATUS_HALFTIME", 1, "basketball", "mens-college-basketball") == MatchPhase.LIVE_HALFTIME
+
+    # NCAA Women's Basketball (quarters, control)
+    def test_ncaaw_q1(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 1, "basketball", "womens-college-basketball") == MatchPhase.LIVE_Q1
+
+    def test_ncaaw_q4(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 4, "basketball", "womens-college-basketball") == MatchPhase.LIVE_Q4
+
+    def test_ncaaw_ot(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 5, "basketball", "womens-college-basketball") == MatchPhase.LIVE_OT
+
+    # Regression: NBA without league_id still defaults to quarters
+    def test_nba_no_league_id_still_quarters(self) -> None:
+        assert _resolve_phase("STATUS_IN_PROGRESS", 1, "basketball") == MatchPhase.LIVE_Q1
+        assert _resolve_phase("STATUS_IN_PROGRESS", 4, "basketball") == MatchPhase.LIVE_Q4
+
+    # Regression: NCAA Men must NOT produce Q1-Q4
+    def test_ncaam_never_produces_quarter_phases(self) -> None:
+        quarter_phases = {MatchPhase.LIVE_Q1, MatchPhase.LIVE_Q2, MatchPhase.LIVE_Q3, MatchPhase.LIVE_Q4}
+        for period in range(1, 7):
+            phase = _resolve_phase("STATUS_IN_PROGRESS", period, "basketball", "mens-college-basketball")
+            assert phase not in quarter_phases, f"Period {period} produced {phase} for NCAAM"
+
 
 # ── TSDB fallback helpers ───────────────────────────────────────────────
 
@@ -107,6 +142,10 @@ class TestTSDBFallback:
         assert TSDB_STATUS_TO_PHASE.get("q1") == MatchPhase.LIVE_Q1
         assert TSDB_STATUS_TO_PHASE.get("q4") == MatchPhase.LIVE_Q4
         assert TSDB_STATUS_TO_PHASE.get("ot") == MatchPhase.LIVE_OT
+
+    def test_status_mapping_halves(self) -> None:
+        assert TSDB_STATUS_TO_PHASE.get("h1") == MatchPhase.LIVE_H1
+        assert TSDB_STATUS_TO_PHASE.get("h2") == MatchPhase.LIVE_H2
 
     def test_league_map_has_all_sports(self) -> None:
         assert "nba" in TSDB_LEAGUE_MAP

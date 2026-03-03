@@ -75,6 +75,11 @@ BASKETBALL_QUARTER_PHASE = {
     1: MatchPhase.LIVE_Q1, 2: MatchPhase.LIVE_Q2,
     3: MatchPhase.LIVE_Q3, 4: MatchPhase.LIVE_Q4,
 }
+BASKETBALL_HALF_PHASE = {
+    1: MatchPhase.LIVE_H1, 2: MatchPhase.LIVE_H2,
+}
+HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
+
 HOCKEY_PERIOD_PHASE = {
     1: MatchPhase.LIVE_P1, 2: MatchPhase.LIVE_P2, 3: MatchPhase.LIVE_P3,
 }
@@ -222,7 +227,7 @@ async def _refresh_live_scores(
             resp.raise_for_status()
             data = resp.json()
             events = data.get("events", [])
-            updated += await _apply_espn_events(db, events, sport)
+            updated += await _apply_espn_events(db, events, sport, espn_league_id)
             espn_ok = True
         except Exception as exc:
             LIVE_REFRESH_ERRORS.labels(provider="espn", league=espn_league_id).inc()
@@ -231,7 +236,7 @@ async def _refresh_live_scores(
             retry_data = await espn_retry(client, path, backoff_s=2.0)
             if retry_data:
                 events = retry_data.get("events", [])
-                espn_count = await _apply_espn_events(db, events, sport)
+                espn_count = await _apply_espn_events(db, events, sport, espn_league_id)
                 updated += espn_count
                 espn_ok = True
                 LIVE_REFRESH_UPDATES.labels(provider="espn").inc(espn_count)
@@ -262,8 +267,8 @@ async def _refresh_live_scores(
             pass
 
 
-def _resolve_phase(espn_status: str, period_num: int, sport: str) -> MatchPhase:
-    """Map ESPN status + period + sport to the correct MatchPhase."""
+def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id: str = "") -> MatchPhase:
+    """Map ESPN status + period + sport + league to the correct MatchPhase."""
     if espn_status in ("STATUS_FINAL", "STATUS_FULL_TIME"):
         return MatchPhase.FINISHED
     if espn_status == "STATUS_SCHEDULED":
@@ -279,8 +284,12 @@ def _resolve_phase(espn_status: str, period_num: int, sport: str) -> MatchPhase:
     if espn_status == "STATUS_END_PERIOD":
         return MatchPhase.BREAK
 
-    # STATUS_IN_PROGRESS — use sport + period for specificity
+    # STATUS_IN_PROGRESS — use sport + league + period for specificity
     if sport == "basketball":
+        if espn_league_id in HALVES_BASKETBALL_LEAGUES:
+            if period_num > 2:
+                return MatchPhase.LIVE_OT
+            return BASKETBALL_HALF_PHASE.get(period_num, MatchPhase.LIVE_H1)
         if period_num > 4:
             return MatchPhase.LIVE_OT
         return BASKETBALL_QUARTER_PHASE.get(period_num, MatchPhase.LIVE_Q1)
@@ -328,7 +337,7 @@ def _extract_team_stats(competitor: dict[str, Any]) -> dict[str, Any]:
     return stats
 
 
-async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer") -> int:
+async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:
     """Apply ESPN scoreboard events to our database. Returns count of updated matches."""
     if not events:
         return 0
@@ -395,7 +404,7 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     period_num = int(status_obj.get("period", 0))
                 except (ValueError, TypeError):
                     period_num = 0
-                phase = _resolve_phase(espn_status, period_num, sport)
+                phase = _resolve_phase(espn_status, period_num, sport, espn_league_id)
                 clock = status_obj.get("displayClock")
 
                 # Update match phase

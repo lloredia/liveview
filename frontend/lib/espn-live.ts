@@ -4,6 +4,8 @@
  * and clocks directly from ESPN's public scoreboard API.
  */
 
+import { isHalvesBasketball } from "./game-clock";
+
 const ESPN_BASE = "/api/espn/site";
 
 export interface ESPNLiveMatch {
@@ -44,6 +46,7 @@ function mapEspnPhase(
   statusName: string,
   statusDetail: string,
   sport: string,
+  leagueSlug: string = "",
 ): string {
   const st = statusName.toLowerCase();
   const detail = statusDetail.toLowerCase();
@@ -63,6 +66,13 @@ function mapEspnPhase(
       return "live_first_half";
     }
     if (sport === "basketball") {
+      if (isHalvesBasketball(leagueSlug)) {
+        if (detail.includes("ot") || detail.includes("overtime")) return "live_ot";
+        if (detail.includes("halftime")) return "break";
+        if (detail.includes("half") && detail.includes("time")) return "live_halftime";
+        if (detail.includes("2nd")) return "live_h2";
+        return "live_h1";
+      }
       if (detail.includes("halftime")) return "break";
       if (detail.includes("1st")) return "live_q1";
       if (detail.includes("2nd")) return "live_q2";
@@ -96,9 +106,16 @@ function mapEspnPhase(
   return "scheduled";
 }
 
-function mapPeriodLabel(statusDetail: string, sport: string): string | null {
+function mapPeriodLabel(statusDetail: string, sport: string, leagueSlug: string = ""): string | null {
   const detail = statusDetail.toLowerCase();
 
+  if (sport === "basketball" && isHalvesBasketball(leagueSlug)) {
+    if (detail.includes("1st")) return "1st Half";
+    if (detail.includes("2nd")) return "2nd Half";
+    if (detail.includes("ot") || detail.includes("overtime")) return "OT";
+    if (detail.includes("halftime")) return "Halftime";
+    return null;
+  }
   if (sport === "basketball" || sport === "football") {
     if (detail.includes("1st")) return "1st Quarter";
     if (detail.includes("2nd")) return "2nd Quarter";
@@ -180,7 +197,7 @@ export async function fetchESPNScoreboard(
       const statusDetail = status.type?.detail || "";
       const displayClock = status.displayClock || null;
 
-      let phase = mapEspnPhase(statusName, statusDetail, info.sport);
+      let phase = mapEspnPhase(statusName, statusDetail, info.sport, info.slug);
       // Soccer: if we defaulted to first half but clock shows >45', correct to second half or extra time
       if (info.sport === "soccer" && phase === "live_first_half") {
         const clockStr = (displayClock ?? statusDetail ?? "").toString().trim();
@@ -209,7 +226,7 @@ export async function fetchESPNScoreboard(
         awayScore: parseInt(away.score || "0", 10),
         phase,
         clock: displayClock,
-        period: mapPeriodLabel(statusDetail, info.sport),
+        period: mapPeriodLabel(statusDetail, info.sport, info.slug),
         detail: statusDetail,
         isLive,
         isFinished,

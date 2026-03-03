@@ -31,7 +31,10 @@ ESPN_STATUS_TO_PHASE: dict[str, str] = {
 }
 
 
-def _resolve_phase(espn_status: str, period: int, sport: str) -> str:
+HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
+
+
+def _resolve_phase(espn_status: str, period: int, sport: str, espn_league_id: str = "") -> str:
     if espn_status in ("STATUS_FINAL", "STATUS_FULL_TIME"):
         return "finished"
     if espn_status == "STATUS_SCHEDULED":
@@ -48,6 +51,10 @@ def _resolve_phase(espn_status: str, period: int, sport: str) -> str:
         return "break"
     if espn_status == "STATUS_IN_PROGRESS":
         if sport == "basketball":
+            if espn_league_id in HALVES_BASKETBALL_LEAGUES:
+                if period > 2:
+                    return "live_ot"
+                return {1: "live_h1", 2: "live_h2"}.get(period, "live_h1")
             if period > 4:
                 return "live_ot"
             return {1: "live_q1", 2: "live_q2", 3: "live_q3", 4: "live_q4"}.get(period, "live_q1")
