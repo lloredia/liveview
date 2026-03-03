@@ -8,6 +8,7 @@ import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
 import { TrackButton } from "./track-button";
+import { hapticSelection } from "@/lib/haptics";
 
 /* ── Animated score digit ─────────────────────────────────────────── */
 
@@ -125,6 +126,9 @@ interface MatchCardProps {
   compact?: boolean;
   pinned?: boolean;
   onTogglePin?: (matchId: string) => void;
+  /** Favorite team IDs — show star and highlight when match involves a favorite */
+  favoriteTeamIds?: string[];
+  onToggleFavoriteTeam?: (teamId: string) => void;
 }
 
 function buildMatchHref(matchId: string, leagueName?: string): string {
@@ -133,15 +137,50 @@ function buildMatchHref(matchId: string, leagueName?: string): string {
   return `${base}?league=${encodeURIComponent(leagueName.trim())}`;
 }
 
+function FavoriteStar({
+  teamId,
+  isFavorite,
+  onToggle,
+}: {
+  teamId: string;
+  isFavorite: boolean;
+  onToggle: (teamId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        hapticSelection();
+        onToggle(teamId);
+      }}
+      className="shrink-0 rounded p-0.5 text-text-muted hover:text-accent-amber focus:outline-none focus:ring-2 focus:ring-accent-amber/50"
+      aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+    >
+      {isFavorite ? (
+        <span className="text-[14px]" aria-hidden>★</span>
+      ) : (
+        <span className="text-[14px] opacity-60" aria-hidden>☆</span>
+      )}
+    </button>
+  );
+}
+
 export const MatchCard = memo(function MatchCard({
   match,
   leagueNameForLink,
   pinned = false,
   onTogglePin,
+  favoriteTeamIds = [],
+  onToggleFavoriteTeam,
 }: MatchCardProps) {
   const live = isLive(match.phase);
   const finished = match.phase === "finished";
   const scheduled = match.phase === "scheduled" || match.phase === "pre_match";
+  const homeFav = favoriteTeamIds.includes(match.home_team.id);
+  const awayFav = favoriteTeamIds.includes(match.away_team.id);
+  const hasFavorite = homeFav || awayFav;
 
   const prevScoreRef = useRef({ home: match.score.home, away: match.score.away });
   const [flash, setFlash] = useState(false);
@@ -168,6 +207,7 @@ export const MatchCard = memo(function MatchCard({
         hover:bg-glass-hover glass-press
         ${live ? "bg-accent-red/[0.03]" : ""}
         ${flash ? "score-flash" : ""}
+        ${hasFavorite ? "border-l-2 border-l-accent-amber/70" : ""}
       `}
       aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
     >
@@ -202,6 +242,13 @@ export const MatchCard = memo(function MatchCard({
 
       {/* Home team */}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pr-2">
+        {onToggleFavoriteTeam && (
+          <FavoriteStar
+            teamId={match.home_team.id}
+            isFavorite={homeFav}
+            onToggle={onToggleFavoriteTeam}
+          />
+        )}
         <span
           className={`truncate text-right text-body-sm ${
             !finished || match.score.home > match.score.away
@@ -264,6 +311,13 @@ export const MatchCard = memo(function MatchCard({
         >
           {match.away_team.name}
         </span>
+        {onToggleFavoriteTeam && (
+          <FavoriteStar
+            teamId={match.away_team.id}
+            isFavorite={awayFav}
+            onToggle={onToggleFavoriteTeam}
+          />
+        )}
       </div>
 
       {/* Track */}

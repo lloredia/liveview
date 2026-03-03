@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { hapticLightImpact } from "@/lib/haptics";
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
@@ -61,6 +62,7 @@ export function PullToRefresh({ onRefresh, children }: PullToRefreshProps) {
     if (pullDistance >= THRESHOLD && !refreshing) {
       setRefreshing(true);
       setPullDistance(THRESHOLD * 0.6);
+      hapticLightImpact().catch(() => {});
 
       try {
         await onRefresh();

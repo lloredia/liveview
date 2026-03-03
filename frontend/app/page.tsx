@@ -17,6 +17,11 @@ import { getPushPermission, subscribeToWebPush } from "@/lib/push-notifications"
 import { ensureDeviceRegistered } from "@/lib/device";
 import { trackGameOnServer, untrackGameOnServer } from "@/lib/notification-api";
 import { getFavoriteLeagues } from "@/lib/favorites";
+import { getFavoriteTeams } from "@/lib/favorite-teams";
+import { useOnlineStatus } from "@/hooks/use-online-status";
+import { OfflineBanner } from "@/components/offline-banner";
+import { ProviderAttribution } from "@/components/provider-attribution";
+import { hapticSelection } from "@/lib/haptics";
 import type { TodayResponse } from "@/components/today-view";
 
 function HomeContent() {
@@ -32,6 +37,7 @@ function HomeContent() {
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
+  const online = useOnlineStatus();
 
   useEffect(() => {
     setPinnedIds(getPinnedMatches());
@@ -137,6 +143,7 @@ function HomeContent() {
   }, []);
 
   const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
+  const [favTeamIds, setFavTeamIds] = useState<string[]>(() => getFavoriteTeams());
   useEffect(() => {
     setFavLeagueIds(getFavoriteLeagues());
   }, []);
@@ -176,6 +183,7 @@ function HomeContent() {
   );
 
   const handleTogglePin = useCallback((matchId: string) => {
+    hapticSelection();
     const prev = getPinnedMatches();
     const wasPinned = prev.includes(matchId);
     const next = togglePinned(matchId);
@@ -227,6 +235,9 @@ function HomeContent() {
 
         <PullToRefresh onRefresh={handleRefresh}>
           <main id="main-content" className="min-w-0 flex-1 px-0 py-3 md:px-4" role="main" aria-label="Match results">
+            {!online && (
+              <OfflineBanner onRetry={() => handleRefresh()} />
+            )}
             <div className="mx-auto max-w-[900px]">
               <div aria-live="polite" aria-atomic="true" className="sr-only">
                 {totalLive > 0 ? `${totalLive} live matches in progress` : ""}
@@ -250,6 +261,8 @@ function HomeContent() {
                   onMatchSelect={handleMatchSelect}
                   pinnedIds={pinnedIds}
                   onTogglePin={handleTogglePin}
+                  favoriteTeamIds={favTeamIds}
+                  onFavoriteTeamsChange={() => setFavTeamIds(getFavoriteTeams())}
                 />
               ) : (
                 <TodayView
@@ -259,8 +272,13 @@ function HomeContent() {
                   onTogglePin={handleTogglePin}
                   headerLiveCount={totalLive}
                   headerTodayData={todaySnapshot}
+                  favoriteTeamIds={favTeamIds}
+                  onFavoriteTeamsChange={() => setFavTeamIds(getFavoriteTeams())}
                 />
               )}
+              <footer className="mt-6 pb-4 text-center">
+                <ProviderAttribution />
+              </footer>
             </div>
           </main>
         </PullToRefresh>

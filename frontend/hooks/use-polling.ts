@@ -17,6 +17,8 @@ interface UsePollingReturn<T> {
   error: string | null;
   /** Last thrown error (e.g. for checking ApiError.status === 404) */
   lastError: Error | null;
+  /** Timestamp (ms) of last successful fetch — for "Updated Xs ago" */
+  lastSuccessAt: number | null;
   refresh: () => Promise<void>;
 }
 
@@ -31,6 +33,7 @@ export function usePolling<T>({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<Error | null>(null);
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
   const [visible, setVisible] = useState(true);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -48,6 +51,7 @@ export function usePolling<T>({
       setData(result);
       setError(null);
       setLastError(null);
+      setLastSuccessAt(Date.now());
     } catch (e) {
       const err = e instanceof Error ? e : new Error("Fetch failed");
       setError(err.message);
@@ -74,5 +78,5 @@ export function usePolling<T>({
     return () => clearInterval(timer);
   }, [enabled, effectiveInterval, key, refresh]);
 
-  return { data, loading, error, lastError, refresh };
+  return { data, loading, error, lastError, lastSuccessAt, refresh };
 }

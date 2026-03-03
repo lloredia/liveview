@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ProviderAttribution } from "@/components/provider-attribution";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — LiveView",
@@ -74,6 +75,9 @@ export default function PrivacyPage() {
             </p>
           </section>
         </div>
+        <footer className="mt-10 border-t border-surface-border pt-6 text-center">
+          <ProviderAttribution />
+        </footer>
       </div>
     </div>
   );

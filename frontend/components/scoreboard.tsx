@@ -11,12 +11,16 @@ import { ScoreboardSkeleton } from "./skeleton";
 import { Standings } from "./standings";
 import { StatsDashboard } from "./stats-dashboard";
 import { GlassTabBar, GlassPill, GlassDivider } from "./ui/glass";
+import { LastUpdatedIndicator } from "./last-updated-indicator";
+import { toggleFavoriteTeam } from "@/lib/favorite-teams";
 
 interface ScoreboardProps {
   leagueId: string | null;
   onMatchSelect: (matchId: string) => void;
   pinnedIds?: string[];
   onTogglePin?: (matchId: string) => void;
+  favoriteTeamIds?: string[];
+  onFavoriteTeamsChange?: () => void;
 }
 
 type Tab = "matches" | "standings" | "stats";
@@ -40,6 +44,8 @@ export function Scoreboard({
   onMatchSelect,
   pinnedIds = [],
   onTogglePin,
+  favoriteTeamIds = [],
+  onFavoriteTeamsChange,
 }: ScoreboardProps) {
   const [tab, setTab] = useState<Tab>("matches");
 
@@ -49,7 +55,7 @@ export function Scoreboard({
   }, [leagueId]);
 
   const [hasLive, setHasLive] = useState(false);
-  const { data, loading, error } = usePolling({
+  const { data, loading, error, lastSuccessAt } = usePolling({
     fetcher,
     interval: hasLive ? 10000 : 20000,
     enabled: !!leagueId,
@@ -154,6 +160,7 @@ export function Scoreboard({
                 <GlassPill variant="live" size="sm" pulse>
                   Live
                 </GlassPill>
+                <LastUpdatedIndicator lastSuccessAt={lastSuccessAt} show={liveMatches.length > 0} className="ml-auto" />
               </div>
               <div className="mx-2 overflow-hidden rounded-[14px] border border-glass-border bg-glass">
                 {liveMatches.map((m) => (
@@ -163,6 +170,15 @@ export function Scoreboard({
                     leagueNameForLink={leagueName}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
+                    favoriteTeamIds={favoriteTeamIds}
+                    onToggleFavoriteTeam={
+                      onFavoriteTeamsChange
+                        ? (teamId) => {
+                            toggleFavoriteTeam(teamId);
+                            onFavoriteTeamsChange();
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -185,6 +201,15 @@ export function Scoreboard({
                     leagueNameForLink={leagueName}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
+                    favoriteTeamIds={favoriteTeamIds}
+                    onToggleFavoriteTeam={
+                      onFavoriteTeamsChange
+                        ? (teamId) => {
+                            toggleFavoriteTeam(teamId);
+                            onFavoriteTeamsChange();
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -208,6 +233,15 @@ export function Scoreboard({
                     compact
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
+                    favoriteTeamIds={favoriteTeamIds}
+                    onToggleFavoriteTeam={
+                      onFavoriteTeamsChange
+                        ? (teamId) => {
+                            toggleFavoriteTeam(teamId);
+                            onFavoriteTeamsChange();
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </div>

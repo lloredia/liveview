@@ -10,10 +10,12 @@ import { getTodayCache, setTodayCache } from "@/lib/today-cache";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
 import { GlassPill, GlassDivider, GlassButton } from "./ui/glass";
+import { getFavoriteTeams, toggleFavoriteTeam } from "@/lib/favorite-teams";
+import { LastUpdatedIndicator } from "./last-updated-indicator";
 
 export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
 
-type MatchFilter = "all" | "tracked" | "live" | "scheduled" | "finished";
+type MatchFilter = "all" | "live" | "favorites" | "tracked";
 
 export type TodayResult =
   | TodayResponse
@@ -51,6 +53,11 @@ async function fetchTodayWithCache(
   dateStr: string | undefined,
   matchIds?: string[],
 ): Promise<TodayResult> {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    const cached = getTodayCache(dateStr);
+    if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+    throw new Error("Offline");
+  }
   try {
     const data = await fetchToday(dateStr, matchIds);
     setTodayCache(dateStr, data);
@@ -109,6 +116,9 @@ interface TodayViewProps {
   onTogglePin?: (matchId: string) => void;
   headerLiveCount?: number;
   headerTodayData?: TodayResponse | null;
+  /** When set, show favorite star on match cards and use for Favorites filter */
+  favoriteTeamIds?: string[];
+  onFavoriteTeamsChange?: () => void;
 }
 
 export function TodayView({
@@ -118,11 +128,20 @@ export function TodayView({
   onTogglePin,
   headerLiveCount,
   headerTodayData,
+  favoriteTeamIds: externalFavTeams,
+  onFavoriteTeamsChange,
 }: TodayViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [filter, setFilter] = useState<MatchFilter>("all");
+  const [favTeamIds, setFavTeamIds] = useState<string[]>(() => getFavoriteTeams());
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasDefaultedToTracked = useRef(false);
+  const favoriteTeamIds = externalFavTeams ?? favTeamIds;
+
+  const handleFavoriteTeamsChange = useCallback(() => {
+    setFavTeamIds(getFavoriteTeams());
+    onFavoriteTeamsChange?.();
+  }, [onFavoriteTeamsChange]);
 
   useEffect(() => {
     if (pinnedIds.length > 0 && !hasDefaultedToTracked.current) {
@@ -144,7 +163,7 @@ export function TodayView({
   );
 
   const [hasLive, setHasLive] = useState(false);
-  const { data, loading, error, refresh } = usePolling<TodayResult>({
+  const { data, loading, error, refresh, lastSuccessAt } = usePolling<TodayResult>({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
     intervalWhenHidden: 60_000,
@@ -206,27 +225,22 @@ export function TodayView({
 
   const filteredLeagues = useMemo(() => {
     if (!effectiveData?.leagues) return [];
+    const favSet = new Set(favoriteTeamIds);
     return effectiveData.leagues
       .map((league) => {
         const filtered = league.matches.filter((m) => {
           if (filter === "tracked") return pinnedIds.includes(m.id);
           if (filter === "all") return true;
           if (filter === "live") return isLivePhase(m);
-          if (filter === "scheduled")
-            return m.phase === "scheduled" || m.phase === "pre_match";
-          if (filter === "finished")
-            return (
-              m.phase === "finished" ||
-              m.phase === "postponed" ||
-              m.phase === "cancelled"
-            );
+          if (filter === "favorites")
+            return favSet.has(m.home_team.id) || favSet.has(m.away_team.id);
           return true;
         });
         const patched = filtered.map((m) => patchMatch(m));
         return { ...league, matches: patched };
       })
       .filter((league) => league.matches.length > 0);
-  }, [effectiveData, filter, pinnedIds, patchMatch]);
+  }, [effectiveData, filter, pinnedIds, favoriteTeamIds, patchMatch]);
 
   const liveCountForTab = useMemo(() => {
     return effectiveData?.live ?? headerLiveCount ?? 0;
@@ -237,6 +251,14 @@ export function TodayView({
     const ids = new Set(pinnedIds);
     return effectiveData.leagues.flatMap((l) => l.matches).filter((m) => ids.has(m.id)).length;
   }, [effectiveData?.leagues, pinnedIds]);
+
+  const favoritesCount = useMemo(() => {
+    if (!effectiveData?.leagues || favoriteTeamIds.length === 0) return 0;
+    const favSet = new Set(favoriteTeamIds);
+    return effectiveData.leagues.flatMap((l) => l.matches).filter(
+      (m) => favSet.has(m.home_team.id) || favSet.has(m.away_team.id)
+    ).length;
+  }, [effectiveData?.leagues, favoriteTeamIds]);
 
   const effectiveLeagues = filteredLeagues;
 
@@ -275,13 +297,14 @@ export function TodayView({
   });
 
   const filterTabs = [
+    { key: "all" as const, label: "All", count: effectiveData?.total_matches },
+    { key: "live" as const, label: "Live", count: liveCountForTab },
+    ...(favoriteTeamIds.length > 0
+      ? [{ key: "favorites" as const, label: "Favorites", count: favoritesCount }]
+      : []),
     ...(pinnedIds.length > 0
       ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
       : []),
-    { key: "all" as const, label: "All", count: effectiveData?.total_matches },
-    { key: "live" as const, label: "Live", count: liveCountForTab },
-    { key: "scheduled" as const, label: "Upcoming", count: effectiveData?.scheduled },
-    { key: "finished" as const, label: "Finished", count: effectiveData?.finished },
   ];
 
   return (
@@ -314,6 +337,16 @@ export function TodayView({
           );
         })}
       </div>
+
+      {/* Last updated (when live) */}
+      {(effectiveData?.live ?? 0) > 0 && (
+        <div className="mb-2 px-3">
+          <LastUpdatedIndicator
+            lastSuccessAt={lastSuccessAt}
+            show={(effectiveData?.live ?? 0) > 0}
+          />
+        </div>
+      )}
 
       {/* Filter tabs — glass pill bar */}
       <div className="mb-4 px-2">
@@ -431,6 +464,11 @@ export function TodayView({
                     leagueNameForLink={league.league_name}
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
+                    favoriteTeamIds={favoriteTeamIds}
+                    onToggleFavoriteTeam={(teamId) => {
+                      toggleFavoriteTeam(teamId);
+                      handleFavoriteTeamsChange();
+                    }}
                   />
                 ))}
               </div>

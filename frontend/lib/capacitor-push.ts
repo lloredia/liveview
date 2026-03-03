@@ -35,6 +35,8 @@ export async function initCapacitorPush(): Promise<void> {
       console.log("[cap-push] Permission not granted");
       return;
     }
+    const { hapticLightImpact } = await import("./haptics");
+    hapticLightImpact().catch(() => {});
 
     await PushNotifications.register();
 
@@ -65,8 +67,9 @@ export async function initCapacitorPush(): Promise<void> {
 
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
       const data = action.notification.data;
-      if (data?.url && typeof window !== "undefined") {
-        window.location.href = data.url;
+      const url = data?.url;
+      if (typeof url === "string" && url.startsWith("/") && typeof window !== "undefined") {
+        window.location.href = url;
       }
     });
   } catch (err) {

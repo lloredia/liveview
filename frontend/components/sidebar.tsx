@@ -8,6 +8,7 @@ import {
   getFavoriteLeagues,
   toggleFavoriteLeague,
 } from "@/lib/favorites";
+import { hapticSelection } from "@/lib/haptics";
 import { GlassPill, GlassDivider } from "./ui/glass";
 
 interface SidebarProps {
@@ -44,6 +45,7 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
 
   const handleFavToggle = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    hapticSelection();
     toggleFavoriteLeague(id);
     setFavIds(getFavoriteLeagues());
   };

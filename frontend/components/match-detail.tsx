@@ -37,6 +37,8 @@ interface MatchDetailProps {
   pinned?: boolean;
   /** Callback to add/remove this match from the tracker. When provided, a Track/Untrack button is shown. */
   onTogglePin?: (matchId: string) => void;
+  /** When this value changes, trigger a refetch (e.g. from pull-to-refresh). */
+  refreshTrigger?: number;
 }
 
 type Tab = "play_by_play" | "player_stats" | "lineup" | "team_stats";
@@ -477,7 +479,7 @@ export type SoccerPlayerSelection = {
   side: "home" | "away";
 };
 
-export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, onTogglePin }: MatchDetailProps) {
+export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, onTogglePin, refreshTrigger }: MatchDetailProps) {
   const [activeTab, setActiveTab] = useState<Tab>("play_by_play");
   const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
@@ -485,6 +487,10 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const { data: matchData, loading: matchLoading, lastError: matchError, refresh: refreshMatch } = usePolling<MatchDetailResponse>({
     fetcher: matchFetcher, interval: 15000, key: matchId,
   });
+
+  useEffect(() => {
+    if (refreshTrigger != null && refreshTrigger > 0) refreshMatch();
+  }, [refreshTrigger, refreshMatch]);
 
   const { findMatch: findESPN } = useESPNLive(leagueName, 15000);
 

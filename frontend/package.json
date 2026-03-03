@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@capacitor/core": "^6.1.2",
+    "@capacitor/haptics": "^6.0.3",
     "@capacitor/ios": "^6.1.2",
     "@capacitor/push-notifications": "^6.0.5",
     "@ducanh2912/next-pwa": "^10.2.0",

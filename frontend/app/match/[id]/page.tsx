@@ -11,6 +11,8 @@ import { Sidebar } from "@/components/sidebar";
 import { MatchDetail } from "@/components/match-detail";
 import { LiveTicker } from "@/components/live-ticker";
 import { MultiTracker } from "@/components/multi-tracker";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { ProviderAttribution } from "@/components/provider-attribution";
 
 export default function MatchPage() {
   const params = useParams();
@@ -26,6 +28,7 @@ export default function MatchPage() {
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     setPinnedIds(getPinnedMatches());
@@ -97,6 +100,10 @@ export default function MatchPage() {
     setPinnedIds(next);
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshTrigger((t) => t + 1);
+  }, []);
+
   useEffect(() => {
     const handleResize = () => {
       setSidebarOpen(window.innerWidth >= 768);
@@ -134,15 +141,21 @@ export default function MatchPage() {
           liveCounts={liveCounts}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-7">
-          <MatchDetail
-            matchId={matchId}
-            onBack={handleBack}
-            leagueName={leagueName}
-            pinned={pinnedIds.includes(matchId)}
-            onTogglePin={handleTogglePin}
-          />
-        </main>
+        <PullToRefresh onRefresh={handleRefresh}>
+          <main className="flex-1 overflow-y-auto p-4 md:p-7">
+            <MatchDetail
+              matchId={matchId}
+              onBack={handleBack}
+              leagueName={leagueName}
+              pinned={pinnedIds.includes(matchId)}
+              onTogglePin={handleTogglePin}
+              refreshTrigger={refreshTrigger}
+            />
+            <footer className="mt-8 pb-6 text-center">
+              <ProviderAttribution />
+            </footer>
+          </main>
+        </PullToRefresh>
       </div>
 
       <MultiTracker
