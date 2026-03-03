@@ -10,6 +10,7 @@ import { MatchCard } from "./match-card";
 import { ScoreboardSkeleton } from "./skeleton";
 import { Standings } from "./standings";
 import { StatsDashboard } from "./stats-dashboard";
+import { GlassTabBar, GlassPill, GlassDivider } from "./ui/glass";
 
 interface ScoreboardProps {
   leagueId: string | null;
@@ -85,7 +86,7 @@ export function Scoreboard({
 
   if (!leagueId) {
     return (
-      <div className="py-16 text-center text-sm text-text-muted">
+      <div className="py-16 text-center text-body-md text-text-muted">
         Select a league from the sidebar
       </div>
     );
@@ -97,52 +98,39 @@ export function Scoreboard({
 
   if (error && !data) {
     return (
-      <div className="px-3 py-4 text-center text-xs text-accent-red">
+      <div className="px-3 py-4 text-center text-label-md text-accent-red">
         Failed to load scoreboard
       </div>
     );
   }
 
-  const tabs: { key: Tab; label: string }[] = [
+  const tabs = [
     { key: "matches", label: "Matches" },
     { key: "standings", label: "Standings" },
     { key: "stats", label: "Stats" },
   ];
 
   return (
-    <div>
+    <div className="animate-glass-fade-in">
       {/* League header */}
-      <div className="mb-3 flex items-center gap-2.5 px-3">
+      <div className="mb-4 flex items-center gap-2.5 px-3">
         <LeagueIcon name={leagueName} />
-        <h2 className="text-[15px] font-extrabold text-text-primary">
+        <h2 className="text-heading-sm text-text-primary">
           {leagueName}
         </h2>
-        <div className="ml-2 h-px flex-1 bg-surface-border" />
-        <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-text-muted">
+        <GlassDivider className="ml-2 flex-1" />
+        <GlassPill variant="info" size="sm">
           {(data?.matches || []).length} matches
-        </span>
+        </GlassPill>
       </div>
 
-      {/* Tab switcher — underline style */}
-      <div className="mb-4 flex border-b border-surface-border">
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`
-              relative px-4 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors
-              ${tab === key
-                ? "text-text-primary"
-                : "text-text-muted hover:text-text-secondary"
-              }
-            `}
-          >
-            {label}
-            {tab === key && (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent-green" />
-            )}
-          </button>
-        ))}
+      {/* Tab switcher — glass pill style */}
+      <div className="mb-4 px-3">
+        <GlassTabBar
+          tabs={tabs}
+          active={tab}
+          onSelect={(key) => setTab(key as Tab)}
+        />
       </div>
 
       {/* Tab content */}
@@ -162,14 +150,12 @@ export function Scoreboard({
           {/* Live */}
           {liveMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 flex items-center gap-2 px-3 text-[11px] font-extrabold uppercase tracking-wider text-accent-red">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-red" />
-                </span>
-                Live
+              <div className="mb-1.5 flex items-center gap-2 px-3">
+                <GlassPill variant="live" size="sm" pulse>
+                  Live
+                </GlassPill>
               </div>
-              <div className="border-t border-surface-border">
+              <div className="mx-2 overflow-hidden rounded-[14px] border border-glass-border bg-glass">
                 {liveMatches.map((m) => (
                   <MatchCard
                     key={m.id}
@@ -186,10 +172,12 @@ export function Scoreboard({
           {/* Scheduled */}
           {scheduledMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 px-3 text-[11px] font-extrabold uppercase tracking-wider text-accent-blue">
-                Upcoming
+              <div className="mb-1.5 flex items-center gap-2 px-3">
+                <GlassPill variant="info" size="sm">
+                  Upcoming
+                </GlassPill>
               </div>
-              <div className="border-t border-surface-border">
+              <div className="mx-2 overflow-hidden rounded-[14px] border border-glass-border bg-glass">
                 {scheduledMatches.map((m) => (
                   <MatchCard
                     key={m.id}
@@ -206,10 +194,12 @@ export function Scoreboard({
           {/* Finished */}
           {finishedMatches.length > 0 && (
             <section className="mb-4">
-              <div className="mb-1 px-3 text-[11px] font-extrabold uppercase tracking-wider text-text-muted">
-                Finished
+              <div className="mb-1.5 flex items-center gap-2 px-3">
+                <GlassPill variant="ft" size="sm">
+                  Finished
+                </GlassPill>
               </div>
-              <div className="border-t border-surface-border">
+              <div className="mx-2 overflow-hidden rounded-[14px] border border-glass-border bg-glass">
                 {finishedMatches.map((m) => (
                   <MatchCard
                     key={m.id}
@@ -225,7 +215,7 @@ export function Scoreboard({
           )}
 
           {(data?.matches || []).length === 0 && (
-            <div className="py-16 text-center text-sm text-text-muted">
+            <div className="py-16 text-center text-body-md text-text-muted">
               No matches today
             </div>
           )}

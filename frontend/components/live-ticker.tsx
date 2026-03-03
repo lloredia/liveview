@@ -7,6 +7,7 @@ import { usePolling } from "@/hooks/use-polling";
 import { phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
+import { GlassPill } from "./ui/glass";
 import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
 
 interface LiveTickerProps {
@@ -47,23 +48,23 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
   return (
     <Link
       href={href}
-      className="flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+      className="flex shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-label-md text-text-secondary transition-all duration-150 hover:bg-glass-hover hover:text-text-primary glass-press"
       aria-label={`${match.home_team.short_name} ${match.score.home} ${match.score.away} ${match.away_team.short_name}, live`}
     >
       <TeamLogo url={match.home_team.logo_url} name={match.home_team.short_name} size={14} />
       <span className="font-medium">{match.home_team.short_name}</span>
       <span className={scoreClass}>
         <TickerScore value={match.score.home} />
-        <span className="text-text-dim/50">-</span>
+        <span className="text-text-dim/40 mx-0.5">-</span>
         <TickerScore value={match.score.away} />
       </span>
       <span className="font-medium">{match.away_team.short_name}</span>
       <TeamLogo url={match.away_team.logo_url} name={match.away_team.short_name} size={14} />
-      <span className="rounded bg-accent-red/15 px-1 py-px text-[8px] font-bold text-accent-red">
+      <GlassPill variant="live" size="xs">
         {phaseShortLabelWithClock(match.phase, match.clock)}
-      </span>
+      </GlassPill>
       {match.clock && (
-        <span className="text-[9px] font-semibold tabular-nums text-accent-green">{match.clock}</span>
+        <span className="text-label-xs tabular-nums text-accent-green">{match.clock}</span>
       )}
     </Link>
   );
@@ -90,7 +91,6 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
       setStableMatches(fresh);
     } else {
       emptyStreakRef.current += 1;
-      // Clear after 2 consecutive empty polls to avoid flicker from a single transient blip
       if (emptyStreakRef.current >= 2) {
         setStableMatches([]);
       }
@@ -103,31 +103,31 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
 
   return (
     <div
-      className="flex h-8 items-center border-b border-surface-border bg-surface-raised overflow-hidden"
+      className="flex h-9 items-center border-b border-glass-border glass-surface-elevated glass-blur overflow-hidden"
       aria-hidden="true"
     >
-      {/* Fixed LIVE label — decorative; main match list is the accessible source */}
-      <div className="relative z-10 flex shrink-0 items-center gap-1.5 border-r border-surface-border bg-surface-raised px-2.5">
+      {/* Fixed LIVE label */}
+      <div className="relative z-10 flex shrink-0 items-center gap-1.5 border-r border-glass-border px-3 bg-glass-elevated">
         <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-60" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
         </span>
-        <span className="text-[10px] font-bold uppercase text-accent-red">
+        <span className="text-label-sm font-bold uppercase text-accent-red">
           Live
         </span>
       </div>
 
-      {/* Scrolling track — matches duplicated for seamless loop; single overflow container */}
+      {/* Scrolling track */}
       <div className="relative flex-1 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: "touch" }}>
         <div
-          className="ticker-track flex items-center gap-4 whitespace-nowrap"
+          className="ticker-track flex items-center gap-3 whitespace-nowrap"
           style={{ "--ticker-duration": `${duration}s` } as React.CSSProperties}
         >
           {stableMatches.map((m) => (
             <TickerItem key={`a-${m.id}`} match={m} />
           ))}
 
-          <span className="mx-2 h-1 w-1 shrink-0 rounded-full bg-surface-border" aria-hidden="true" />
+          <span className="mx-2 h-1 w-1 shrink-0 rounded-full bg-glass-border" aria-hidden="true" />
 
           {stableMatches.map((m) => (
             <TickerItem key={`b-${m.id}`} match={m} />

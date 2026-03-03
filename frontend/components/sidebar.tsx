@@ -8,6 +8,7 @@ import {
   getFavoriteLeagues,
   toggleFavoriteLeague,
 } from "@/lib/favorites";
+import { GlassPill, GlassDivider } from "./ui/glass";
 
 interface SidebarProps {
   leagues: LeagueGroup[];
@@ -55,7 +56,7 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
       {/* Mobile backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 glass-blur-light md:hidden"
           onClick={onClose}
         />
       )}
@@ -64,7 +65,8 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
         role="navigation"
         aria-label="League navigation"
         className={`
-          fixed inset-y-[44px] left-0 z-50 w-[260px] overflow-y-auto border-r border-surface-border bg-surface-raised
+          fixed inset-y-[44px] left-0 z-50 w-[260px] overflow-y-auto
+          glass-surface-elevated glass-blur border-r border-glass-border
           transition-transform duration-200 ease-out
           md:sticky md:top-[44px] md:z-auto md:h-[calc(100vh-44px)] md:w-[200px] md:min-w-[200px] md:translate-x-0 md:transition-none
           ${open ? "translate-x-0" : "-translate-x-full"}
@@ -75,23 +77,23 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
           <button
             onClick={onTodayClick}
             className={`
-              flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12px] font-semibold transition-colors
+              flex w-full items-center gap-2 px-4 py-2.5 text-left text-label-lg transition-all duration-150 glass-press
               ${selectedLeagueId === null
-                ? "border-l-2 border-accent-green bg-accent-green/5 text-text-primary"
-                : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover"
+                ? "border-l-2 border-accent-green bg-accent-green/8 text-text-primary"
+                : "border-l-2 border-transparent text-text-secondary hover:bg-glass-hover"
               }
             `}
           >
-            <span className="text-sm">Today</span>
+            <span className="text-body-sm font-semibold">Today</span>
           </button>
         )}
 
-        <div className="mx-3 border-b border-surface-border" />
+        <GlassDivider className="mx-3" />
 
         {/* Favorites */}
         {favoriteLeagues.length > 0 && (
           <div className="py-1">
-            <div className="px-4 pb-1 pt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-accent-amber">
+            <div className="px-4 pb-1 pt-2 text-label-xs uppercase tracking-[0.12em] text-accent-amber">
               Favorites
             </div>
             {favoriteLeagues.map((league) => (
@@ -105,14 +107,14 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
                 liveCount={liveCounts[league.id] || 0}
               />
             ))}
-            <div className="mx-3 my-1 border-b border-surface-border" />
+            <GlassDivider className="mx-3 my-1" />
           </div>
         )}
 
         {/* All leagues */}
         {leagues.map((group) => (
           <div key={group.sport} className="py-0.5">
-            <div className="flex items-center gap-1.5 px-4 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-text-dim">
+            <div className="flex items-center gap-1.5 px-4 py-1.5 text-label-xs uppercase tracking-[0.12em] text-text-dim">
               <span className="text-xs">{sportIcon(group.sport)}</span>
               {group.sport_display}
             </div>
@@ -156,31 +158,27 @@ function LeagueButton({
     <button
       onClick={() => onSelect(league.id)}
       className={`
-        group flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-colors duration-150
+        group flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-all duration-150 glass-press
         ${active
-          ? "border-l-2 border-accent-green bg-accent-green/5 text-text-primary"
-          : "border-l-2 border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+          ? "border-l-2 border-accent-green bg-accent-green/8 text-text-primary"
+          : "border-l-2 border-transparent text-text-secondary hover:bg-glass-hover hover:text-text-primary"
         }
       `}
     >
       <LeagueLogo name={league.short_name || league.name} apiLogoUrl={league.logo_url} />
-      <span className="flex-1 truncate text-[12px]">{league.short_name || league.name}</span>
+      <span className="flex-1 truncate text-label-lg">{league.short_name || league.name}</span>
 
       {liveCount > 0 && (
-        <span className="flex items-center gap-0.5 rounded-full bg-accent-red/10 px-1.5 py-0.5 text-[8px] font-bold text-accent-red">
-          <span className="relative h-1 w-1">
-            <span className="absolute inset-0 animate-ping rounded-full bg-accent-red opacity-75" />
-            <span className="relative block h-1 w-1 rounded-full bg-accent-red" />
-          </span>
+        <GlassPill variant="live" size="xs" pulse>
           {liveCount}
-        </span>
+        </GlassPill>
       )}
 
       <button
         onClick={(e) => onFavToggle(e, league.id)}
         aria-label={isFav ? `Remove ${league.name} from favorites` : `Add ${league.name} to favorites`}
         aria-pressed={isFav}
-        className={`text-[10px] opacity-0 transition-opacity group-hover:opacity-100 ${
+        className={`text-label-sm opacity-0 transition-opacity group-hover:opacity-100 ${
           isFav ? "!opacity-100 text-accent-amber" : "text-text-dim hover:text-accent-amber"
         }`}
       >

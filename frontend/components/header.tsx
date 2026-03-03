@@ -51,11 +51,14 @@ export function Header({
   const isNews = pathname === "/news";
 
   return (
-    <header role="banner" className="sticky top-0 z-50 flex h-[44px] items-center justify-between border-b border-surface-border bg-surface-raised px-3 md:px-4">
+    <header
+      role="banner"
+      className="sticky top-0 z-50 flex h-[44px] items-center justify-between px-3 md:px-4 glass-surface-elevated glass-blur border-b border-glass-border"
+    >
       <div className="flex items-center gap-2">
         <button
           onClick={onToggleSidebar}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+          className="flex h-8 w-8 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary glass-press"
           aria-label="Toggle sidebar"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -65,17 +68,17 @@ export function Header({
 
         <Link
           href="/"
-          className="text-[15px] font-black tracking-tight text-text-primary hover:opacity-90"
+          className="text-heading-sm tracking-tight text-text-primary hover:opacity-90 transition-opacity"
         >
           LIVE<span className="text-accent-green">VIEW</span>
         </Link>
 
         <Link
           href="/news"
-          className={`ml-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold transition-colors ${
+          className={`ml-2 rounded-[10px] px-2.5 py-1.5 text-body-sm font-semibold transition-all duration-150 glass-press ${
             isNews
-              ? "bg-accent-green/15 text-accent-green"
-              : "text-text-muted hover:bg-surface-hover hover:text-text-primary"
+              ? "bg-accent-green/15 text-accent-green border border-accent-green/20"
+              : "text-text-muted hover:bg-glass-hover hover:text-text-primary"
           }`}
         >
           News
@@ -90,7 +93,7 @@ export function Header({
         {onPushToggle && (
           <button
             onClick={onPushToggle}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover ${
+            className={`flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors glass-press hover:bg-glass-hover ${
               pushEnabled ? "text-accent-amber" : "text-text-muted hover:text-text-primary"
             }`}
             aria-label={pushEnabled ? "Notifications enabled" : "Enable notifications"}
@@ -106,7 +109,7 @@ export function Header({
 
         <button
           onClick={toggle}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+          className="flex h-8 w-8 items-center justify-center rounded-[10px] text-text-muted transition-colors glass-press hover:bg-glass-hover hover:text-text-primary"
           aria-label={`Theme: ${mode}. Click to switch.`}
           title={`Theme: ${mode}`}
         >
@@ -114,8 +117,8 @@ export function Header({
         </button>
 
         <div
-          className={`h-[6px] w-[6px] rounded-full ${
-            connected ? "bg-accent-green" : "bg-accent-red"
+          className={`h-[6px] w-[6px] rounded-full transition-colors ${
+            connected ? "bg-accent-green shadow-[0_0_6px_rgba(0,230,118,0.4)]" : "bg-accent-red shadow-[0_0_6px_rgba(255,23,68,0.4)]"
           }`}
           title={connected ? "Connected" : "Offline"}
         />

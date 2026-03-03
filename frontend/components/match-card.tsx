@@ -6,6 +6,7 @@ import type { MatchSummary } from "@/lib/types";
 import { formatTime, isLive, phaseLabel, phaseShortLabel, phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
+import { GlassPill } from "./ui/glass";
 
 /* ── Animated score digit ─────────────────────────────────────────── */
 
@@ -26,11 +27,11 @@ function AnimatedScore({ value, live }: { value: number; live: boolean }) {
   const liveScoreClass =
     theme === "light"
       ? "text-text-primary"
-      : "text-white [text-shadow:0_0_10px_rgba(0,230,118,0.3)]";
+      : "text-white [text-shadow:0_0_10px_rgba(0,230,118,0.25)]";
 
   return (
     <span
-      className={`inline-block font-mono text-[17px] font-extrabold tabular-nums md:text-xl ${
+      className={`inline-block font-mono text-score-md tabular-nums ${
         live ? liveScoreClass : "text-text-primary"
       } ${pop ? "score-pop" : ""}`}
     >
@@ -52,7 +53,6 @@ function LiveClock({
   phase: string;
   period: string | null;
 }) {
-  // Baseball: show inning (period) instead of clock; MLB has no game clock
   const isBaseball = phase === "live_inning";
   const rawPeriod = period?.trim();
   const inningLabel = isBaseball && rawPeriod
@@ -120,7 +120,6 @@ function LiveClock({
 
 interface MatchCardProps {
   match: MatchSummary;
-  /** Optional league name to append as ?league= for match detail context */
   leagueNameForLink?: string;
   compact?: boolean;
   pinned?: boolean;
@@ -162,9 +161,11 @@ export const MatchCard = memo(function MatchCard({
     <Link
       href={href}
       className={`
-        group relative flex h-12 cursor-pointer items-center border-b border-surface-border
-        transition-colors duration-150 hover:bg-surface-hover
-        ${live ? "bg-accent-red/[0.04]" : ""}
+        group relative flex h-12 items-center
+        border-b border-glass-border-light
+        transition-all duration-150
+        hover:bg-glass-hover glass-press
+        ${live ? "bg-accent-red/[0.03]" : ""}
         ${flash ? "score-flash" : ""}
       `}
       aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
@@ -173,10 +174,10 @@ export const MatchCard = memo(function MatchCard({
       <div className="flex w-[60px] shrink-0 flex-col items-center justify-center px-1">
         {live ? (
           <>
-            <span className="rounded bg-accent-red/15 px-1.5 py-px text-[9px] font-extrabold leading-tight text-accent-red">
+            <GlassPill variant="live" size="xs" pulse>
               {phaseShortLabelWithClock(match.phase, match.clock)}
-            </span>
-            <span className="mt-0.5 font-mono text-[10px] font-bold leading-tight text-accent-green tabular-nums">
+            </GlassPill>
+            <span className="mt-0.5 font-mono text-label-sm font-bold leading-tight text-accent-green tabular-nums">
               <LiveClock
                 serverClock={match.clock}
                 startTime={match.start_time}
@@ -186,13 +187,13 @@ export const MatchCard = memo(function MatchCard({
             </span>
           </>
         ) : finished ? (
-          <span className="text-[11px] font-semibold text-text-muted">FT</span>
+          <GlassPill variant="ft" size="xs">FT</GlassPill>
         ) : scheduled && match.start_time ? (
-          <span className="text-[11px] font-medium text-text-muted">
+          <span className="text-label-md text-text-muted">
             {formatTime(match.start_time)}
           </span>
         ) : (
-          <span className="text-[10px] font-semibold text-text-muted">
+          <span className="text-label-sm text-text-muted">
             {phaseLabel(match.phase)}
           </span>
         )}
@@ -201,7 +202,7 @@ export const MatchCard = memo(function MatchCard({
       {/* Home team */}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pr-2">
         <span
-          className={`truncate text-right text-[13px] md:text-sm ${
+          className={`truncate text-right text-body-sm ${
             !finished || match.score.home > match.score.away
               ? "font-semibold text-text-primary"
               : "text-text-secondary"
@@ -221,14 +222,14 @@ export const MatchCard = memo(function MatchCard({
       <div className="flex shrink-0 flex-col items-center justify-center gap-0">
         <div className="flex items-center justify-center gap-1">
           {scheduled ? (
-            <span className="text-[11px] text-text-muted">vs</span>
+            <span className="text-label-md text-text-muted">vs</span>
           ) : (
             <>
               <AnimatedScore
                 value={match.score.home}
                 live={live || (finished && match.score.home > match.score.away)}
               />
-              <span className="text-[10px] text-text-dim">-</span>
+              <span className="text-label-sm text-text-dim">-</span>
               <AnimatedScore
                 value={match.score.away}
                 live={live || (finished && match.score.away > match.score.home)}
@@ -239,7 +240,7 @@ export const MatchCard = memo(function MatchCard({
         {!scheduled &&
           typeof match.score.aggregate_home === "number" &&
           typeof match.score.aggregate_away === "number" && (
-            <span className="text-[9px] font-semibold tabular-nums text-text-secondary" title="Aggregate score (two legs)">
+            <span className="text-label-xs tabular-nums text-text-secondary" title="Aggregate score (two legs)">
               {match.score.aggregate_home}-{match.score.aggregate_away} agg
             </span>
           )}
@@ -254,7 +255,7 @@ export const MatchCard = memo(function MatchCard({
           className="shrink-0 md:h-5 md:w-5 h-4 w-4"
         />
         <span
-          className={`truncate text-[13px] md:text-sm ${
+          className={`truncate text-body-sm ${
             !finished || match.score.away > match.score.home
               ? "font-semibold text-text-primary"
               : "text-text-secondary"
@@ -264,7 +265,7 @@ export const MatchCard = memo(function MatchCard({
         </span>
       </div>
 
-      {/* Pin (hover only) — stop propagation so Link doesn't navigate */}
+      {/* Pin */}
       {onTogglePin && (
         <button
           type="button"
@@ -273,7 +274,7 @@ export const MatchCard = memo(function MatchCard({
             e.stopPropagation();
             onTogglePin(match.id);
           }}
-          className={`mr-2 shrink-0 rounded p-1 text-[10px] transition-opacity ${
+          className={`mr-2 shrink-0 rounded-[8px] p-1 text-label-sm transition-all ${
             pinned
               ? "text-accent-blue opacity-100"
               : "text-text-dim opacity-0 group-hover:opacity-100 hover:text-accent-blue"

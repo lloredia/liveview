@@ -9,12 +9,12 @@ import { getApiBase, API_REQUEST_TIMEOUT_MS } from "@/lib/api";
 import { getTodayCache, setTodayCache } from "@/lib/today-cache";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
+import { GlassPill, GlassDivider, GlassButton } from "./ui/glass";
 
 export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
 
 type MatchFilter = "all" | "tracked" | "live" | "scheduled" | "finished";
 
-/** Result from fetcher: fresh data or cached with metadata */
 export type TodayResult =
   | TodayResponse
   | { data: TodayResponse; fromCache: true; savedAt: string };
@@ -47,7 +47,6 @@ async function fetchToday(
   }
 }
 
-/** Fetcher that returns fresh data or falls back to cache on network failure. */
 async function fetchTodayWithCache(
   dateStr: string | undefined,
   matchIds?: string[],
@@ -82,7 +81,6 @@ function formatCacheTime(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-/** Format date as YYYY-MM-DD in **local** time (not UTC) so "TODAY" in the UI matches the API date. */
 function formatDateISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -109,9 +107,7 @@ interface TodayViewProps {
   onLeagueSelect: (leagueId: string) => void;
   pinnedIds?: string[];
   onTogglePin?: (matchId: string) => void;
-  /** When viewing today, use this for the Live tab count so it matches the header. */
   headerLiveCount?: number;
-  /** Same data the header count came from; use for Live list when our fetch has 0 live so count and list match. */
   headerTodayData?: TodayResponse | null;
 }
 
@@ -128,7 +124,6 @@ export function TodayView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasDefaultedToTracked = useRef(false);
 
-  // When user has pinned matches, default to "Tracked" view once
   useEffect(() => {
     if (pinnedIds.length > 0 && !hasDefaultedToTracked.current) {
       setFilter("tracked");
@@ -141,7 +136,6 @@ export function TodayView({
     selectedDate.getFullYear() === new Date().getFullYear() &&
     selectedDate.getMonth() === new Date().getMonth() &&
     selectedDate.getDate() === new Date().getDate();
-  // Always send the selected date so API returns matches for the day the user sees (avoids UTC "today" vs local today mismatch).
   const apiDateStr = dateStr;
 
   const fetcher = useCallback(
@@ -150,7 +144,6 @@ export function TodayView({
   );
 
   const [hasLive, setHasLive] = useState(false);
-  // Always fetch with the selected date so the list matches the date the user sees (no UTC vs local mismatch from header data).
   const { data, loading, error, refresh } = usePolling<TodayResult>({
     fetcher,
     interval: hasLive ? 10_000 : 20_000,
@@ -172,7 +165,6 @@ export function TodayView({
     setHasLive((effectiveData?.live ?? 0) > 0);
   }, [effectiveData?.live]);
 
-  // Scroll date strip to center "today" on mount
   useEffect(() => {
     if (scrollRef.current) {
       const todayBtn = scrollRef.current.querySelector("[data-today]");
@@ -182,7 +174,6 @@ export function TodayView({
     }
   }, []);
 
-  // Build 7-day date strip: 3 past + today + 3 future
   const dateStrip = useMemo(() => {
     const today = new Date();
     return Array.from({ length: 7 }, (_, i) => {
@@ -264,10 +255,10 @@ export function TodayView({
   }, [effectiveLeagues]);
 
   const SPORT_ICONS: Record<string, string> = {
-    soccer: "⚽",
-    basketball: "🏀",
-    hockey: "🏒",
-    baseball: "⚾",
+    soccer: "\u26BD",
+    basketball: "\uD83C\uDFC0",
+    hockey: "\uD83C\uDFD2",
+    baseball: "\u26BE",
   };
 
   const toMatchSummary = (m: TodayMatch) => ({
@@ -283,12 +274,22 @@ export function TodayView({
     away_team: m.away_team,
   });
 
+  const filterTabs = [
+    ...(pinnedIds.length > 0
+      ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
+      : []),
+    { key: "all" as const, label: "All", count: effectiveData?.total_matches },
+    { key: "live" as const, label: "Live", count: liveCountForTab },
+    { key: "scheduled" as const, label: "Upcoming", count: effectiveData?.scheduled },
+    { key: "finished" as const, label: "Finished", count: effectiveData?.finished },
+  ];
+
   return (
-    <div>
+    <div className="animate-glass-fade-in">
       {/* Date strip */}
       <div
         ref={scrollRef}
-        className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide"
+        className="mb-3 flex gap-1.5 overflow-x-auto px-2 pb-1 scrollbar-hide"
       >
         {dateStrip.map((item) => {
           const active = item.iso === dateStr;
@@ -300,10 +301,10 @@ export function TodayView({
                 setSelectedDate(new Date(item.date));
               }}
               className={`
-                flex-shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all
+                flex-shrink-0 rounded-glass-pill px-3 py-1.5 text-label-md transition-all duration-200 glass-press
                 ${active
-                  ? "bg-accent-green text-surface shadow-sm"
-                  : "text-text-muted hover:bg-surface-hover hover:text-text-secondary"
+                  ? "bg-accent-green text-white shadow-glass-sm"
+                  : "text-text-muted hover:bg-glass-hover hover:text-text-secondary"
                 }
                 ${item.isToday && !active ? "text-accent-green" : ""}
               `}
@@ -314,50 +315,43 @@ export function TodayView({
         })}
       </div>
 
-      {/* Filter tabs: Tracked first when user has pins */}
-      <div className="mb-4 flex border-b border-surface-border">
-        {(
-          [
-            ...(pinnedIds.length > 0
-              ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
-              : []),
-            { key: "all" as const, label: "All", count: effectiveData?.total_matches },
-            { key: "live" as const, label: "Live", count: liveCountForTab },
-            { key: "scheduled" as const, label: "Upcoming", count: effectiveData?.scheduled },
-            { key: "finished" as const, label: "Finished", count: effectiveData?.finished },
-          ]
-        ).map(({ key, label, count }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`
-              relative px-3 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors
-              ${filter === key
-                ? "text-text-primary"
-                : "text-text-muted hover:text-text-secondary"
-              }
-            `}
-          >
-            {key === "live" && (count ?? 0) > 0 && (
-              <span className="relative mr-1 inline-flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
-              </span>
-            )}
-            {label}
-            {(count ?? 0) > 0 && (
-              <span className="ml-1 text-[10px] opacity-50">({count})</span>
-            )}
-            {filter === key && (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 bg-accent-green" />
-            )}
-          </button>
-        ))}
+      {/* Filter tabs — glass pill bar */}
+      <div className="mb-4 px-2">
+        <div className="flex gap-0.5 rounded-[14px] border border-glass-border bg-glass p-1">
+          {filterTabs.map(({ key, label, count }) => {
+            const isActive = filter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`
+                  relative flex-1 rounded-[10px] px-2 py-1.5 text-label-md uppercase tracking-wider
+                  transition-all duration-200
+                  ${isActive
+                    ? "bg-glass-elevated text-text-primary shadow-glass-sm"
+                    : "text-text-muted hover:text-text-secondary hover:bg-glass-hover"
+                  }
+                `}
+              >
+                {key === "live" && (count ?? 0) > 0 && (
+                  <span className="relative mr-1 inline-flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-60" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
+                  </span>
+                )}
+                {label}
+                {(count ?? 0) > 0 && (
+                  <span className={`ml-1 text-label-xs ${isActive ? "opacity-60" : "opacity-40"}`}>({count})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Stale/cached banner: show when we have data but fetch failed or we're showing cache */}
+      {/* Stale/cached banner */}
       {effectiveData && (fromCache || error) && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px]">
+        <div className="mb-3 mx-2 flex flex-wrap items-center justify-between gap-2 rounded-glass-pill border border-accent-amber/20 bg-accent-amber/10 px-3 py-2 text-label-md">
           <span className="text-amber-700 dark:text-amber-400">
             {fromCache
               ? `Scores temporarily delayed — showing last data${cacheSavedAt ? ` (${formatCacheTime(cacheSavedAt)})` : ""}`
@@ -381,59 +375,55 @@ export function TodayView({
       {/* Error */}
       {error && !effectiveData && (
         <div className="flex flex-col items-center gap-3 px-3 py-6 text-center">
-          <p className="text-xs text-accent-red">Failed to load matches</p>
-          <p className="text-[11px] text-text-dim">
+          <p className="text-label-md text-accent-red">Failed to load matches</p>
+          <p className="text-label-md text-text-dim">
             Check your connection. The app needs access to the scores API.
           </p>
-          <button
-            type="button"
-            onClick={() => refresh()}
-            className="rounded-xl bg-accent-blue px-4 py-2 text-xs font-semibold text-white hover:brightness-110 active:scale-[0.98]"
-          >
+          <GlassButton variant="primary" onClick={() => refresh()}>
             Try again
-          </button>
+          </GlassButton>
         </div>
       )}
 
       {/* Sport groups with league sections */}
       {groupedBySport.map((sportGroup) => (
-        <div key={sportGroup.sportType} className="mb-6">
+        <div key={sportGroup.sportType} className="mb-5">
           {/* Sport header */}
           <div className="mb-2 flex items-center gap-2.5 px-3 py-1.5">
             <span className="text-base leading-none">
-              {SPORT_ICONS[sportGroup.sportType] || "🏆"}
+              {SPORT_ICONS[sportGroup.sportType] || "\uD83C\uDFC6"}
             </span>
-            <h2 className="text-[15px] font-extrabold uppercase tracking-wide text-text-primary">
+            <h2 className="text-heading-sm uppercase tracking-wide text-text-primary">
               {sportGroup.sport}
             </h2>
-            <div className="ml-2 h-px flex-1 bg-surface-border" />
-            <span className="text-[10px] font-medium text-text-dim">
+            <GlassDivider className="ml-2 flex-1" />
+            <span className="text-label-sm text-text-dim">
               {sportGroup.leagues.reduce((s, l) => s + l.matches.length, 0)}
             </span>
           </div>
 
           {/* Leagues under this sport */}
           {sportGroup.leagues.map((league) => (
-            <section key={league.league_id} className="mb-3">
+            <section key={league.league_id} className="mb-3 mx-2">
               {/* League header row */}
               <button
                 onClick={() => onLeagueSelect(league.league_id)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                className="flex w-full items-center gap-2 rounded-t-[14px] px-3 py-2 text-left transition-all duration-150 hover:bg-glass-hover glass-press border border-b-0 border-glass-border bg-glass"
               >
                 <LeagueLogo name={league.league_name} apiLogoUrl={league.league_logo_url} />
-                <span className="text-[12px] font-bold text-text-secondary">
+                <span className="text-label-lg text-text-secondary">
                   {league.league_name}
                 </span>
-                <span className="text-[10px] text-text-dim">
+                <span className="text-label-sm text-text-dim">
                   {league.league_country}
                 </span>
-                <span className="ml-auto rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+                <GlassPill variant="info" size="xs" className="ml-auto">
                   {league.matches.length}
-                </span>
+                </GlassPill>
               </button>
 
               {/* Match rows */}
-              <div className="border-t border-surface-border">
+              <div className="overflow-hidden rounded-b-[14px] border border-t-0 border-glass-border bg-glass">
                 {league.matches.map((m) => (
                   <MatchCard
                     key={m.id}
@@ -451,7 +441,7 @@ export function TodayView({
 
       {/* Empty state */}
       {effectiveData && effectiveLeagues.length === 0 && (
-        <div className="py-16 px-4 text-center text-sm text-text-muted">
+        <div className="py-16 px-4 text-center text-body-md text-text-muted">
           {filter === "all"
             ? (error || fromCache
                 ? "Scores temporarily unavailable"
@@ -461,29 +451,29 @@ export function TodayView({
               : `No ${filter} matches`}
           {isUserToday && filter === "all" && (
             <>
-              <p className="mt-2 text-xs text-text-dim">
+              <p className="mt-2 text-label-md text-text-dim">
                 {error || fromCache
                   ? "The server could not be reached. Scores will resume automatically when the connection is restored."
                   : "New matches appear throughout the day. If you just set up the app, the backend may need to load match data (run the seed script or start the scheduler)."}
               </p>
-              <button
-                type="button"
+              <GlassButton
+                variant="primary"
+                className="mt-4"
                 onClick={() => refresh()}
-                className="mt-4 rounded-xl bg-accent-green px-4 py-2 text-xs font-semibold text-white hover:brightness-110 active:scale-[0.98]"
               >
                 {fromCache ? "Try again" : "Refresh"}
-              </button>
+              </GlassButton>
             </>
           )}
           {!isUserToday && filter === "all" && (
-            <p className="mt-2 text-xs text-text-dim">
+            <p className="mt-2 text-label-md text-text-dim">
               Pull down or tap Refresh to check for new data.
             </p>
           )}
           {filter !== "all" && (
             <button
               onClick={() => setFilter("all")}
-              className="mt-2 block mx-auto text-xs text-accent-green hover:underline"
+              className="mt-2 block mx-auto text-label-md text-accent-green hover:underline"
             >
               Show all
             </button>

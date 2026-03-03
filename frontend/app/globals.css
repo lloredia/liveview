@@ -12,48 +12,99 @@
   }
 
   html.dark {
-    --color-surface: #1A1A2E;
-    --color-surface-raised: #16213E;
-    --color-surface-card: #16213E;
-    --color-surface-hover: #1E2A4A;
-    --color-surface-border: #2A2A4A;
-    --color-surface-border-light: #3A3A5A;
-    --color-text-primary: #FFFFFF;
-    --color-text-secondary: #B8B8CC;
-    --color-text-tertiary: #8888A0;
-    --color-text-muted: #6B6B80;
-    --color-text-dim: #4A4A5A;
+    --color-surface: #111118;
+    --color-surface-raised: #16161f;
+    --color-surface-card: #1a1a25;
+    --color-surface-hover: #22222f;
+    --color-surface-border: #2a2a3a;
+    --color-surface-border-light: #35354a;
+    --color-text-primary: #f0f0f5;
+    --color-text-secondary: #b0b0c4;
+    --color-text-tertiary: #8080a0;
+    --color-text-muted: #606078;
+    --color-text-dim: #404058;
     --color-accent-green: #00E676;
     --color-accent-blue: #448AFF;
     --color-accent-red: #FF1744;
     --color-accent-amber: #FFD740;
+
+    /* Glass material tokens */
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-bg-hover: rgba(255, 255, 255, 0.07);
+    --glass-bg-elevated: rgba(255, 255, 255, 0.06);
+    --glass-bg-prominent: rgba(255, 255, 255, 0.09);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-light: rgba(255, 255, 255, 0.05);
+    --glass-highlight: rgba(255, 255, 255, 0.12);
+    --glass-shadow: rgba(0, 0, 0, 0.4);
+    --glass-shadow-ambient: rgba(0, 0, 0, 0.2);
+    --glass-blur: 20px;
+    --glass-blur-light: 12px;
+
+    /* Background gradient for glass to refract */
+    --bg-gradient-start: #0a0a12;
+    --bg-gradient-mid: #0f0f1e;
+    --bg-gradient-end: #0c0c18;
+
+    /* Reduce-transparency fallbacks */
+    --glass-solid-bg: #1a1a25;
+    --glass-solid-elevated: #1e1e2a;
+
     color-scheme: dark;
   }
 
   html.light {
-    --color-surface: #f5f7fa;
+    --color-surface: #f0f2f5;
     --color-surface-raised: #ffffff;
     --color-surface-card: #ffffff;
-    --color-surface-hover: #eef1f6;
-    --color-surface-border: #dde3eb;
-    --color-surface-border-light: #c5cdd8;
-    --color-text-primary: #1a2332;
-    --color-text-secondary: #4a5568;
-    --color-text-tertiary: #718096;
-    --color-text-muted: #a0aec0;
-    --color-text-dim: #cbd5e0;
+    --color-surface-hover: #e8ecf2;
+    --color-surface-border: #d0d8e2;
+    --color-surface-border-light: #bcc6d4;
+    --color-text-primary: #1a2030;
+    --color-text-secondary: #445068;
+    --color-text-tertiary: #667890;
+    --color-text-muted: #8898b0;
+    --color-text-dim: #b0bcd0;
     --color-accent-green: #059669;
     --color-accent-blue: #3b82f6;
     --color-accent-red: #ef4444;
     --color-accent-amber: #f59e0b;
+
+    /* Glass material tokens — light mode */
+    --glass-bg: rgba(255, 255, 255, 0.55);
+    --glass-bg-hover: rgba(255, 255, 255, 0.70);
+    --glass-bg-elevated: rgba(255, 255, 255, 0.65);
+    --glass-bg-prominent: rgba(255, 255, 255, 0.80);
+    --glass-border: rgba(0, 0, 0, 0.06);
+    --glass-border-light: rgba(0, 0, 0, 0.04);
+    --glass-highlight: rgba(255, 255, 255, 0.80);
+    --glass-shadow: rgba(0, 0, 0, 0.08);
+    --glass-shadow-ambient: rgba(0, 0, 0, 0.04);
+    --glass-blur: 20px;
+    --glass-blur-light: 12px;
+
+    --bg-gradient-start: #e8ecf4;
+    --bg-gradient-mid: #f0f2f8;
+    --bg-gradient-end: #eaeff5;
+
+    --glass-solid-bg: #ffffff;
+    --glass-solid-elevated: #f5f7fa;
+
     color-scheme: light;
   }
 
   body {
-    background-color: var(--color-surface);
+    background: linear-gradient(
+      165deg,
+      var(--bg-gradient-start) 0%,
+      var(--bg-gradient-mid) 40%,
+      var(--bg-gradient-end) 100%
+    );
+    background-attachment: fixed;
     color: var(--color-text-primary);
     overscroll-behavior: none;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background 0.3s ease, color 0.3s ease;
+    min-height: 100dvh;
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -66,6 +117,8 @@
     background: var(--color-surface-border-light);
   }
 }
+
+/* ── Keyframes ──────────────────────────────────────────────────── */
 
 @keyframes ticker-scroll {
   0% { transform: translateX(0); }
@@ -85,12 +138,92 @@
   70%      { background-color: color-mix(in srgb, var(--color-accent-green) 6%, transparent); }
 }
 
+@keyframes glass-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes score-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; text-shadow: 0 0 12px var(--color-accent-green); }
+}
+
+@keyframes glass-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glass-scale-press {
+  0% { transform: scale(1); }
+  100% { transform: scale(0.97); }
+}
+
 .score-pop {
   animation: score-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .score-flash {
   animation: score-flash 1.2s ease-out;
+}
+
+/* ── Glass utility classes ──────────────────────────────────────── */
+
+@layer components {
+  .glass-surface {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 0.5px 0 0 var(--glass-highlight),
+      0 1px 3px 0 var(--glass-shadow-ambient),
+      0 4px 12px 0 rgba(0, 0, 0, 0.06);
+  }
+
+  .glass-surface-elevated {
+    background: var(--glass-bg-elevated);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 0.5px 0 0 var(--glass-highlight),
+      0 2px 8px 0 var(--glass-shadow-ambient),
+      0 8px 24px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .glass-surface-prominent {
+    background: var(--glass-bg-prominent);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      0 4px 16px 0 var(--glass-shadow),
+      0 12px 40px 0 rgba(0, 0, 0, 0.15);
+  }
+
+  .glass-blur {
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+  }
+
+  .glass-blur-light {
+    -webkit-backdrop-filter: blur(var(--glass-blur-light));
+    backdrop-filter: blur(var(--glass-blur-light));
+  }
+
+  .glass-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--glass-border) 20%,
+      var(--glass-border) 80%,
+      transparent 100%
+    );
+  }
+
+  .glass-press {
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .glass-press:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
 }
 
 @layer utilities {
@@ -113,9 +246,13 @@
   }
 }
 
+/* ── Responsive ─────────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   body { overscroll-behavior-y: contain; }
 }
+
+/* ── Interaction ────────────────────────────────────────────────── */
 
 * { -webkit-tap-highlight-color: transparent; }
 button, a, [role="button"] {
@@ -141,6 +278,8 @@ button, a, [role="button"] {
   border-width: 0;
 }
 
+/* ── Accessibility ──────────────────────────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -149,5 +288,28 @@ button, a, [role="button"] {
   }
   .ticker-track {
     animation: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-bg: var(--glass-solid-bg) !important;
+    --glass-bg-hover: var(--glass-solid-bg) !important;
+    --glass-bg-elevated: var(--glass-solid-elevated) !important;
+    --glass-bg-prominent: var(--glass-solid-elevated) !important;
+  }
+  .glass-blur,
+  .glass-blur-light {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --glass-border: rgba(255, 255, 255, 0.2) !important;
+  }
+  html.light {
+    --glass-border: rgba(0, 0, 0, 0.15) !important;
   }
 }
