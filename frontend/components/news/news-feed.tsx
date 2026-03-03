@@ -3,43 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchNews, fetchTrendingNews } from "@/lib/api";
 import type { NewsArticle } from "@/lib/types";
-import { CATEGORY_LABELS } from "./news-constants";
 import { NewsCard } from "./news-card";
 import { NewsFeedSkeletons } from "./news-skeleton";
-import { NewsSearch } from "./news-search";
-import { NewsTrending } from "./news-trending";
-
-const CATEGORIES = [
-  "all",
-  "trending",
-  "transfer",
-  "injury",
-  "trade",
-  "draft",
-  "result",
-  "breaking",
-  "rumor",
-  "club",
-  "analysis",
-  "general",
-];
-
-const SPORTS = [
-  { value: "", label: "All sports" },
-  { value: "soccer", label: "Soccer" },
-  { value: "basketball", label: "Basketball" },
-  { value: "football", label: "Football" },
-  { value: "baseball", label: "Baseball" },
-  { value: "hockey", label: "Hockey" },
-];
-
-const TIME_FILTERS = [
-  { value: 0, label: "All time" },
-  { value: 6, label: "Last 6h" },
-  { value: 24, label: "Last 24h" },
-];
+import { NewsHeader } from "./news-header";
+import { NewsCategoryPills } from "./news-category-pills";
+import { NewsFilterSheet } from "./news-filter-sheet";
+import { NewsTrending, NewsTrendingSheetContent } from "./news-trending";
+import { NewsHero } from "./news-hero";
+import { getSavedArticleIds } from "@/lib/news-saved";
+import { GlassModalSheet } from "@/components/ui/glass";
 
 export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
+  const [heroTrigger, setHeroTrigger] = useState(0);
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -47,10 +22,20 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
-  const [category, setCategory] = useState<string>("all");
-  const [sport, setSport] = useState<string>("");
-  const [hours, setHours] = useState<number>(0);
+  const [category, setCategory] = useState("all");
+  const [sport, setSport] = useState("");
+  const [hours, setHours] = useState(0);
   const [query, setQuery] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [trendingSheetOpen, setTrendingSheetOpen] = useState(false);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSavedIds(getSavedArticleIds());
+    const handler = () => setSavedIds(getSavedArticleIds());
+    window.addEventListener("news-saved-change", handler);
+    return () => window.removeEventListener("news-saved-change", handler);
+  }, []);
 
   const load = useCallback(
     (pageNum: number, append: boolean) => {
@@ -81,9 +66,7 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         page: pageNum,
         limit: 20,
       };
-      if (category !== "all") {
-        params.category = category;
-      }
+      if (category !== "all") params.category = category;
       if (sport) params.sport = sport;
       if (hours > 0) params.hours = hours;
       if (query) params.q = query;
@@ -104,7 +87,6 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
             setError("Could not load news. Check your connection and try again.");
           } else {
             setLoadMoreError(true);
-            // Keep hasNext true so user can retry load more
           }
         })
         .finally(() => setLoading(false));
@@ -117,7 +99,10 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   }, [load]);
 
   useEffect(() => {
-    if (refreshTrigger > 0) load(1, false);
+    if (refreshTrigger > 0) {
+      load(1, false);
+      setHeroTrigger((t) => t + 1);
+    }
   }, [refreshTrigger, load]);
 
   const handleLoadMore = () => {
@@ -127,147 +112,122 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
     }
   };
 
-  const handleSearch = useCallback((q: string) => {
-    setQuery(q);
-    setPage(1);
-  }, []);
-
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
-      <div className="min-w-0 flex-1">
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <NewsSearch onSearch={handleSearch} />
-        </div>
+    <>
+      <main id="main-content" className="min-h-[100dvh]" role="main" aria-label="News feed">
+      <NewsHeader
+        onSearch={setQuery}
+        onOpenFilter={() => setFilterOpen(true)}
+      />
+      <div className="flex flex-col gap-6 px-3 pb-8 md:px-4 lg:flex-row lg:gap-8">
+        <div className="min-w-0 flex-1">
+          <div className="mb-4">
+            <NewsCategoryPills sport={sport} onSportChange={setSport} />
+          </div>
 
-        <div className="mb-3 overflow-x-auto pb-1 md:overflow-visible">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-text-dim">Sport</p>
-          <div className="flex gap-1.5 md:flex-wrap">
-            {SPORTS.map((s) => (
+          {category !== "trending" && (
+            <NewsHero refreshTrigger={heroTrigger + refreshTrigger} />
+          )}
+
+          {category !== "trending" ? (
+            <div className="lg:hidden">
               <button
-                key={s.value || "all"}
                 type="button"
-                onClick={() => setSport(s.value)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                  sport === s.value
-                    ? "bg-accent-green text-white"
-                    : "bg-surface-card text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                }`}
+                onClick={() => setTrendingSheetOpen(true)}
+                className="mb-4 w-full rounded-[16px] border border-glass-border bg-glass/60 py-3 text-body-sm font-semibold text-text-primary transition-colors hover:bg-glass-hover focus:outline-none focus:ring-2 focus:ring-accent-green/50"
               >
-                {s.label}
+                Trending
               </button>
-            ))}
-          </div>
-        </div>
+            </div>
+          ) : null}
 
-        <div className="mb-3 overflow-x-auto pb-1 md:overflow-visible">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-text-dim">Time</p>
-          <div className="flex gap-1.5">
-            {TIME_FILTERS.map((t) => (
+          {loading && articles.length === 0 ? (
+            <NewsFeedSkeletons count={6} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {articles.map((a, i) => (
+                <div key={a.id} className={i === 0 ? "sm:col-span-2" : undefined}>
+                  <NewsCard
+                    article={a}
+                    variant={i === 0 ? "featured" : "compact"}
+                    headingLevel={i === 0 ? "h2" : "h3"}
+                    savedIds={savedIds}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {error ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <p className="text-center text-text-muted">{error}</p>
               <button
-                key={t.value}
                 type="button"
-                onClick={() => setHours(t.value)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                  hours === t.value
-                    ? "bg-accent-green text-white"
-                    : "bg-surface-card text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                }`}
+                onClick={() => load(1, false)}
+                className="rounded-[12px] bg-accent-green px-4 py-2 text-body-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent-green/50"
               >
-                {t.label}
+                Try again
               </button>
-            ))}
-          </div>
-        </div>
+            </div>
+          ) : null}
 
-        <div className="mb-4 overflow-x-auto pb-1 md:overflow-visible">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-text-dim">Category</p>
-          <div className="flex gap-1.5 md:flex-wrap">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategory(cat)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                  category === cat
-                    ? "bg-accent-green text-white"
-                    : "bg-surface-card text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                }`}
-              >
-                {cat === "all" ? "All" : cat === "trending" ? "Trending" : CATEGORY_LABELS[cat] ?? cat}
-              </button>
-            ))}
-          </div>
-        </div>
+          {!loading && !error && articles.length === 0 && (
+            <p className="py-8 text-center text-text-muted">No articles found.</p>
+          )}
 
-        {category !== "trending" ? (
-          <div className="lg:hidden">
-            <NewsTrending />
-          </div>
-        ) : null}
-
-        {loading && articles.length === 0 ? (
-          <NewsFeedSkeletons count={6} />
-        ) : (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {articles.map((a, i) => (
-              <div key={a.id} className={i === 0 ? "sm:col-span-2" : undefined}>
-                <NewsCard
-                  article={a}
-                  variant={i === 0 ? "featured" : "compact"}
-                  headingLevel={i === 0 ? "h2" : "h3"}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {error ? (
-          <div className="flex flex-col items-center gap-3 py-8">
-            <p className="text-center text-text-muted">{error}</p>
-            <button
-              type="button"
-              onClick={() => load(1, false)}
-              className="rounded-lg bg-accent-green px-4 py-2 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
-            >
-              Try again
-            </button>
-          </div>
-        ) : null}
-
-        {!loading && !error && articles.length === 0 && (
-          <p className="py-8 text-center text-text-muted">No articles found.</p>
-        )}
-
-        {hasNext && articles.length > 0 && category !== "trending" && (
-          <div className="mt-6 flex flex-col items-center gap-2">
-            {loadMoreError ? (
-              <>
-                <p className="text-center text-[13px] text-text-muted">Couldn&apos;t load more.</p>
+          {hasNext && articles.length > 0 && category !== "trending" && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              {loadMoreError ? (
+                <>
+                  <p className="text-center text-body-sm text-text-muted">Couldn&apos;t load more.</p>
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    className="rounded-[12px] bg-accent-green px-4 py-2 text-body-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent-green/50"
+                  >
+                    Try again
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
                   onClick={handleLoadMore}
-                  className="rounded-lg bg-accent-green px-4 py-2 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+                  disabled={loading}
+                  className="rounded-[12px] border border-glass-border bg-glass/80 px-4 py-2 text-body-sm font-semibold text-text-primary transition-colors hover:bg-glass-hover focus:outline-none focus:ring-2 focus:ring-accent-green/50 disabled:opacity-50"
                 >
-                  Try again
+                  {loading ? "Loading…" : "Load more"}
                 </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleLoadMore}
-                disabled={loading}
-                className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-[14px] font-semibold text-text-primary transition-colors hover:bg-surface-hover disabled:opacity-50"
-              >
-                {loading ? "Loading…" : "Load more"}
-              </button>
-            )}
+              )}
+            </div>
+          )}
+        </div>
+
+        <aside className="hidden w-full shrink-0 lg:block lg:w-[300px] lg:sticky lg:top-14 lg:max-h-[calc(100dvh-3.5rem)] lg:overflow-y-auto">
+          <div className="rounded-[16px] border border-glass-border bg-glass/60 p-4">
+            <NewsTrending variant="sidebar" />
           </div>
-        )}
+        </aside>
       </div>
 
-      <aside className="w-full shrink-0 lg:sticky lg:top-[44px] lg:h-[calc(100vh-44px)] lg:w-[300px] lg:overflow-y-auto">
-        <NewsTrending />
-      </aside>
-    </div>
+      <NewsFilterSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        sport={sport}
+        category={category}
+        hours={hours}
+        onSportChange={setSport}
+        onCategoryChange={setCategory}
+        onHoursChange={setHours}
+      />
+
+      <GlassModalSheet
+        open={trendingSheetOpen}
+        onClose={() => setTrendingSheetOpen(false)}
+        title="Trending"
+      >
+        <NewsTrendingSheetContent />
+      </GlassModalSheet>
+      </main>
+    </>
   );
 }

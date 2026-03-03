@@ -51,7 +51,7 @@ export function NewsBreaking() {
 
   return (
     <div
-      className="border-b border-red-500/30 bg-red-600/15 px-3 py-2 md:px-4"
+      className="border-b border-accent-red/20 bg-accent-red/10 px-3 py-2.5 md:px-4"
       role="region"
       aria-label="Breaking news"
     >
@@ -62,10 +62,10 @@ export function NewsBreaking() {
           rel="noopener noreferrer"
           className="min-w-0 flex-1"
         >
-          <span className="mr-2 inline-flex items-center gap-1 text-[11px] font-bold text-red-400">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+          <span className="mr-2 inline-flex items-center gap-1 text-[11px] font-bold text-accent-red">
+            <span className="relative flex h-2 w-2" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-red" />
             </span>
             BREAKING
           </span>
@@ -79,7 +79,7 @@ export function NewsBreaking() {
         <button
           type="button"
           onClick={handleDismiss}
-          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:bg-red-500/20 hover:text-text-primary"
+          className="shrink-0 rounded-[8px] p-1.5 text-text-muted transition-colors hover:bg-accent-red/20 hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-red/50"
           aria-label="Dismiss breaking news"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

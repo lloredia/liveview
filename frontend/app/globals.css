@@ -289,6 +289,9 @@ button, a, [role="button"] {
   .ticker-track {
     animation: none !important;
   }
+  .news-reading-progress {
+    display: none !important;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
