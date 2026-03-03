@@ -53,3 +53,5 @@
 4. **Saved articles page:** Dedicated route listing `getSavedArticleIds()` with optional sync (e.g. backend later).
 5. **Share button:** Native Web Share API or copy-link on card or expanded preview.
 6. **Category in header or pills:** Show active category (e.g. "Transfers") in a chip next to sport pills or in header for clarity.
+
+7. **Daily Highlights Option 2 (backend):** Add `/api/news/highlights` Next route that computes highlights server-side with `revalidate = 3600` for daily cache.

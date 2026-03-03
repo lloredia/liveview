@@ -1,94 +1,98 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
 import { sportIcon } from "@/lib/utils";
-
-function sanitizeImageSrc(src: string | null | undefined): string | null {
-  if (src == null || typeof src !== "string") return null;
-  const trimmed = src.trim();
-  if (!trimmed || !trimmed.startsWith("http")) return null;
-  return trimmed;
-}
+import { newsImageProxyUrl } from "@/lib/news/imageUrl";
 
 interface NewsImageProps {
   src: string | null;
   alt?: string;
   className?: string;
-  /** Optional sport for placeholder emoji when image fails */
   sport?: string | null;
-  /** Placeholder when no src or on error */
   placeholder?: ReactNode;
-  /** Container class for the wrapper (e.g. aspect-video, h-20 w-20) */
+  /** Must include aspect ratio or explicit size to avoid layout shift (e.g. aspect-video w-full, aspect-square h-20 w-20) */
   containerClassName?: string;
-  /** Eager load + high priority (e.g. hero first/active slide) */
   priority?: boolean;
+  /** Responsive sizes for next/image (default: card/hero friendly) */
+  sizes?: string;
 }
 
 const defaultPlaceholder = (
   <div
-    className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-hover to-surface-card"
+    className="flex h-full w-full items-center justify-center bg-gradient-to-br from-glass-hover to-glass bg-glass/80"
     aria-hidden
   >
     <span className="text-2xl opacity-50">📰</span>
   </div>
 );
 
+function PlaceholderContent({ sport, placeholder }: { sport?: string | null; placeholder?: ReactNode }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-glass-hover to-glass bg-glass/80 transition-opacity duration-200"
+      aria-hidden
+    >
+      {sport ? (
+        <span className="text-3xl opacity-70" title={sport ?? undefined}>
+          {sportIcon(sport)}
+        </span>
+      ) : (
+        placeholder ?? defaultPlaceholder
+      )}
+    </div>
+  );
+}
+
 export function NewsImage({
   src: rawSrc,
   alt = "",
-  className = "h-full w-full object-cover",
+  className = "object-cover",
   sport,
   placeholder = defaultPlaceholder,
   containerClassName,
   priority = false,
+  sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
 }: NewsImageProps) {
-  const src = sanitizeImageSrc(rawSrc);
+  const proxyUrl = newsImageProxyUrl(rawSrc);
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setError(false);
     setLoaded(false);
-  }, [src]);
+  }, [proxyUrl]);
 
-  const showImage = src && !error;
+  const showImage = proxyUrl && !error;
+
+  const containerCls = [
+    "relative overflow-hidden",
+    containerClassName ?? "aspect-video w-full",
+  ].filter(Boolean).join(" ");
 
   const content = showImage ? (
     <>
-      {/* Loading overlay: hides partial image until fully loaded */}
-      {!loaded && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface-hover to-surface-card transition-opacity duration-200"
-          aria-hidden
-        >
-          {sport ? (
-            <span className="text-3xl opacity-70" title={sport}>
-              {sportIcon(sport)}
-            </span>
-          ) : (
-            <span className="text-2xl opacity-50">📰</span>
-          )}
-        </div>
-      )}
-      <img
-        src={src}
+      {!loaded && <PlaceholderContent sport={sport} placeholder={placeholder} />}
+      <Image
+        src={proxyUrl}
         alt={alt}
+        fill
+        sizes={sizes}
         className={`${className} ${loaded ? "opacity-100" : "opacity-0"} transition-opacity duration-300`}
+        priority={priority}
         loading={priority ? "eager" : "lazy"}
-        decoding="async"
-        fetchPriority={priority ? "high" : undefined}
-        referrerPolicy="no-referrer"
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
+        unoptimized={false}
       />
     </>
   ) : (
     <div
-      className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-hover to-surface-card"
+      className="flex h-full w-full items-center justify-center bg-gradient-to-br from-glass-hover to-glass bg-glass/80"
       aria-hidden
     >
       {sport ? (
-        <span className="text-3xl opacity-70" title={sport}>
+        <span className="text-3xl opacity-70" title={sport ?? undefined}>
           {sportIcon(sport)}
         </span>
       ) : (
@@ -97,12 +101,9 @@ export function NewsImage({
     </div>
   );
 
-  if (containerClassName) {
-    return (
-      <div className={`relative overflow-hidden ${containerClassName}`}>
-        {content}
-      </div>
-    );
-  }
-  return <div className="relative">{content}</div>;
+  return (
+    <div className={containerCls}>
+      {content}
+    </div>
+  );
 }

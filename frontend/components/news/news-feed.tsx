@@ -10,6 +10,7 @@ import { NewsCategoryPills } from "./news-category-pills";
 import { NewsFilterSheet } from "./news-filter-sheet";
 import { NewsTrending, NewsTrendingSheetContent } from "./news-trending";
 import { NewsHero } from "./news-hero";
+import { NewsDailyHighlights } from "./news-daily-highlights";
 import { getSavedArticleIds } from "@/lib/news-saved";
 import { GlassModalSheet } from "@/components/ui/glass";
 
@@ -128,6 +129,8 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
           {category !== "trending" && (
             <NewsHero refreshTrigger={heroTrigger + refreshTrigger} />
           )}
+
+          {category !== "trending" && <NewsDailyHighlights />}
 
           {category !== "trending" ? (
             <div className="lg:hidden">
