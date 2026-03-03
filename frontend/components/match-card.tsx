@@ -7,6 +7,7 @@ import { formatTime, isLive, phaseLabel, phaseShortLabel, phaseShortLabelWithClo
 import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
+import { TrackButton } from "./track-button";
 
 /* ── Animated score digit ─────────────────────────────────────────── */
 
@@ -265,24 +266,16 @@ export const MatchCard = memo(function MatchCard({
         </span>
       </div>
 
-      {/* Pin */}
+      {/* Track */}
       {onTogglePin && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onTogglePin(match.id);
-          }}
-          className={`mr-2 shrink-0 rounded-[8px] p-1 text-label-sm transition-all ${
-            pinned
-              ? "text-accent-blue opacity-100"
-              : "text-text-dim opacity-0 group-hover:opacity-100 hover:text-accent-blue"
-          }`}
-          aria-label={pinned ? "Unpin match" : "Pin match"}
-        >
-          {pinned ? "★" : "☆"}
-        </button>
+        <div className={`mr-1 shrink-0 transition-opacity ${
+          pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}>
+          <TrackButton
+            matchId={match.id}
+            onToggle={(next) => onTogglePin(match.id)}
+          />
+        </div>
       )}
     </Link>
   );

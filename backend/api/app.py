@@ -52,6 +52,7 @@ from ingest.news_fetcher import fetch_and_store_news
 from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.ws.manager import WebSocketManager
 from api.live_fallback import espn_retry, tsdb_fallback_for_league
+from api.routes.notifications import router as notifications_router
 
 logger = get_logger(__name__)
 
@@ -342,6 +343,8 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
     if not events:
         return 0
 
+    _notif_queue: list[tuple[str, Any]] = []
+
     count = 0
     async with db.write_session() as session:
         for event in events:
@@ -434,6 +437,11 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         or state_obj.extra_data != extra
                     )
                     if changed:
+                        # Capture pre-update state for notifications
+                        _prev_home = state_obj.score_home
+                        _prev_away = state_obj.score_away
+                        _prev_phase = state_obj.phase
+
                         state_obj.score_home = score_home
                         state_obj.score_away = score_away
                         state_obj.clock = clock
@@ -442,6 +450,27 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         state_obj.extra_data = extra
                         state_obj.version = (state_obj.version or 0) + 1
                         count += 1
+
+                        # Queue notification processing
+                        home_name = match_obj.home_team.name if match_obj and match_obj.home_team else "Home"
+                        away_name = match_obj.away_team.name if match_obj and match_obj.away_team else "Away"
+                        home_short = (match_obj.home_team.short_name if match_obj and match_obj.home_team else "HOM")
+                        away_short = (match_obj.away_team.short_name if match_obj and match_obj.away_team else "AWY")
+                        league_name = match_obj.league.name if match_obj and match_obj.league else espn_league_id
+
+                        _notif_queue.append((str(match_id), {
+                            "score_home": score_home,
+                            "score_away": score_away,
+                            "phase": phase.value,
+                            "clock": clock,
+                            "period": str(period_num) if period_num else None,
+                            "sport": sport,
+                            "league": league_name,
+                            "home_name": home_name,
+                            "away_name": away_name,
+                            "home_short": home_short,
+                            "away_short": away_short,
+                        }))
 
                 # Upsert team statistics
                 if home_stats or away_stats:
@@ -470,6 +499,30 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     sport=sport,
                     error=str(evt_exc),
                 )
+
+    # Process notification queue outside the DB session
+    if _notif_queue:
+        try:
+            from notifications.dispatcher import process_game_update
+            from notifications.engine import GameState
+            for game_id, info in _notif_queue:
+                state = GameState(
+                    game_id=game_id,
+                    score_home=info["score_home"],
+                    score_away=info["score_away"],
+                    phase=info["phase"],
+                    clock=info.get("clock"),
+                    period=info.get("period"),
+                    sport=info["sport"],
+                    league=info["league"],
+                    home_name=info["home_name"],
+                    away_name=info["away_name"],
+                    home_short=info["home_short"],
+                    away_short=info["away_short"],
+                )
+                await process_game_update(db, game_id, state)
+        except Exception as notif_exc:
+            logger.warning("notification_processing_error", error=str(notif_exc))
 
     return count
 
@@ -700,6 +753,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
     app.include_router(matches_router)
     app.include_router(news_router)
     app.include_router(today_router)
+    app.include_router(notifications_router)
 
     # Health check
     @app.get("/health", tags=["system"])

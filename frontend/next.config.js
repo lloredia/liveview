@@ -3,6 +3,8 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+  customWorkerSrc: "custom-sw",
+  customWorkerDest: "custom-sw.js",
   fallbacks: {
     document: "/offline",
   },
@@ -49,6 +51,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/v1/ws",
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "",
   },
   async rewrites() {
     return [

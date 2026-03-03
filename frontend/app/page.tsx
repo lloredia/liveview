@@ -13,7 +13,9 @@ import { PullToRefresh } from "@/components/pull-to-refresh";
 import { MultiTracker } from "@/components/multi-tracker";
 import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { useScoreAlerts } from "@/hooks/use-score-alerts";
-import { requestPushPermission, getPushPermission } from "@/lib/push-notifications";
+import { getPushPermission, subscribeToWebPush } from "@/lib/push-notifications";
+import { ensureDeviceRegistered } from "@/lib/device";
+import { trackGameOnServer, untrackGameOnServer } from "@/lib/notification-api";
 import { getFavoriteLeagues } from "@/lib/favorites";
 import type { TodayResponse } from "@/components/today-view";
 
@@ -27,8 +29,6 @@ function HomeContent() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
-  const [pushEnabled, setPushEnabled] = useState(false);
-
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
@@ -37,8 +37,15 @@ function HomeContent() {
     setPinnedIds(getPinnedMatches());
   }, []);
 
+  // Register device with backend notification system
   useEffect(() => {
-    setPushEnabled(getPushPermission() === "granted");
+    ensureDeviceRegistered()
+      .then(() => {
+        if (getPushPermission() === "granted") {
+          subscribeToWebPush().catch(() => {});
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -169,8 +176,16 @@ function HomeContent() {
   );
 
   const handleTogglePin = useCallback((matchId: string) => {
+    const prev = getPinnedMatches();
+    const wasPinned = prev.includes(matchId);
     const next = togglePinned(matchId);
     setPinnedIds(next);
+    // Sync with backend notification system
+    if (wasPinned) {
+      untrackGameOnServer(matchId).catch(() => {});
+    } else {
+      trackGameOnServer(matchId).catch(() => {});
+    }
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -195,11 +210,6 @@ function HomeContent() {
         liveCount={totalLive}
         onLeagueSelect={handleLeagueSelect}
         onMatchSelect={handleMatchSelect}
-        pushEnabled={pushEnabled}
-        onPushToggle={async () => {
-          const granted = await requestPushPermission();
-          setPushEnabled(granted);
-        }}
       />
 
       <LiveTicker leagues={leagues} onMatchSelect={handleMatchSelect} />
