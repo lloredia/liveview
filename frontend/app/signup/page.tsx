@@ -29,18 +29,33 @@ function SignupContent() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/v1/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-          name: name.trim() || undefined,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/v1/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            name: name.trim() || undefined,
+          }),
+        });
+      } catch (netErr) {
+        setError("Could not reach server. Check your connection or try again later.");
+        setLoading(false);
+        return;
+      }
+      const raw = await res.text();
+      const data = raw ? (() => { try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; } })() : {};
       if (!res.ok) {
-        setError(data.detail || data.message || "Registration failed.");
+        const detail = data.detail;
+        const msg =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? (detail as { msg?: string }[]).map((x) => x.msg ?? "").filter(Boolean).join(". ") || String(data.message ?? "Registration failed.")
+              : String(data.message ?? "Registration failed.");
+        setError(msg || "Registration failed.");
         setLoading(false);
         return;
       }
@@ -56,8 +71,9 @@ function SignupContent() {
       }
       if (signInRes?.error) setError("Account created. Please sign in.");
       else router.push(callbackUrl);
-    } catch {
-      setError("Something went wrong.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setError(message.includes("fetch") || message.includes("Network") ? "Could not reach server. Check your connection or try again later." : message);
     }
     setLoading(false);
   };

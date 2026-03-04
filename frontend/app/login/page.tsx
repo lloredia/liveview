@@ -17,6 +17,9 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const from = searchParams.get("from") ?? undefined;
+  const oauthError = searchParams.get("error");
 
   // Show OAuth error from NextAuth redirect (e.g. OAuthCallback, Configuration, etc.)
   const errorMessage =
@@ -30,9 +33,6 @@ function LoginContent() {
           : oauthError
             ? "Sign-in failed. Try again or use Email."
             : "");
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
-  const from = searchParams.get("from") ?? undefined;
-  const oauthError = searchParams.get("error");
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
