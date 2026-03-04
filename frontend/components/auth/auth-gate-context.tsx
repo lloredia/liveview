@@ -9,6 +9,8 @@ import {
 } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { AppleLogo } from "@/components/auth/AppleLogo";
+import { GoogleLogo } from "@/components/auth/GoogleLogo";
 
 interface GateState {
   open: boolean;
@@ -67,16 +69,18 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => signIn("apple", { callbackUrl: gateState.returnPath || "/" })}
-                className="rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
+                className="flex items-center justify-center gap-2 rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
               >
-                Apple
+                <AppleLogo className="h-4 w-4 shrink-0 text-white" />
+                Continue with Apple
               </button>
               <button
                 type="button"
                 onClick={() => signIn("google", { callbackUrl: gateState.returnPath || "/" })}
-                className="rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
+                className="flex items-center justify-center gap-2 rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
               >
-                Google
+                <GoogleLogo className="h-4 w-4 shrink-0" />
+                Continue with Google
               </button>
               <Link
                 href={loginUrl}

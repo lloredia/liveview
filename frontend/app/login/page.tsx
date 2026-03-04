@@ -7,6 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { SportsBackground } from "@/components/auth/SportsBackground";
 import { VignetteOverlay } from "@/components/auth/VignetteOverlay";
 import { GlassAuthCard } from "@/components/auth/GlassAuthCard";
+import { AppleLogo } from "@/components/auth/AppleLogo";
+import { GoogleLogo } from "@/components/auth/GoogleLogo";
 import { AUTH_GLASS } from "@/lib/ui/glass";
 
 function LoginContent() {
@@ -82,7 +84,7 @@ function LoginContent() {
             className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
             aria-label="Continue with Apple"
           >
-            <span aria-hidden className="text-lg">🍎</span>
+            <AppleLogo className="h-5 w-5 shrink-0 text-white" />
             Continue with Apple
           </button>
           <button
@@ -91,7 +93,7 @@ function LoginContent() {
             className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
             aria-label="Continue with Google"
           >
-            <span aria-hidden className="text-[15px] font-semibold text-[#4285F4]">G</span>
+            <GoogleLogo className="h-5 w-5 shrink-0" />
             Continue with Google
           </button>
         </div>

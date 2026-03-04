@@ -3,6 +3,8 @@
 import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AppleLogo } from "@/components/auth/AppleLogo";
+import { GoogleLogo } from "@/components/auth/GoogleLogo";
 
 export interface RequireAuthGateProps {
   children: ReactNode;
@@ -53,16 +55,18 @@ export function RequireAuthGate({ children, fallback, returnPath }: RequireAuthG
         <button
           type="button"
           onClick={() => signIn("apple", { callbackUrl: returnPath || "/" })}
-          className="rounded-lg border border-glass-border bg-glass px-4 py-2 text-label-md font-medium text-text-primary hover:bg-glass-hover"
+          className="flex items-center justify-center gap-2 rounded-lg border border-glass-border bg-glass px-4 py-2 text-label-md font-medium text-text-primary hover:bg-glass-hover"
         >
-          Apple
+          <AppleLogo className="h-4 w-4 shrink-0 text-white" />
+          Continue with Apple
         </button>
         <button
           type="button"
           onClick={() => signIn("google", { callbackUrl: returnPath || "/" })}
-          className="rounded-lg border border-glass-border bg-glass px-4 py-2 text-label-md font-medium text-text-primary hover:bg-glass-hover"
+          className="flex items-center justify-center gap-2 rounded-lg border border-glass-border bg-glass px-4 py-2 text-label-md font-medium text-text-primary hover:bg-glass-hover"
         >
-          Google
+          <GoogleLogo className="h-4 w-4 shrink-0" />
+          Continue with Google
         </button>
         <Link
           href={`/login${returnPath ? `?callbackUrl=${encodeURIComponent(returnPath)}` : ""}`}
