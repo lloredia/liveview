@@ -1,24 +1,33 @@
 """
-Auth API: register (email/password), login (returns user for NextAuth Credentials).
+Auth API: register (email/password), login (returns user for NextAuth Credentials),
+oauth-ensure (get-or-create user for OAuth, called by NextAuth server).
 """
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
 from api.dependencies import get_db
-from auth.models import PasswordCredentialORM, UserORM
+from auth.models import AuthIdentityORM, PasswordCredentialORM, UserORM
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/v1", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+OAUTH_SECRET = os.environ.get("OAUTH_ENSURE_SECRET") or os.environ.get("NEXTAUTH_SECRET") or ""
+
+
+def _require_oauth_secret(x_oauth_secret: Optional[str] = Header(None, alias="X-OAuth-Secret")) -> None:
+    if not OAUTH_SECRET or x_oauth_secret != OAUTH_SECRET:
+        raise HTTPException(401, "Unauthorized")
 
 
 class RegisterRequest(BaseModel):
@@ -96,3 +105,75 @@ async def login(
             email=user.email,
             name=user.name,
         )
+
+
+class OAuthEnsureRequest(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=50)
+    provider_account_id: str = Field(..., min_length=1, max_length=255)
+    email: Optional[str] = Field(None, max_length=255)
+    name: Optional[str] = Field(None, max_length=255)
+
+
+class OAuthEnsureResponse(BaseModel):
+    id: str
+
+
+@router.post("/auth/oauth-ensure", response_model=OAuthEnsureResponse)
+async def oauth_ensure(
+    req: OAuthEnsureRequest,
+    db: DatabaseManager = Depends(get_db),
+    _: None = Depends(_require_oauth_secret),
+):
+    """
+    Get or create a user for OAuth sign-in. Called by NextAuth server only (X-OAuth-Secret).
+    Returns user id to use as JWT sub so backend and frontend share the same user.
+    """
+    if not req.email and not req.provider_account_id:
+        raise HTTPException(400, "email or provider_account_id required")
+    async with db.write_session() as session:
+        # 1) Existing auth identity for this provider + provider_account_id
+        existing_identity = (
+            await session.execute(
+                select(AuthIdentityORM).where(
+                    AuthIdentityORM.provider == req.provider,
+                    AuthIdentityORM.provider_account_id == req.provider_account_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing_identity:
+            return OAuthEnsureResponse(id=str(existing_identity.user_id))
+
+        # 2) Find by email and link this provider
+        email = (req.email or "").strip().lower()
+        if email:
+            existing_user = (
+                await session.execute(select(UserORM).where(UserORM.email == email))
+            ).scalar_one_or_none()
+            if existing_user:
+                identity = AuthIdentityORM(
+                    user_id=existing_user.id,
+                    provider=req.provider,
+                    provider_account_id=req.provider_account_id,
+                )
+                session.add(identity)
+                await session.flush()
+                return OAuthEnsureResponse(id=str(existing_user.id))
+
+        # 3) Create new user (email from OAuth or placeholder)
+        if not email:
+            email = f"{req.provider}_{req.provider_account_id}@oauth.placeholder"
+        new_user = UserORM(
+            id=uuid.uuid4(),
+            email=email,
+            name=req.name or None,
+        )
+        session.add(new_user)
+        await session.flush()
+        identity = AuthIdentityORM(
+            user_id=new_user.id,
+            provider=req.provider,
+            provider_account_id=req.provider_account_id,
+        )
+        session.add(identity)
+        await session.flush()
+        return OAuthEnsureResponse(id=str(new_user.id))

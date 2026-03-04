@@ -68,11 +68,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/login",
   },
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.sub = user.id;
         token.email = user.email;
         token.name = user.name;
+        // Credentials: user.id is already our backend UUID. OAuth: get-or-create backend user and use its id.
+        if (account?.provider === "google" || account?.provider === "apple") {
+          const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+          try {
+            const res = await fetch(`${apiBase}/v1/auth/oauth-ensure`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(secret ? { "X-OAuth-Secret": secret } : {}),
+              },
+              body: JSON.stringify({
+                provider: account.provider,
+                provider_account_id: account.providerAccountId ?? (account as { providerAccountId?: string }).providerAccountId ?? "",
+                email: user.email ?? undefined,
+                name: user.name ?? undefined,
+              }),
+            });
+            if (res.ok) {
+              const data = (await res.json()) as { id: string };
+              token.sub = data.id;
+            } else {
+              token.sub = user.id;
+            }
+          } catch {
+            token.sub = user.id;
+          }
+        } else {
+          token.sub = user.id;
+        }
       }
       return token;
     },

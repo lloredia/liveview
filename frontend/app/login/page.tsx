@@ -17,8 +17,22 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
+
+  // Show OAuth error from NextAuth redirect (e.g. OAuthCallback, Configuration, etc.)
+  const errorMessage =
+    error ||
+    (oauthError === "OAuthAccountNotLinked"
+      ? "This email is already linked to another sign-in method. Try signing in with Email or the other provider."
+      : oauthError === "OAuthCreateAccount" || oauthError === "OAuthCallback"
+        ? "Sign-in failed. Try again or use Email to continue."
+        : oauthError === "Configuration"
+          ? "Sign-in is not configured. Please use Email to sign in."
+          : oauthError
+            ? "Sign-in failed. Try again or use Email."
+            : "");
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
   const from = searchParams.get("from") ?? undefined;
+  const oauthError = searchParams.get("error");
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,9 +139,9 @@ function LoginContent() {
             autoComplete="current-password"
             aria-label="Password"
           />
-          {error && (
+          {errorMessage && (
             <p className="text-[13px] text-accent-red" role="alert">
-              {error}
+              {errorMessage}
             </p>
           )}
           <button

@@ -48,6 +48,7 @@ APPLE_SECRET=...
 
 - **POST /v1/auth/register** — Email/password signup (no auth).
 - **POST /v1/auth/login** — Email/password login; returns user for NextAuth Credentials (no auth).
+- **POST /v1/auth/oauth-ensure** — Get-or-create user for OAuth (Google/Apple). Called by the NextAuth server only; requires header `X-OAuth-Secret: <NEXTAUTH_SECRET>` (or set `OAUTH_ENSURE_SECRET` on the backend). Creates/links `auth_identities` and returns user `id` so the JWT `sub` matches the backend user.
 - **GET /v1/me** — Current user (requires `Authorization: Bearer <jwt>`).
 - **GET/POST/DELETE /v1/user/tracked-games** — User tracked games (requires auth).
 - **GET/POST/DELETE /v1/user/favorites** — User favorites (requires auth).
