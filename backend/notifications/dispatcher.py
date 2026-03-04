@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger
@@ -179,7 +179,7 @@ async def _deliver_to_device(
                 if sub:
                     await session.delete(sub)
 
-    # iOS APNs
+    # iOS APNs (notifications.apns with APNS_* env; invalid tokens removed)
     async with db.read_session() as session:
         stmt = select(IOSPushTokenORM).where(
             IOSPushTokenORM.device_id == device_uuid
@@ -189,7 +189,8 @@ async def _deliver_to_device(
 
     if tokens:
         try:
-            from notifications.deliver_apns import send_apns_notification
+            from notifications.apns import send_apns_notification
+            invalid_token_ids: list[uuid.UUID] = []
             for token_obj in tokens:
                 ok = await send_apns_notification(
                     device_token=token_obj.apns_token,
@@ -200,6 +201,15 @@ async def _deliver_to_device(
                 if ok:
                     delivered = True
                     await _log_delivery(db, device_id, event, "apns")
+                else:
+                    invalid_token_ids.append(token_obj.id)
+            if invalid_token_ids:
+                async with db.write_session() as session:
+                    await session.execute(
+                        delete(IOSPushTokenORM).where(
+                            IOSPushTokenORM.id.in_(invalid_token_ids)
+                        )
+                    )
         except Exception as exc:
             logger.warning("apns_delivery_error", device=device_id[:8], error=str(exc))
 

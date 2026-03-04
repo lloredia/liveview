@@ -83,7 +83,7 @@ export function NewsImage({
         loading={priority ? "eager" : "lazy"}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
-        unoptimized={false}
+        unoptimized
       />
     </>
   ) : (

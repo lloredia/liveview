@@ -1,23 +1,42 @@
 /**
  * Capacitor iOS push notification integration.
  *
- * Registers for APNs push notifications when running inside the iOS app,
- * and sends the device token to the backend.
+ * - On app load: register action listener so tap → deep link works when app is cold-started.
+ * - On first user interaction: request permission, register for remote notifications,
+ *   capture APNs token, POST to backend /v1/notifications/ios/register-token.
  *
  * Prerequisites:
  * 1. npm install @capacitor/push-notifications
  * 2. npx cap sync ios
- * 3. Enable Push Notifications capability in Xcode
+ * 3. Enable Push Notifications + Background Modes → Remote notifications in Xcode
  * 4. Add APNs credentials to backend env vars
  */
 
 import { getApiBase } from "./api";
-import { getDeviceId, ensureDeviceRegistered } from "./device";
+import { getDeviceIdAsync, ensureDeviceRegistered } from "./device";
 
 function isCapacitorIOS(): boolean {
   if (typeof window === "undefined") return false;
   const cap = (window as any).Capacitor;
   return cap?.getPlatform?.() === "ios";
+}
+
+/**
+ * Register listener for notification tap. Call early (e.g. root layout) so deep link
+ * works when app is cold-started from a push tap.
+ */
+export function registerPushActionListener(): void {
+  if (!isCapacitorIOS()) return;
+  import("@capacitor/push-notifications").then(({ PushNotifications }) => {
+    PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+      const data = action.notification.data as Record<string, unknown> | undefined;
+      const url = data?.url ?? (data?.data as Record<string, unknown> | undefined)?.url;
+      const urlStr = typeof url === "string" ? url : null;
+      if (urlStr && urlStr.startsWith("/") && typeof window !== "undefined") {
+        window.location.href = urlStr;
+      }
+    });
+  }).catch(() => {});
 }
 
 /**
@@ -43,7 +62,7 @@ export async function initCapacitorPush(): Promise<void> {
     PushNotifications.addListener("registration", async (token) => {
       console.log("[cap-push] APNs token:", token.value.substring(0, 12) + "...");
       await ensureDeviceRegistered();
-      const deviceId = getDeviceId();
+      const deviceId = await getDeviceIdAsync();
       if (!deviceId) return;
 
       await fetch(`${getApiBase()}/v1/notifications/ios/register-token`, {
@@ -65,11 +84,13 @@ export async function initCapacitorPush(): Promise<void> {
       console.log("[cap-push] Received:", notification.title);
     });
 
+    // Action listener also registered early via registerPushActionListener() for cold start
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-      const data = action.notification.data;
-      const url = data?.url;
-      if (typeof url === "string" && url.startsWith("/") && typeof window !== "undefined") {
-        window.location.href = url;
+      const data = action.notification.data as Record<string, unknown> | undefined;
+      const url = data?.url ?? (data?.data as { url?: string } | undefined)?.url;
+      const urlStr = typeof url === "string" ? url : null;
+      if (urlStr && urlStr.startsWith("/") && typeof window !== "undefined") {
+        window.location.href = urlStr;
       }
     });
   } catch (err) {

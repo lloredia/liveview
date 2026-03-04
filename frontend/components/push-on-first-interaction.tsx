@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { initCapacitorPush } from "@/lib/capacitor-push";
+import { initCapacitorPush, registerPushActionListener } from "@/lib/capacitor-push";
 import { hapticLightImpact } from "@/lib/haptics";
 
 /**
+ * Registers push action listener on load (for deep link on cold start).
  * Requests APNs permission and initializes push only after the user's first
  * interaction (tap/click), per App Store guidelines.
  */
 export function PushOnFirstInteraction() {
   const done = useRef(false);
+
+  useEffect(() => {
+    registerPushActionListener();
+  }, []);
 
   useEffect(() => {
     if (done.current) return;
