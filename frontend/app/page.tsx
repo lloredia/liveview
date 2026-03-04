@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
@@ -11,18 +12,24 @@ import { TodayView } from "@/components/today-view";
 import { LiveTicker } from "@/components/live-ticker";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { MultiTracker } from "@/components/multi-tracker";
-import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { useScoreAlerts } from "@/hooks/use-score-alerts";
 import { getPushPermission, subscribeToWebPush } from "@/lib/push-notifications";
 import { ensureDeviceRegistered } from "@/lib/device";
-import { trackGameOnServer, untrackGameOnServer } from "@/lib/notification-api";
-import { getFavoriteLeagues } from "@/lib/favorites";
-import { getFavoriteTeams } from "@/lib/favorite-teams";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { OfflineBanner } from "@/components/offline-banner";
 import { ProviderAttribution } from "@/components/provider-attribution";
 import { hapticSelection } from "@/lib/haptics";
 import type { TodayResponse } from "@/components/today-view";
+import { useRequireAuth } from "@/hooks/use-require-auth";
+import { useAuthToken } from "@/hooks/use-auth-token";
+import {
+  fetchUserTrackedGames,
+  addUserTrackedGame,
+  removeUserTrackedGame,
+  fetchUserFavorites,
+  addUserFavorite,
+  removeUserFavorite,
+} from "@/lib/auth-api";
 
 function HomeContent() {
   const router = useRouter();
@@ -38,10 +45,27 @@ function HomeContent() {
   const [totalLive, setTotalLive] = useState(0);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
   const online = useOnlineStatus();
+  const { isAuthed, requireAuth, openLogin } = useRequireAuth();
+  const { token, refresh: refreshToken } = useAuthToken();
 
+  // When authed, load pinned and favorites from backend; when not, keep empty (no local tracking)
   useEffect(() => {
-    setPinnedIds(getPinnedMatches());
-  }, []);
+    if (!isAuthed || !token) {
+      setPinnedIds([]);
+      setFavTeamIds([]);
+      setFavLeagueIds([]);
+      return;
+    }
+    (async () => {
+      const [pinned, favs] = await Promise.all([
+        fetchUserTrackedGames(token),
+        fetchUserFavorites(token),
+      ]);
+      setPinnedIds(pinned);
+      setFavTeamIds(favs.teams);
+      setFavLeagueIds(favs.leagues);
+    })();
+  }, [isAuthed, token]);
 
   // Register device with backend notification system
   useEffect(() => {
@@ -143,10 +167,7 @@ function HomeContent() {
   }, []);
 
   const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
-  const [favTeamIds, setFavTeamIds] = useState<string[]>(() => getFavoriteTeams());
-  useEffect(() => {
-    setFavLeagueIds(getFavoriteLeagues());
-  }, []);
+  const [favTeamIds, setFavTeamIds] = useState<string[]>([]);
 
   const favoriteLeagueIds = useMemo(
     () =>
@@ -182,19 +203,68 @@ function HomeContent() {
     [router],
   );
 
-  const handleTogglePin = useCallback((matchId: string) => {
-    hapticSelection();
-    const prev = getPinnedMatches();
-    const wasPinned = prev.includes(matchId);
-    const next = togglePinned(matchId);
-    setPinnedIds(next);
-    // Sync with backend notification system
-    if (wasPinned) {
-      untrackGameOnServer(matchId).catch(() => {});
-    } else {
-      trackGameOnServer(matchId).catch(() => {});
-    }
-  }, []);
+  const handleTogglePin = useCallback(
+    (matchId: string) => {
+      hapticSelection();
+      requireAuth({
+        returnPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/",
+        onAuthed: async () => {
+          if (!token) return;
+          const wasPinned = pinnedIds.includes(matchId);
+          if (wasPinned) {
+            await removeUserTrackedGame(matchId, token);
+          } else {
+            await addUserTrackedGame(matchId, {}, token);
+          }
+          const next = await fetchUserTrackedGames(token);
+          setPinnedIds(next);
+          refreshToken();
+        },
+      });
+    },
+    [requireAuth, token, pinnedIds, refreshToken]
+  );
+
+  const refreshFavorites = useCallback(async () => {
+    if (!token) return;
+    const favs = await fetchUserFavorites(token);
+    setFavTeamIds(favs.teams);
+    setFavLeagueIds(favs.leagues);
+  }, [token]);
+
+  const handleToggleFavoriteTeam = useCallback(
+    (teamId: string) => {
+      hapticSelection();
+      requireAuth({
+        returnPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/",
+        onAuthed: async () => {
+          if (!token) return;
+          const isFav = favTeamIds.includes(teamId);
+          if (isFav) await removeUserFavorite("team", teamId, token);
+          else await addUserFavorite("team", teamId, token);
+          await refreshFavorites();
+        },
+      });
+    },
+    [requireAuth, token, favTeamIds, refreshFavorites]
+  );
+
+  const handleToggleFavoriteLeague = useCallback(
+    (leagueId: string) => {
+      hapticSelection();
+      requireAuth({
+        returnPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/",
+        onAuthed: async () => {
+          if (!token) return;
+          const isFav = favLeagueIds.includes(leagueId);
+          if (isFav) await removeUserFavorite("league", leagueId, token);
+          else await addUserFavorite("league", leagueId, token);
+          await refreshFavorites();
+        },
+      });
+    },
+    [requireAuth, token, favLeagueIds, refreshFavorites]
+  );
 
   const handleRefresh = useCallback(async () => {
     const current = selectedLeague;
@@ -231,6 +301,8 @@ function HomeContent() {
           onClose={() => setSidebarOpen(false)}
           liveCounts={liveCounts}
           onTodayClick={handleTodayView}
+          favoriteLeagueIds={favLeagueIds}
+          onToggleFavoriteLeague={handleToggleFavoriteLeague}
         />
 
         <PullToRefresh onRefresh={handleRefresh}>
@@ -262,7 +334,7 @@ function HomeContent() {
                   pinnedIds={pinnedIds}
                   onTogglePin={handleTogglePin}
                   favoriteTeamIds={favTeamIds}
-                  onFavoriteTeamsChange={() => setFavTeamIds(getFavoriteTeams())}
+                  onToggleFavoriteTeam={handleToggleFavoriteTeam}
                 />
               ) : (
                 <TodayView
@@ -273,11 +345,18 @@ function HomeContent() {
                   headerLiveCount={totalLive}
                   headerTodayData={todaySnapshot}
                   favoriteTeamIds={favTeamIds}
-                  onFavoriteTeamsChange={() => setFavTeamIds(getFavoriteTeams())}
+                  onToggleFavoriteTeam={handleToggleFavoriteTeam}
+                  isAuthed={isAuthed}
+                  openLogin={openLogin}
                 />
               )}
               <footer className="mt-6 pb-4 text-center">
                 <ProviderAttribution />
+                <p className="mt-2 text-label-xs text-text-dim">
+                  <Link href="/privacy" className="text-text-muted hover:text-text-secondary hover:underline">
+                    Privacy Policy
+                  </Link>
+                </p>
               </footer>
             </div>
           </main>
@@ -288,6 +367,16 @@ function HomeContent() {
         pinnedIds={pinnedIds}
         onPinnedChange={setPinnedIds}
         onMatchSelect={(id) => handleMatchSelect(id)}
+        onRemove={
+          isAuthed && token
+            ? async (matchId) => {
+                await removeUserTrackedGame(matchId, token);
+                const next = await fetchUserTrackedGames(token);
+                setPinnedIds(next);
+                refreshToken();
+              }
+            : undefined
+        }
       />
     </div>
   );

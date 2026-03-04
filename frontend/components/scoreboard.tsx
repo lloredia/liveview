@@ -12,7 +12,6 @@ import { Standings } from "./standings";
 import { StatsDashboard } from "./stats-dashboard";
 import { GlassTabBar, GlassPill, GlassDivider } from "./ui/glass";
 import { LastUpdatedIndicator } from "./last-updated-indicator";
-import { toggleFavoriteTeam } from "@/lib/favorite-teams";
 
 interface ScoreboardProps {
   leagueId: string | null;
@@ -20,7 +19,7 @@ interface ScoreboardProps {
   pinnedIds?: string[];
   onTogglePin?: (matchId: string) => void;
   favoriteTeamIds?: string[];
-  onFavoriteTeamsChange?: () => void;
+  onToggleFavoriteTeam?: (teamId: string) => void;
 }
 
 type Tab = "matches" | "standings" | "stats";
@@ -45,7 +44,7 @@ export function Scoreboard({
   pinnedIds = [],
   onTogglePin,
   favoriteTeamIds = [],
-  onFavoriteTeamsChange,
+  onToggleFavoriteTeam,
 }: ScoreboardProps) {
   const [tab, setTab] = useState<Tab>("matches");
 
@@ -172,12 +171,7 @@ export function Scoreboard({
                     onTogglePin={onTogglePin}
                     favoriteTeamIds={favoriteTeamIds}
                     onToggleFavoriteTeam={
-                      onFavoriteTeamsChange
-                        ? (teamId) => {
-                            toggleFavoriteTeam(teamId);
-                            onFavoriteTeamsChange();
-                          }
-                        : undefined
+                      onToggleFavoriteTeam
                     }
                   />
                 ))}
@@ -203,12 +197,7 @@ export function Scoreboard({
                     onTogglePin={onTogglePin}
                     favoriteTeamIds={favoriteTeamIds}
                     onToggleFavoriteTeam={
-                      onFavoriteTeamsChange
-                        ? (teamId) => {
-                            toggleFavoriteTeam(teamId);
-                            onFavoriteTeamsChange();
-                          }
-                        : undefined
+                      onToggleFavoriteTeam
                     }
                   />
                 ))}
@@ -235,12 +224,7 @@ export function Scoreboard({
                     onTogglePin={onTogglePin}
                     favoriteTeamIds={favoriteTeamIds}
                     onToggleFavoriteTeam={
-                      onFavoriteTeamsChange
-                        ? (teamId) => {
-                            toggleFavoriteTeam(teamId);
-                            onFavoriteTeamsChange();
-                          }
-                        : undefined
+                      onToggleFavoriteTeam
                     }
                   />
                 ))}

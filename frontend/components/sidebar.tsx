@@ -4,10 +4,6 @@ import { useEffect, useState } from "react";
 import type { LeagueGroup, LeagueInfo } from "@/lib/types";
 import { sportIcon } from "@/lib/utils";
 import { getLeagueLogo } from "@/lib/league-logos";
-import {
-  getFavoriteLeagues,
-  toggleFavoriteLeague,
-} from "@/lib/favorites";
 import { hapticSelection } from "@/lib/haptics";
 import { GlassPill, GlassDivider } from "./ui/glass";
 
@@ -19,6 +15,9 @@ interface SidebarProps {
   onClose?: () => void;
   liveCounts?: Record<string, number>;
   onTodayClick?: () => void;
+  /** When provided, show favorites section and use these + onToggleFavoriteLeague (gated) */
+  favoriteLeagueIds?: string[];
+  onToggleFavoriteLeague?: (leagueId: string) => void;
 }
 
 function LeagueLogo({ name, apiLogoUrl, size = 16 }: { name: string; apiLogoUrl?: string | null; size?: number }) {
@@ -36,22 +35,25 @@ function LeagueLogo({ name, apiLogoUrl, size = 16 }: { name: string; apiLogoUrl?
   );
 }
 
-export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, liveCounts = {}, onTodayClick }: SidebarProps) {
-  const [favIds, setFavIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    setFavIds(getFavoriteLeagues());
-  }, []);
+export function Sidebar({
+  leagues,
+  selectedLeagueId,
+  onSelect,
+  open,
+  onClose,
+  liveCounts = {},
+  onTodayClick,
+  favoriteLeagueIds = [],
+  onToggleFavoriteLeague,
+}: SidebarProps) {
+  const allLeagues = leagues.flatMap((g) => g.leagues);
+  const favoriteLeagues = allLeagues.filter((l) => favoriteLeagueIds.includes(l.id));
 
   const handleFavToggle = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     hapticSelection();
-    toggleFavoriteLeague(id);
-    setFavIds(getFavoriteLeagues());
+    onToggleFavoriteLeague?.(id);
   };
-
-  const allLeagues = leagues.flatMap((g) => g.leagues);
-  const favoriteLeagues = allLeagues.filter((l) => favIds.includes(l.id));
 
   return (
     <>
@@ -128,7 +130,7 @@ export function Sidebar({ leagues, selectedLeagueId, onSelect, open, onClose, li
                 active={selectedLeagueId === league.id}
                 onSelect={onSelect}
                 onFavToggle={handleFavToggle}
-                isFav={favIds.includes(league.id)}
+                isFav={favoriteLeagueIds.includes(league.id)}
                 liveCount={liveCounts[league.id] || 0}
               />
             ))}

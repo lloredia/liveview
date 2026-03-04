@@ -10,7 +10,6 @@ import { getTodayCache, setTodayCache } from "@/lib/today-cache";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
 import { GlassPill, GlassDivider, GlassButton } from "./ui/glass";
-import { getFavoriteTeams, toggleFavoriteTeam } from "@/lib/favorite-teams";
 import { LastUpdatedIndicator } from "./last-updated-indicator";
 
 export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
@@ -118,7 +117,10 @@ interface TodayViewProps {
   headerTodayData?: TodayResponse | null;
   /** When set, show favorite star on match cards and use for Favorites filter */
   favoriteTeamIds?: string[];
-  onFavoriteTeamsChange?: () => void;
+  onToggleFavoriteTeam?: (teamId: string) => void;
+  /** When false and user selects Tracked or Favorites filter, redirect to login */
+  isAuthed?: boolean;
+  openLogin?: (returnPath?: string) => void;
 }
 
 export function TodayView({
@@ -128,20 +130,26 @@ export function TodayView({
   onTogglePin,
   headerLiveCount,
   headerTodayData,
-  favoriteTeamIds: externalFavTeams,
-  onFavoriteTeamsChange,
+  favoriteTeamIds: externalFavTeams = [],
+  onToggleFavoriteTeam,
+  isAuthed = true,
+  openLogin,
 }: TodayViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [filter, setFilter] = useState<MatchFilter>("all");
-  const [favTeamIds, setFavTeamIds] = useState<string[]>(() => getFavoriteTeams());
+  const prevFilter = useRef<MatchFilter>("all");
+
+  // When not authed and user selects Tracked or Favorites, redirect to login
+  useEffect(() => {
+    if (isAuthed || !openLogin) return;
+    if ((filter === "tracked" || filter === "favorites") && prevFilter.current !== filter) {
+      openLogin(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/");
+    }
+    prevFilter.current = filter;
+  }, [filter, isAuthed, openLogin]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasDefaultedToTracked = useRef(false);
-  const favoriteTeamIds = externalFavTeams ?? favTeamIds;
-
-  const handleFavoriteTeamsChange = useCallback(() => {
-    setFavTeamIds(getFavoriteTeams());
-    onFavoriteTeamsChange?.();
-  }, [onFavoriteTeamsChange]);
+  const favoriteTeamIds = externalFavTeams;
 
   useEffect(() => {
     if (pinnedIds.length > 0 && !hasDefaultedToTracked.current) {
@@ -299,12 +307,19 @@ export function TodayView({
   const filterTabs = [
     { key: "all" as const, label: "All", count: effectiveData?.total_matches },
     { key: "live" as const, label: "Live", count: liveCountForTab },
-    ...(favoriteTeamIds.length > 0
-      ? [{ key: "favorites" as const, label: "Favorites", count: favoritesCount }]
-      : []),
-    ...(pinnedIds.length > 0
-      ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
-      : []),
+    ...(!isAuthed && openLogin
+      ? [
+          { key: "favorites" as const, label: "Favorites", count: 0 },
+          { key: "tracked" as const, label: "Tracked", count: 0 },
+        ]
+      : [
+          ...(favoriteTeamIds.length > 0
+            ? [{ key: "favorites" as const, label: "Favorites", count: favoritesCount }]
+            : []),
+          ...(pinnedIds.length > 0
+            ? [{ key: "tracked" as const, label: "Tracked", count: trackedCount }]
+            : []),
+        ]),
   ];
 
   return (
@@ -465,10 +480,7 @@ export function TodayView({
                     pinned={pinnedIds.includes(m.id)}
                     onTogglePin={onTogglePin}
                     favoriteTeamIds={favoriteTeamIds}
-                    onToggleFavoriteTeam={(teamId) => {
-                      toggleFavoriteTeam(teamId);
-                      handleFavoriteTeamsChange();
-                    }}
+                    onToggleFavoriteTeam={onToggleFavoriteTeam}
                   />
                 ))}
               </div>

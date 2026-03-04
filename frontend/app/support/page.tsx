@@ -30,9 +30,9 @@ export default function SupportPage() {
             <p className="mt-2">
               <a
                 href="mailto:support@liveview-tracker.com"
-                className="text-accent-blue hover:underline"
+                className="text-accent-blue hover:underline focus:outline focus:outline-2 focus:outline-accent-blue focus:outline-offset-2 rounded-sm"
               >
-                support@liveview.app
+                support@liveview-tracker.com
               </a>
             </p>
            </section>

@@ -14,9 +14,11 @@ interface MultiTrackerProps {
   pinnedIds: string[];
   onPinnedChange: (ids: string[]) => void;
   onMatchSelect: (matchId: string) => void;
+  /** When provided (e.g. auth flow), called when user removes one game from tracker instead of local toggle */
+  onRemove?: (matchId: string) => void;
 }
 
-export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect }: MultiTrackerProps) {
+export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemove }: MultiTrackerProps) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -102,8 +104,12 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect }: Multi
                 matchId={id}
                 onClick={() => onMatchSelect(id)}
                 onRemove={() => {
-                  const next = togglePinned(id);
-                  onPinnedChange(next);
+                  if (onRemove) {
+                    onRemove(id);
+                  } else {
+                    const next = togglePinned(id);
+                    onPinnedChange(next);
+                  }
                 }}
               />
             ))}

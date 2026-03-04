@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Search } from "./search";
 import { useTheme } from "@/lib/theme";
 import { NotificationInbox } from "./notification-inbox";
@@ -45,6 +46,7 @@ export function Header({
 }: HeaderProps) {
   const { mode, toggle } = useTheme();
   const pathname = usePathname();
+  const { data: session, status } = useSession();
   const isNews = pathname === "/news";
 
   return (
@@ -88,6 +90,15 @@ export function Header({
         )}
 
         <NotificationInbox />
+
+        {status !== "loading" && (
+          <Link
+            href={session?.user ? "/account" : "/login"}
+            className="rounded-[10px] px-2.5 py-1.5 text-body-sm font-medium text-text-muted hover:bg-glass-hover hover:text-text-primary"
+          >
+            {session?.user ? "Account" : "Sign in"}
+          </Link>
+        )}
 
         <button
           onClick={toggle}

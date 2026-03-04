@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchScoreboard } from "@/lib/api";
 import type { LeagueGroup } from "@/lib/types";
 import { isLive } from "@/lib/utils";
-import { getPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { MatchDetail } from "@/components/match-detail";
@@ -13,6 +13,17 @@ import { LiveTicker } from "@/components/live-ticker";
 import { MultiTracker } from "@/components/multi-tracker";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ProviderAttribution } from "@/components/provider-attribution";
+import { useRequireAuth } from "@/hooks/use-require-auth";
+import { useAuthToken } from "@/hooks/use-auth-token";
+import {
+  fetchUserTrackedGames,
+  addUserTrackedGame,
+  removeUserTrackedGame,
+  fetchUserFavorites,
+  addUserFavorite,
+  removeUserFavorite,
+} from "@/lib/auth-api";
+import { hapticSelection } from "@/lib/haptics";
 
 export default function MatchPage() {
   const params = useParams();
@@ -25,14 +36,25 @@ export default function MatchPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [connected, setConnected] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [favLeagueIds, setFavLeagueIds] = useState<string[]>([]);
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const { isAuthed, requireAuth } = useRequireAuth();
+  const { token, refresh: refreshToken } = useAuthToken();
 
   useEffect(() => {
-    setPinnedIds(getPinnedMatches());
-  }, []);
+    if (!isAuthed || !token) {
+      setPinnedIds([]);
+      setFavLeagueIds([]);
+      return;
+    }
+    Promise.all([fetchUserTrackedGames(token), fetchUserFavorites(token)]).then(([pinned, favs]) => {
+      setPinnedIds(pinned);
+      setFavLeagueIds(favs.leagues);
+    });
+  }, [isAuthed, token]);
 
   useEffect(() => {
     fetchLeagues()
@@ -95,14 +117,46 @@ export default function MatchPage() {
     router.back();
   }, [router]);
 
-  const handleTogglePin = useCallback((matchId: string) => {
-    const next = togglePinned(matchId);
-    setPinnedIds(next);
-  }, []);
+  const handleTogglePin = useCallback(
+    (matchId: string) => {
+      hapticSelection();
+      requireAuth({
+        returnPath: typeof window !== "undefined" ? `/match/${matchId}${leagueName ? `?league=${encodeURIComponent(leagueName)}` : ""}` : `/match/${matchId}`,
+        onAuthed: async () => {
+          if (!token) return;
+          const wasPinned = pinnedIds.includes(matchId);
+          if (wasPinned) await removeUserTrackedGame(matchId, token);
+          else await addUserTrackedGame(matchId, {}, token);
+          const next = await fetchUserTrackedGames(token);
+          setPinnedIds(next);
+          refreshToken();
+        },
+      });
+    },
+    [requireAuth, token, pinnedIds, refreshToken, leagueName]
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshTrigger((t) => t + 1);
   }, []);
+
+  const handleToggleFavoriteLeague = useCallback(
+    (leagueId: string) => {
+      hapticSelection();
+      requireAuth({
+        returnPath: typeof window !== "undefined" ? window.location.pathname + window.location.search : "/",
+        onAuthed: async () => {
+          if (!token) return;
+          const isFav = favLeagueIds.includes(leagueId);
+          if (isFav) await removeUserFavorite("league", leagueId, token);
+          else await addUserFavorite("league", leagueId, token);
+          const favs = await fetchUserFavorites(token);
+          setFavLeagueIds(favs.leagues);
+        },
+      });
+    },
+    [requireAuth, token, favLeagueIds]
+  );
 
   useEffect(() => {
     const handleResize = () => {
@@ -139,6 +193,8 @@ export default function MatchPage() {
           onSelect={handleLeagueSelect}
           open={sidebarOpen}
           liveCounts={liveCounts}
+          favoriteLeagueIds={favLeagueIds}
+          onToggleFavoriteLeague={handleToggleFavoriteLeague}
         />
 
         <PullToRefresh onRefresh={handleRefresh}>
@@ -153,6 +209,11 @@ export default function MatchPage() {
             />
             <footer className="mt-8 pb-6 text-center">
               <ProviderAttribution />
+              <p className="mt-2 text-label-xs text-text-dim">
+                <Link href="/privacy" className="text-text-muted hover:text-text-secondary hover:underline">
+                  Privacy Policy
+                </Link>
+              </p>
             </footer>
           </main>
         </PullToRefresh>
@@ -162,6 +223,16 @@ export default function MatchPage() {
         pinnedIds={pinnedIds}
         onPinnedChange={setPinnedIds}
         onMatchSelect={(id) => handleMatchSelect(id)}
+        onRemove={
+          isAuthed && token
+            ? async (id) => {
+                await removeUserTrackedGame(id, token);
+                const next = await fetchUserTrackedGames(token);
+                setPinnedIds(next);
+                refreshToken();
+              }
+            : undefined
+        }
       />
     </div>
   );

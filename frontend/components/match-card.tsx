@@ -327,7 +327,8 @@ export const MatchCard = memo(function MatchCard({
         }`}>
           <TrackButton
             matchId={match.id}
-            onToggle={(next) => onTogglePin(match.id)}
+            pinned={pinned}
+            onToggle={() => onTogglePin(match.id)}
           />
         </div>
       )}

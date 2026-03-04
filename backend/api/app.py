@@ -53,6 +53,8 @@ from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.ws.manager import WebSocketManager
 from api.live_fallback import espn_retry, tsdb_fallback_for_league
 from api.routes.notifications import router as notifications_router
+from api.routes.auth_routes import router as auth_router
+from api.routes.user_routes import router as user_router
 
 logger = get_logger(__name__)
 
@@ -754,6 +756,8 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
     app.include_router(news_router)
     app.include_router(today_router)
     app.include_router(notifications_router)
+    app.include_router(auth_router)
+    app.include_router(user_router)
 
     # Health check
     @app.get("/health", tags=["system"])

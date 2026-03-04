@@ -4,6 +4,8 @@ import { ThemeProvider } from "@/lib/theme";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorHandler } from "@/components/global-error-handler";
 import { PushOnFirstInteraction } from "@/components/push-on-first-interaction";
+import { SessionProvider } from "@/components/providers/session-provider";
+import { AuthGateProvider } from "@/components/auth/auth-gate-context";
 
 export const metadata: Metadata = {
   title: "LiveView — Real-Time Sports Tracker",
@@ -48,7 +50,11 @@ export default function RootLayout({
         <GlobalErrorHandler />
         <PushOnFirstInteraction />
         <ErrorBoundary>
-          <ThemeProvider>{children}</ThemeProvider>
+          <SessionProvider>
+            <AuthGateProvider>
+              <ThemeProvider>{children}</ThemeProvider>
+            </AuthGateProvider>
+          </SessionProvider>
         </ErrorBoundary>
       </body>
     </html>

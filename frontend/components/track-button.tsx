@@ -9,7 +9,9 @@ interface TrackButtonProps {
   sport?: string;
   league?: string;
   size?: "sm" | "md";
-  onToggle?: (pinned: string[]) => void;
+  /** When provided, button is controlled by parent (no local storage or device API); click only calls onToggle. */
+  pinned?: boolean;
+  onToggle?: (pinned?: string[]) => void;
   className?: string;
 }
 
@@ -18,11 +20,13 @@ export function TrackButton({
   sport,
   league,
   size = "sm",
+  pinned: controlledPinned,
   onToggle,
   className = "",
 }: TrackButtonProps) {
-  const [tracked, setTracked] = useState(() => isPinned(matchId));
+  const [uncontrolledTracked, setUncontrolledTracked] = useState(() => isPinned(matchId));
   const [loading, setLoading] = useState(false);
+  const tracked = controlledPinned !== undefined ? controlledPinned : uncontrolledTracked;
 
   const handleClick = useCallback(
     async (e: React.MouseEvent) => {
@@ -32,24 +36,27 @@ export function TrackButton({
 
       setLoading(true);
       try {
+        if (controlledPinned !== undefined) {
+          // Controlled (auth flow): parent handles backend; just notify.
+          onToggle?.();
+          return;
+        }
         const wasPinned = isPinned(matchId);
         const next = togglePinned(matchId);
-        setTracked(!wasPinned);
+        setUncontrolledTracked(!wasPinned);
         onToggle?.(next);
-
         if (wasPinned) {
           await untrackGameOnServer(matchId);
         } else {
           await trackGameOnServer(matchId, sport, league);
         }
       } catch {
-        // Revert on failure
-        setTracked(isPinned(matchId));
+        if (controlledPinned === undefined) setUncontrolledTracked(isPinned(matchId));
       } finally {
         setLoading(false);
       }
     },
-    [matchId, sport, league, loading, onToggle]
+    [matchId, sport, league, loading, onToggle, controlledPinned]
   );
 
   const sizeClasses = size === "sm" ? "h-7 w-7" : "h-8 w-8";
