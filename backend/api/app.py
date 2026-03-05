@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import signal
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, Union
 
 import httpx
@@ -184,12 +185,13 @@ async def _refresh_live_scores(
     db: DatabaseManager, redis: RedisManager, client: httpx.AsyncClient,
 ) -> None:
     """One cycle of live score refresh."""
-    # Find leagues that have live or recently-started matches
+    # Find leagues that have live/scheduled matches OR recently finished (so we get final scores)
     async with db.read_session() as session:
         live_phases = [p.value for p in MatchPhase if p.is_live]
         live_phases.append(MatchPhase.BREAK.value)
         live_phases.append(MatchPhase.PRE_MATCH.value)
         live_phases.append(MatchPhase.SCHEDULED.value)
+        finished_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
 
         stmt = (
             select(
@@ -203,7 +205,12 @@ async def _refresh_live_scores(
                 & (ProviderMappingORM.canonical_id == LeagueORM.id)
                 & (ProviderMappingORM.provider == "espn"),
             )
-            .where(MatchORM.phase.in_(live_phases))
+            .where(
+                or_(
+                    MatchORM.phase.in_(live_phases),
+                    (MatchORM.phase == MatchPhase.FINISHED.value) & (MatchORM.start_time >= finished_cutoff),
+                )
+            )
             .distinct()
         )
         result = await session.execute(stmt)
