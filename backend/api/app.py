@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import uuid as uuid_mod
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
 from fastapi import FastAPI, WebSocket
@@ -166,6 +167,12 @@ async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> N
     logger.info("live_score_refresh_started")
 
     async with httpx.AsyncClient(timeout=12.0) as client:
+        # Run one refresh immediately so scores are fresh right after deploy/cold start
+        try:
+            await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
+        except Exception as exc:
+            logger.warning("live_score_refresh_startup_error", error=str(exc))
+
         while True:
             try:
                 await asyncio.sleep(LIVE_REFRESH_INTERVAL_S)
@@ -323,6 +330,28 @@ def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id
     return MatchPhase.LIVE_FIRST_HALF
 
 
+def _competitor_score(competitor: dict[str, Any], sport: str) -> int:
+    """Get total score for a competitor. For baseball, fall back to summing linescores if score is 0."""
+    try:
+        sc = int(competitor.get("score", "0"))
+    except (ValueError, TypeError):
+        sc = 0
+    if sc > 0:
+        return sc
+    if sport == "baseball":
+        linescores = competitor.get("linescores", [])
+        if isinstance(linescores, list):
+            for ls in linescores:
+                if isinstance(ls, dict):
+                    val = ls.get("displayValue", ls.get("value"))
+                    if val is not None:
+                        try:
+                            sc += int(val)
+                        except (ValueError, TypeError):
+                            pass
+    return sc
+
+
 def _extract_team_stats(competitor: dict[str, Any]) -> dict[str, Any]:
     """Extract team stats from an ESPN competitor object into a flat dict."""
     raw_stats = competitor.get("statistics", [])
@@ -347,6 +376,82 @@ def _extract_team_stats(competitor: dict[str, Any]) -> dict[str, Any]:
     return stats
 
 
+async def _resolve_match_from_espn_event(
+    session: Any,
+    espn_league_id: str,
+    event: dict[str, Any],
+    competitors: list[dict[str, Any]],
+) -> Optional[uuid_mod.UUID]:
+    """
+    Fallback: resolve our match_id from league + home/away team provider ids + event start time
+    when provider_mappings has no match for this ESPN event id.
+    """
+    if not competitors or len(competitors) < 2:
+        return None
+    # League canonical id
+    league_row = (
+        await session.execute(
+            select(ProviderMappingORM.canonical_id).where(
+                ProviderMappingORM.entity_type == "league",
+                ProviderMappingORM.provider == "espn",
+                ProviderMappingORM.provider_id == espn_league_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not league_row:
+        return None
+    league_id = league_row
+
+    # Event start time
+    start_str = event.get("date") or (event.get("competitions") or [{}])[0].get("date", "")
+    try:
+        event_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    window_start = event_dt - timedelta(minutes=5)
+    window_end = event_dt + timedelta(minutes=5)
+
+    # Resolve our home/away team ids from ESPN competitor team ids
+    home_id: Optional[uuid_mod.UUID] = None
+    away_id: Optional[uuid_mod.UUID] = None
+    for c in competitors:
+        team_obj = c.get("team") or c
+        raw_id = str(team_obj.get("id", ""))
+        if not raw_id:
+            continue
+        scoped = f"{espn_league_id}:{raw_id}" if espn_league_id else raw_id
+        row = (
+            await session.execute(
+                select(ProviderMappingORM.canonical_id).where(
+                    ProviderMappingORM.entity_type == "team",
+                    ProviderMappingORM.provider == "espn",
+                    ProviderMappingORM.provider_id == scoped,
+                )
+            )
+        ).scalar_one_or_none()
+        if row:
+            if c.get("homeAway") == "home":
+                home_id = row
+            else:
+                away_id = row
+    if not home_id or not away_id:
+        return None
+
+    # Find match in this league with these teams and start_time in window
+    match_row = (
+        await session.execute(
+            select(MatchORM.id).where(
+                MatchORM.league_id == league_id,
+                MatchORM.home_team_id == home_id,
+                MatchORM.away_team_id == away_id,
+                MatchORM.start_time >= window_start,
+                MatchORM.start_time <= window_end,
+            )
+        )
+    ).scalar_one_or_none()
+    return match_row
+
+
 async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:
     """Apply ESPN scoreboard events to our database. Returns count of updated matches."""
     if not events:
@@ -362,6 +467,13 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 if not espn_id:
                     continue
 
+                competitions = event.get("competitions")
+                if not competitions or not isinstance(competitions, list):
+                    logger.debug("espn_event_no_competitions", espn_id=espn_id)
+                    continue
+                comp = competitions[0]
+                competitors = comp.get("competitors", [])
+
                 mapping_stmt = select(ProviderMappingORM.canonical_id).where(
                     ProviderMappingORM.entity_type == "match",
                     ProviderMappingORM.provider == "espn",
@@ -369,14 +481,21 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 )
                 match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
                 if not match_id:
-                    continue
-
-                competitions = event.get("competitions")
-                if not competitions or not isinstance(competitions, list):
-                    logger.debug("espn_event_no_competitions", espn_id=espn_id)
-                    continue
-                comp = competitions[0]
-                competitors = comp.get("competitors", [])
+                    match_id = await _resolve_match_from_espn_event(
+                        session, espn_league_id, event, competitors
+                    )
+                    if match_id:
+                        # So next time we hit the fast path
+                        session.add(ProviderMappingORM(
+                            id=uuid_mod.uuid4(),
+                            entity_type="match",
+                            canonical_id=match_id,
+                            provider="espn",
+                            provider_id=espn_id,
+                        ))
+                        await session.flush()
+                    else:
+                        continue
 
                 score_home = 0
                 score_away = 0
@@ -386,10 +505,7 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 away_stats: dict[str, Any] = {}
 
                 for c in competitors:
-                    try:
-                        sc = int(c.get("score", "0"))
-                    except (ValueError, TypeError):
-                        sc = 0
+                    sc = _competitor_score(c, sport)
                     try:
                         agg = int(c.get("aggregateScore", 0))
                     except (ValueError, TypeError):

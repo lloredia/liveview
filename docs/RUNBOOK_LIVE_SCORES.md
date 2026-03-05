@@ -83,6 +83,9 @@ Shows pass/fail for health, status, leagues, today, scoreboards, and ESPN reacha
 | Frontend shows "Scores temporarily delayed" | Backend unreachable or returning errors | Check backend health + logs |
 | Frontend shows cached data | Network issue or backend cold start | Wait for backend warm-up; try "Try again" button |
 | "Updated 1h ago" / scores stale | Tab was in background or polling failed | App now refetches when tab becomes visible; live polling every 5s when there are live games. Backend uses 5s cache TTL when live_count > 0. |
+| MLB/baseball scores stay 0-0 | ESPN sometimes puts score in `linescores` only | Backend now sums `linescores` for baseball when top-level `score` is 0. |
+| Scores not updating after deploy | Refresh only runs every 30s | Backend runs **one refresh cycle on startup** (after 5s) so scores are fresh immediately. |
+| Match has no ESPN mapping (e.g. different ID) | Provider lookup fails, so refresh skips the match | Backend **fallback**: if no match by ESPN event id, resolve by league + home/away team + start time and upsert the mapping for next time. |
 
 ---
 
