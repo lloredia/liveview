@@ -38,18 +38,6 @@ export function usePolling<T>({
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  useEffect(() => {
-    const onVisibility = () => {
-      const nowVisible = document.visibilityState === "visible";
-      setVisible(nowVisible);
-      // When tab becomes visible, refetch immediately so scores are up to date
-      if (nowVisible && enabled) refresh();
-    };
-    onVisibility();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [enabled, refresh]);
-
   const refresh = useCallback(async () => {
     try {
       const result = await fetcherRef.current();
@@ -65,6 +53,18 @@ export function usePolling<T>({
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      const nowVisible = document.visibilityState === "visible";
+      setVisible(nowVisible);
+      // When tab becomes visible, refetch immediately so scores are up to date
+      if (nowVisible && enabled) refresh();
+    };
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [enabled, refresh]);
 
   const effectiveInterval =
     intervalWhenHidden != null && !visible ? intervalWhenHidden : interval;
