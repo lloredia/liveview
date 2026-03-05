@@ -419,10 +419,11 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 if match_obj:
                     match_obj.phase = phase.value
 
-                # Update match state (scores, clock, period, aggregate for two-legged ties)
+                # Update or create match state (scores, clock, period, aggregate for two-legged ties)
                 state_obj = (await session.execute(
                     select(MatchStateORM).where(MatchStateORM.match_id == match_id)
                 )).scalar_one_or_none()
+
                 if state_obj:
                     extra = dict(state_obj.extra_data or {})
                     if aggregate_home is not None and aggregate_away is not None:
@@ -473,6 +474,24 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                             "home_short": home_short,
                             "away_short": away_short,
                         }))
+                else:
+                    # No match_state row yet — create one so scores display (fixes 0-0 for mapped matches)
+                    extra_new: dict[str, Any] = {}
+                    if aggregate_home is not None and aggregate_away is not None:
+                        extra_new["aggregate_home"] = aggregate_home
+                        extra_new["aggregate_away"] = aggregate_away
+                    session.add(MatchStateORM(
+                        match_id=match_id,
+                        score_home=score_home,
+                        score_away=score_away,
+                        clock=clock,
+                        phase=phase.value,
+                        period=str(period_num) if period_num else None,
+                        extra_data=extra_new,
+                        version=1,
+                    ))
+                    await session.flush()
+                    count += 1
 
                 # Upsert team statistics
                 if home_stats or away_stats:

@@ -74,6 +74,8 @@ Shows pass/fail for health, status, leagues, today, scoreboards, and ESPN reacha
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | "No matches on this date" | DB empty / scheduler not running | Run `python seed.py` or start the scheduler service |
+| Scores stuck at 0-0 | No `match_state` row for match | Deploy with fix: live refresh now **creates** `match_state` when missing (ESPN data applied). |
+| Scores stuck at 0-0 | Match has no ESPN `provider_mapping` | Matches must have `provider_mappings` (entity_type=match, provider=espn) for refresh to update them. Ensure scheduler or seed created matches with ESPN mappings. |
 | Scores not updating | ESPN circuit breaker open | Wait 2 min for auto-recovery; check `/v1/status` |
 | Scores not updating | `espn_live_refresh_enabled = false` | Set `LV_ESPN_LIVE_REFRESH_ENABLED=true` and restart |
 | Wrong phase for NFL games | Old code without football branch | Deploy latest code (includes NFL phase resolution) |

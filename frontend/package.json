@@ -12,7 +12,8 @@
     "cap:add:ios": "cap add ios",
     "cap:open:ios": "cap open ios",
     "cap:sync": "cap sync",
-    "export:app-icon": "node scripts/export-app-icon.mjs"
+    "export:app-icon": "node scripts/export-app-icon.mjs",
+    "gen:apple-secret": "node scripts/gen-apple-secret.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^6.1.2",
