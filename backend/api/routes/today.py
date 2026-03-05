@@ -329,9 +329,10 @@ async def get_today(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Cache for 15 seconds (short for live updates)
+    # Shorter TTL when there are live games so scores refresh faster
+    cache_ttl = 5 if live_count > 0 else 15
     payload_json = json.dumps(payload, default=str)
-    await redis.client.setex(cache_key, 15, payload_json)
+    await redis.client.setex(cache_key, cache_ttl, payload_json)
 
     etag = _compute_etag(payload_json)
     response.headers["ETag"] = etag

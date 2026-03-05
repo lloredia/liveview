@@ -173,8 +173,8 @@ export function TodayView({
   const [hasLive, setHasLive] = useState(false);
   const { data, loading, error, refresh, lastSuccessAt } = usePolling<TodayResult>({
     fetcher,
-    interval: hasLive ? 10_000 : 20_000,
-    intervalWhenHidden: 60_000,
+    interval: hasLive ? 5_000 : 15_000,
+    intervalWhenHidden: 30_000,
     enabled: true,
     key: apiDateStr,
   });

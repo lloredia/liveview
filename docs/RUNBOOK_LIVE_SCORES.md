@@ -82,6 +82,7 @@ Shows pass/fail for health, status, leagues, today, scoreboards, and ESPN reacha
 | Wrong phase for NFL games | Old code without football branch | Deploy latest code (includes NFL phase resolution) |
 | Frontend shows "Scores temporarily delayed" | Backend unreachable or returning errors | Check backend health + logs |
 | Frontend shows cached data | Network issue or backend cold start | Wait for backend warm-up; try "Try again" button |
+| "Updated 1h ago" / scores stale | Tab was in background or polling failed | App now refetches when tab becomes visible; live polling every 5s when there are live games. Backend uses 5s cache TTL when live_count > 0. |
 
 ---
 
