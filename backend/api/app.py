@@ -34,6 +34,7 @@ from shared.models.orm import (
     MatchStatsORM,
     ProviderMappingORM,
     SportORM,
+    TeamORM,
 )
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
@@ -424,19 +425,16 @@ async def _resolve_match_from_espn_event(
     """
     if not competitors or len(competitors) < 2:
         return None
-    # League canonical id
+    # League canonical id (raw SQL — no ORM in this path)
     league_row = (
         await session.execute(
-            select(ProviderMappingORM.canonical_id).where(
-                ProviderMappingORM.entity_type == "league",
-                ProviderMappingORM.provider == "espn",
-                ProviderMappingORM.provider_id == espn_league_id,
-            )
+            text("SELECT canonical_id FROM provider_mappings WHERE entity_type = 'league' AND provider = 'espn' AND provider_id = :pid"),
+            {"pid": espn_league_id},
         )
-    ).scalar_one_or_none()
+    ).fetchone()
     if not league_row:
         return None
-    league_id = league_row
+    league_id = league_row[0]
 
     # Event start time
     start_str = event.get("date") or (event.get("competitions") or [{}])[0].get("date", "")
@@ -457,19 +455,18 @@ async def _resolve_match_from_espn_event(
         if not raw_id:
             continue
         scoped = f"{espn_league_id}:{raw_id}" if espn_league_id else raw_id
+        row = None
         for pid in (scoped, raw_id):
-            row = (
+            r = (
                 await session.execute(
-                    select(ProviderMappingORM.canonical_id).where(
-                        ProviderMappingORM.entity_type == "team",
-                        ProviderMappingORM.provider == "espn",
-                        ProviderMappingORM.provider_id == pid,
-                    )
+                    text("SELECT canonical_id FROM provider_mappings WHERE entity_type = 'team' AND provider = 'espn' AND provider_id = :pid"),
+                    {"pid": pid},
                 )
-            ).scalar_one_or_none()
-            if row:
+            ).fetchone()
+            if r:
+                row = r[0]
                 break
-        if row:
+        if row is not None:
             if c.get("homeAway") == "home":
                 home_id = row
             else:
@@ -477,19 +474,17 @@ async def _resolve_match_from_espn_event(
     if not home_id or not away_id:
         return None
 
-    # Find match in this league with these teams and start_time in window
+    # Find match in this league with these teams and start_time in window (raw SQL)
     match_row = (
         await session.execute(
-            select(MatchORM.id).where(
-                MatchORM.league_id == league_id,
-                MatchORM.home_team_id == home_id,
-                MatchORM.away_team_id == away_id,
-                MatchORM.start_time >= window_start,
-                MatchORM.start_time <= window_end,
-            )
+            text(
+                "SELECT id FROM matches WHERE league_id = :lid AND home_team_id = :hid AND away_team_id = :aid "
+                "AND start_time >= :t0 AND start_time <= :t1"
+            ),
+            {"lid": league_id, "hid": home_id, "aid": away_id, "t0": window_start, "t1": window_end},
         )
-    ).scalar_one_or_none()
-    return match_row
+    ).fetchone()
+    return match_row[0] if match_row else None
 
 
 async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:
@@ -515,12 +510,16 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 comp = competitions[0]
                 competitors = comp.get("competitors", [])
 
-                mapping_stmt = select(ProviderMappingORM.canonical_id).where(
-                    ProviderMappingORM.entity_type == "match",
-                    ProviderMappingORM.provider == "espn",
-                    ProviderMappingORM.provider_id == espn_id,
-                )
-                match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
+                mapping_row = (
+                    await session.execute(
+                        text(
+                            "SELECT canonical_id FROM provider_mappings "
+                            "WHERE entity_type = 'match' AND provider = 'espn' AND provider_id = :pid"
+                        ),
+                        {"pid": espn_id},
+                    )
+                ).fetchone()
+                match_id = mapping_row[0] if mapping_row else None
                 match_source = "mapping" if match_id else None
                 if not match_id:
                     match_id = await _resolve_match_from_espn_event(
@@ -528,15 +527,18 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     )
                     match_source = "fallback" if match_id else None
                     if match_id:
-                        # So next time we hit the fast path
-                        session.add(ProviderMappingORM(
-                            id=uuid_mod.uuid4(),
-                            entity_type="match",
-                            canonical_id=match_id,
-                            provider="espn",
-                            provider_id=espn_id,
-                        ))
-                        await session.flush()
+                        # So next time we hit the fast path — raw INSERT to avoid ORM flush/lazy-load
+                        await session.execute(
+                            text(
+                                "INSERT INTO provider_mappings (id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
+                                "VALUES (:id, 'match', :canonical_id, 'espn', :provider_id, '{}', NOW(), NOW())"
+                            ),
+                            {
+                                "id": uuid_mod.uuid4(),
+                                "canonical_id": match_id,
+                                "provider_id": espn_id,
+                            },
+                        )
                     else:
                         # #region agent log
                         if skip_log_count < 2:
@@ -593,54 +595,80 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 phase = _resolve_phase(espn_status, period_num, sport, espn_league_id)
                 clock = status_obj.get("displayClock")
 
-                # Update match phase
-                match_obj = (await session.execute(
-                    select(MatchORM).where(MatchORM.id == match_id)
-                )).scalar_one_or_none()
-                if match_obj:
-                    match_obj.phase = phase.value
+                # Update match phase (no relationship access — async-safe)
+                await session.execute(
+                    text("UPDATE matches SET phase = :phase WHERE id = :id"),
+                    {"phase": phase.value, "id": match_id},
+                )
 
-                # Update or create match state (scores, clock, period, aggregate for two-legged ties)
-                state_obj = (await session.execute(
-                    select(MatchStateORM).where(MatchStateORM.match_id == match_id)
-                )).scalar_one_or_none()
-
-                if state_obj:
-                    extra = dict(state_obj.extra_data or {})
-                    if aggregate_home is not None and aggregate_away is not None:
-                        extra["aggregate_home"] = aggregate_home
-                        extra["aggregate_away"] = aggregate_away
-                    else:
-                        extra.pop("aggregate_home", None)
-                        extra.pop("aggregate_away", None)
+                # Update or create match state — raw SQL only (no ORM) to avoid async lazy-load on flush
+                state_row = (
+                    await session.execute(
+                        text(
+                            "SELECT score_home, score_away, clock, phase, period, extra_data, version "
+                            "FROM match_state WHERE match_id = :match_id"
+                        ),
+                        {"match_id": match_id},
+                    )
+                ).fetchone()
+                extra = {}
+                if aggregate_home is not None and aggregate_away is not None:
+                    extra["aggregate_home"] = aggregate_home
+                    extra["aggregate_away"] = aggregate_away
+                extra_json = json.dumps(extra) if extra else "{}"
+                if state_row:
+                    # state_row: (score_home, score_away, clock, phase, period, extra_data, version)
                     changed = (
-                        state_obj.score_home != score_home
-                        or state_obj.score_away != score_away
-                        or state_obj.clock != clock
-                        or state_obj.phase != phase.value
-                        or state_obj.extra_data != extra
+                        state_row[0] != score_home
+                        or state_row[1] != score_away
+                        or state_row[2] != clock
+                        or state_row[3] != phase.value
+                        or (state_row[5] or {}) != extra
                     )
                     if changed:
-                        # Capture pre-update state for notifications
-                        _prev_home = state_obj.score_home
-                        _prev_away = state_obj.score_away
-                        _prev_phase = state_obj.phase
-
-                        state_obj.score_home = score_home
-                        state_obj.score_away = score_away
-                        state_obj.clock = clock
-                        state_obj.phase = phase.value
-                        state_obj.period = str(period_num) if period_num else state_obj.period
-                        state_obj.extra_data = extra
-                        state_obj.version = (state_obj.version or 0) + 1
+                        period_val = str(period_num) if period_num else (state_row[4] or "")
+                        new_version = (state_row[6] or 0) + 1
+                        await session.execute(
+                            text("""
+                                UPDATE match_state SET
+                                    score_home = :score_home, score_away = :score_away,
+                                    clock = :clock, phase = :phase, period = :period,
+                                    extra_data = :extra_data::jsonb, version = :version
+                                WHERE match_id = :match_id
+                            """),
+                            {
+                                "score_home": score_home,
+                                "score_away": score_away,
+                                "clock": clock or "",
+                                "phase": phase.value,
+                                "period": period_val,
+                                "extra_data": extra_json,
+                                "version": new_version,
+                                "match_id": match_id,
+                            },
+                        )
                         count += 1
 
-                        # Queue notification processing
-                        home_name = match_obj.home_team.name if match_obj and match_obj.home_team else "Home"
-                        away_name = match_obj.away_team.name if match_obj and match_obj.away_team else "Away"
-                        home_short = (match_obj.home_team.short_name if match_obj and match_obj.home_team else "HOM")
-                        away_short = (match_obj.away_team.short_name if match_obj and match_obj.away_team else "AWY")
-                        league_name = match_obj.league.name if match_obj and match_obj.league else espn_league_id
+                        # Queue notification: get names via raw SQL (no ORM)
+                        name_row = (
+                            await session.execute(
+                                text(
+                                    "SELECT ht.name AS home_name, ht.short_name AS home_short, at.name AS away_name, at.short_name AS away_short, l.name AS league_name "
+                                    "FROM matches m "
+                                    "JOIN teams ht ON m.home_team_id = ht.id "
+                                    "JOIN teams at ON m.away_team_id = at.id "
+                                    "JOIN leagues l ON m.league_id = l.id "
+                                    "WHERE m.id = :match_id"
+                                ),
+                                {"match_id": match_id},
+                            )
+                        ).fetchone()
+                        # name_row: (home_name, home_short, away_name, away_short, league_name)
+                        home_name = name_row[0] if name_row else "Home"
+                        home_short = name_row[1] if name_row else "HOM"
+                        away_name = name_row[2] if name_row else "Away"
+                        away_short = name_row[3] if name_row else "AWY"
+                        league_name = name_row[4] if name_row else espn_league_id
 
                         _notif_queue.append((str(match_id), {
                             "score_home": score_home,
@@ -656,45 +684,55 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                             "away_short": away_short,
                         }))
                 else:
-                    # No match_state row yet — create one so scores display (fixes 0-0 for mapped matches)
-                    extra_new: dict[str, Any] = {}
-                    if aggregate_home is not None and aggregate_away is not None:
-                        extra_new["aggregate_home"] = aggregate_home
-                        extra_new["aggregate_away"] = aggregate_away
-                    session.add(MatchStateORM(
-                        match_id=match_id,
-                        score_home=score_home,
-                        score_away=score_away,
-                        clock=clock,
-                        phase=phase.value,
-                        period=str(period_num) if period_num else None,
-                        extra_data=extra_new,
-                        version=1,
-                    ))
-                    await session.flush()
+                    # No match_state row yet — insert via raw SQL to avoid ORM relationship on flush
+                    period_val = str(period_num) if period_num else None
+                    await session.execute(
+                        text("""
+                            INSERT INTO match_state (match_id, score_home, score_away, score_breakdown, clock, phase, period, extra_data, version, seq)
+                            VALUES (:match_id, :score_home, :score_away, '[]', :clock, :phase, :period, :extra_data::jsonb, 1, 0)
+                        """),
+                        {
+                            "match_id": match_id,
+                            "score_home": score_home,
+                            "score_away": score_away,
+                            "clock": clock or "",
+                            "phase": phase.value,
+                            "period": period_val or "",
+                            "extra_data": extra_json,
+                        },
+                    )
                     count += 1
 
-                # Upsert team statistics
+                # Upsert team statistics — raw SQL only (no ORM)
                 if home_stats or away_stats:
-                    stats_obj = (await session.execute(
-                        select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
-                    )).scalar_one_or_none()
-
-                    if stats_obj:
-                        stats_obj.home_stats = home_stats
-                        stats_obj.away_stats = away_stats
-                        stats_obj.version = (stats_obj.version or 0) + 1
+                    stats_row = (
+                        await session.execute(
+                            text("SELECT id FROM match_stats WHERE match_id = :match_id"),
+                            {"match_id": match_id},
+                        )
+                    ).fetchone()
+                    stats_json_h = json.dumps(home_stats)
+                    stats_json_a = json.dumps(away_stats)
+                    if stats_row is not None:
+                        await session.execute(
+                            text("""
+                                UPDATE match_stats SET home_stats = :home_stats::jsonb, away_stats = :away_stats::jsonb, version = version + 1
+                                WHERE match_id = :match_id
+                            """),
+                            {"home_stats": stats_json_h, "away_stats": stats_json_a, "match_id": match_id},
+                        )
                     else:
                         import uuid as _uuid
-                        session.add(MatchStatsORM(
-                            id=_uuid.uuid4(),
-                            match_id=match_id,
-                            home_stats=home_stats,
-                            away_stats=away_stats,
-                            version=1,
-                            seq=0,
-                        ))
+                        new_id = _uuid.uuid4()
+                        await session.execute(
+                            text("""
+                                INSERT INTO match_stats (id, match_id, home_stats, away_stats, version, seq)
+                                VALUES (:id, :match_id, :home_stats::jsonb, :away_stats::jsonb, 1, 0)
+                            """),
+                            {"id": new_id, "match_id": match_id, "home_stats": stats_json_h, "away_stats": stats_json_a},
+                        )
             except Exception as evt_exc:
+                await session.rollback()
                 logger.warning(
                     "espn_event_parse_error",
                     espn_id=event.get("id", "?"),
@@ -978,7 +1016,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
                     await espn_circuit_breaker.record_success()
                 except Exception as exc:
                     logger.warning("live_refresh_force_failed", error=str(exc))
-                    return {"ok": False, "message": f"Force refresh failed: {exc!s}"}
+                    return {"ok": False, "message": f"Force refresh failed: {exc!s}", "build": "live_scores_raw_sql"}
             else:
                 try:
                     updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
@@ -989,7 +1027,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
             await redis.client.delete(today_key)
         except Exception:
             pass
-        return {"ok": True, "message": "Refresh cycle run, today cache invalidated", "matches_updated": updated}
+        return {"ok": True, "message": "Refresh cycle run, today cache invalidated", "matches_updated": updated, "build": "live_scores_raw_sql"}
 
     @app.get("/ready", tags=["system"])
     async def readiness() -> Dict[str, Union[str, bool]]:

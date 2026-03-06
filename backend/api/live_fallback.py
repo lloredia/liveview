@@ -18,10 +18,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from shared.models.enums import MatchPhase
-from shared.models.orm import MatchORM, MatchStateORM, ProviderMappingORM
+from shared.models.orm import MatchORM, ProviderMappingORM
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger
 
@@ -123,12 +123,16 @@ async def tsdb_fallback_for_league(
                 match_id = None
 
                 if tsdb_event_id:
-                    stmt = select(ProviderMappingORM.canonical_id).where(
-                        ProviderMappingORM.entity_type == "match",
-                        ProviderMappingORM.provider == "thesportsdb",
-                        ProviderMappingORM.provider_id == tsdb_event_id,
-                    )
-                    match_id = (await session.execute(stmt)).scalar_one_or_none()
+                    row = (
+                        await session.execute(
+                            text(
+                                "SELECT canonical_id FROM provider_mappings "
+                                "WHERE entity_type = 'match' AND provider = 'thesportsdb' AND provider_id = :pid"
+                            ),
+                            {"pid": tsdb_event_id},
+                        )
+                    ).fetchone()
+                    match_id = row[0] if row else None
 
                 if not match_id:
                     match_id = await _fuzzy_match_by_teams(session, home_name, away_name, espn_league_id)
@@ -136,28 +140,33 @@ async def tsdb_fallback_for_league(
                 if not match_id:
                     continue
 
-                state_obj = (await session.execute(
-                    select(MatchStateORM).where(MatchStateORM.match_id == match_id)
-                )).scalar_one_or_none()
-
-                if state_obj:
+                # Raw SQL only — avoid ORM (MatchStateORM.match lazy-load on flush)
+                state_row = (
+                    await session.execute(
+                        text("SELECT score_home, score_away, phase, version FROM match_state WHERE match_id = :mid"),
+                        {"mid": match_id},
+                    )
+                ).fetchone()
+                if state_row:
                     changed = (
-                        state_obj.score_home != home_score
-                        or state_obj.score_away != away_score
-                        or state_obj.phase != phase.value
+                        state_row[0] != home_score
+                        or state_row[1] != away_score
+                        or state_row[2] != phase.value
                     )
                     if changed:
-                        state_obj.score_home = home_score
-                        state_obj.score_away = away_score
-                        state_obj.phase = phase.value
-                        state_obj.version = (state_obj.version or 0) + 1
+                        new_ver = (state_row[3] or 0) + 1
+                        await session.execute(
+                            text(
+                                "UPDATE match_state SET score_home = :sh, score_away = :sa, phase = :ph, version = :ver WHERE match_id = :mid"
+                            ),
+                            {"sh": home_score, "sa": away_score, "ph": phase.value, "ver": new_ver, "mid": match_id},
+                        )
                         count += 1
 
-                match_obj = (await session.execute(
-                    select(MatchORM).where(MatchORM.id == match_id)
-                )).scalar_one_or_none()
-                if match_obj and match_obj.phase != phase.value:
-                    match_obj.phase = phase.value
+                await session.execute(
+                    text("UPDATE matches SET phase = :phase WHERE id = :id"),
+                    {"phase": phase.value, "id": match_id},
+                )
 
             except Exception as exc:
                 logger.debug("tsdb_fallback_event_error", event_id=ev.get("idEvent"), error=str(exc))
