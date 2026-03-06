@@ -190,8 +190,8 @@ async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> N
 
 async def _refresh_live_scores(
     db: DatabaseManager, redis: RedisManager, client: httpx.AsyncClient,
-) -> None:
-    """One cycle of live score refresh."""
+) -> int:
+    """One cycle of live score refresh. Returns number of matches updated."""
     # Find leagues that have live/scheduled matches OR recently finished (so we get final scores)
     async with db.read_session() as session:
         live_phases = [p.value for p in MatchPhase if p.is_live]
@@ -225,7 +225,7 @@ async def _refresh_live_scores(
 
     if not league_ids:
         LIVE_GAMES_DETECTED.set(0)
-        return
+        return 0
 
     LIVE_GAMES_DETECTED.set(len(league_ids))
     settings = get_settings()
@@ -282,6 +282,7 @@ async def _refresh_live_scores(
             await redis.client.delete(today_key)
         except Exception:
             pass
+    return updated
 
 
 def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id: str = "") -> MatchPhase:
@@ -331,24 +332,23 @@ def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id
 
 
 def _competitor_score(competitor: dict[str, Any], sport: str) -> int:
-    """Get total score for a competitor. For baseball, fall back to summing linescores if score is 0."""
+    """Get total score for a competitor. Fall back to summing linescores if score is 0 (baseball, hockey, basketball)."""
     try:
         sc = int(competitor.get("score", "0"))
     except (ValueError, TypeError):
         sc = 0
     if sc > 0:
         return sc
-    if sport == "baseball":
-        linescores = competitor.get("linescores", [])
-        if isinstance(linescores, list):
-            for ls in linescores:
-                if isinstance(ls, dict):
-                    val = ls.get("displayValue", ls.get("value"))
-                    if val is not None:
-                        try:
-                            sc += int(val)
-                        except (ValueError, TypeError):
-                            pass
+    linescores = competitor.get("linescores", [])
+    if isinstance(linescores, list) and linescores:
+        for ls in linescores:
+            if isinstance(ls, dict):
+                val = ls.get("displayValue", ls.get("value"))
+                if val is not None:
+                    try:
+                        sc += int(val)
+                    except (ValueError, TypeError):
+                        pass
     return sc
 
 
@@ -408,10 +408,11 @@ async def _resolve_match_from_espn_event(
         event_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return None
-    window_start = event_dt - timedelta(minutes=5)
-    window_end = event_dt + timedelta(minutes=5)
+    # 15 min window to allow for timezone or start-time skew between our DB and ESPN
+    window_start = event_dt - timedelta(minutes=15)
+    window_end = event_dt + timedelta(minutes=15)
 
-    # Resolve our home/away team ids from ESPN competitor team ids
+    # Resolve our home/away team ids from ESPN competitor team ids (try scoped then raw)
     home_id: Optional[uuid_mod.UUID] = None
     away_id: Optional[uuid_mod.UUID] = None
     for c in competitors:
@@ -420,15 +421,18 @@ async def _resolve_match_from_espn_event(
         if not raw_id:
             continue
         scoped = f"{espn_league_id}:{raw_id}" if espn_league_id else raw_id
-        row = (
-            await session.execute(
-                select(ProviderMappingORM.canonical_id).where(
-                    ProviderMappingORM.entity_type == "team",
-                    ProviderMappingORM.provider == "espn",
-                    ProviderMappingORM.provider_id == scoped,
+        for pid in (scoped, raw_id):
+            row = (
+                await session.execute(
+                    select(ProviderMappingORM.canonical_id).where(
+                        ProviderMappingORM.entity_type == "team",
+                        ProviderMappingORM.provider == "espn",
+                        ProviderMappingORM.provider_id == pid,
+                    )
                 )
-            )
-        ).scalar_one_or_none()
+            ).scalar_one_or_none()
+            if row:
+                break
         if row:
             if c.get("homeAway") == "home":
                 home_id = row
@@ -914,7 +918,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
         """Run one live score refresh cycle and invalidate today cache. For manual/cron use."""
         async with httpx.AsyncClient(timeout=12.0) as client:
             try:
-                await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
+                updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
             except CircuitBreakerOpen:
                 return {"ok": False, "message": "ESPN circuit breaker open, try again later"}
         today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
@@ -922,7 +926,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
             await redis.client.delete(today_key)
         except Exception:
             pass
-        return {"ok": True, "message": "Refresh cycle run, today cache invalidated"}
+        return {"ok": True, "message": "Refresh cycle run, today cache invalidated", "matches_updated": updated}
 
     @app.get("/ready", tags=["system"])
     async def readiness() -> Dict[str, Union[str, bool]]:
