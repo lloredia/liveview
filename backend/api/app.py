@@ -1122,6 +1122,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
                 live_refresh_info["live_matches_now"] = None
 
         return {
+            "build": "live_scores_raw_sql",
             "status": "ok" if (redis_ok and db_ok) else "degraded",
             "services": {
                 "redis": redis_ok,
