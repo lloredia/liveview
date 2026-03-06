@@ -61,7 +61,7 @@ from api.routes.user_routes import router as user_router
 logger = get_logger(__name__)
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
-LIVE_REFRESH_INTERVAL_S = 30
+LIVE_REFRESH_INTERVAL_S = 15
 
 ESPN_STATUS_TO_PHASE: dict[str, MatchPhase] = {
     "STATUS_SCHEDULED": MatchPhase.SCHEDULED,

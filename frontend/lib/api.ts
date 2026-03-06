@@ -38,10 +38,15 @@ async function apiFetch<T>(path: string, retries = MAX_RETRIES): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+    const isLiveEndpoint =
+      path.includes("/today") ||
+      path.includes("/scoreboard") ||
+      path.includes("/matches/");
     try {
       const res = await fetch(`${API_BASE}${path}`, {
         headers: { Accept: "application/json" },
         next: { revalidate: 0 },
+        ...(isLiveEndpoint ? { cache: "no-store" as RequestCache } : {}),
         signal: controller.signal,
       });
       clearTimeout(timeout);
