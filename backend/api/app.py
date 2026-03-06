@@ -13,14 +13,16 @@ Creates the app with:
 from __future__ import annotations
 
 import asyncio
+import json
 import signal
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
-from fastapi import Depends, FastAPI, WebSocket
+from fastapi import Depends, FastAPI, Query, WebSocket
 from sqlalchemy import func, or_, select, text
 
 from shared.config import get_settings
@@ -59,6 +61,31 @@ from api.routes.auth_routes import router as auth_router
 from api.routes.user_routes import router as user_router
 
 logger = get_logger(__name__)
+
+# #region agent log
+def _debug_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str = "") -> None:
+    payload = {
+        "sessionId": "38b46f",
+        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+        "location": location,
+        "message": message,
+        "data": data,
+        "hypothesisId": hypothesis_id,
+    }
+    line = json.dumps(payload)
+    logger.info("DEBUG-38b46f %s", line)
+    try:
+        for base in (Path.cwd(), Path.cwd().parent, Path(__file__).resolve().parent.parent.parent):
+            log_path = base / "debug-38b46f.log"
+            try:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+                return
+            except OSError:
+                continue
+    except Exception:
+        pass
+# #endregion
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 LIVE_REFRESH_INTERVAL_S = 15
@@ -225,8 +252,14 @@ async def _refresh_live_scores(
 
     if not league_ids:
         LIVE_GAMES_DETECTED.set(0)
+        # #region agent log
+        _debug_log("app.py:_refresh_live_scores", "no leagues to refresh", {"league_count": 0}, "E")
+        # #endregion
         return 0
 
+    # #region agent log
+    _debug_log("app.py:_refresh_live_scores", "leagues to refresh", {"league_count": len(league_ids), "league_ids": league_ids[:5]}, "A")
+    # #endregion
     LIVE_GAMES_DETECTED.set(len(league_ids))
     settings = get_settings()
     use_fallback = getattr(settings, "live_refresh_use_fallback", True)
@@ -282,6 +315,9 @@ async def _refresh_live_scores(
             await redis.client.delete(today_key)
         except Exception:
             pass
+    # #region agent log
+    _debug_log("app.py:_refresh_live_scores", "refresh cycle done", {"matches_updated": updated, "league_count": len(league_ids)}, "B")
+    # #endregion
     return updated
 
 
@@ -464,8 +500,9 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
     _notif_queue: list[tuple[str, Any]] = []
 
     count = 0
+    skip_log_count = 0
     async with db.write_session() as session:
-        for event in events:
+        for idx, event in enumerate(events):
             try:
                 espn_id = str(event.get("id", ""))
                 if not espn_id:
@@ -484,10 +521,12 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     ProviderMappingORM.provider_id == espn_id,
                 )
                 match_id = (await session.execute(mapping_stmt)).scalar_one_or_none()
+                match_source = "mapping" if match_id else None
                 if not match_id:
                     match_id = await _resolve_match_from_espn_event(
                         session, espn_league_id, event, competitors
                     )
+                    match_source = "fallback" if match_id else None
                     if match_id:
                         # So next time we hit the fast path
                         session.add(ProviderMappingORM(
@@ -499,6 +538,11 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         ))
                         await session.flush()
                     else:
+                        # #region agent log
+                        if skip_log_count < 2:
+                            _debug_log("app.py:_apply_espn_events", "event skipped no match_id", {"espn_id": espn_id, "league": espn_league_id}, "B")
+                            skip_log_count += 1
+                        # #endregion
                         continue
 
                 score_home = 0
@@ -524,6 +568,16 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         if "aggregateScore" in c:
                             aggregate_away = agg
                         away_stats = _extract_team_stats(c)
+
+                # #region agent log
+                if count == 0 and events:
+                    _debug_log("app.py:_apply_espn_events", "first event scores", {
+                        "espn_id": espn_id, "league": espn_league_id, "match_source": match_source,
+                        "score_home": score_home, "score_away": score_away,
+                        "first_competitor_keys": list(competitors[0].keys()) if competitors else [],
+                        "has_linescores": bool(competitors and competitors[0].get("linescores")) if competitors else False,
+                    }, "C")
+                # #endregion
 
                 status_obj = comp.get("status", event.get("status", {}))
                 if not isinstance(status_obj, dict):
@@ -912,15 +966,24 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
 
     @app.post("/v1/refresh", tags=["system"])
     async def trigger_refresh(
+        force: bool = Query(False, description="If true, run one refresh even when circuit is open (manual recovery)."),
         db: DatabaseManager = Depends(get_db),
         redis: RedisManager = Depends(get_redis),
     ) -> dict[str, Any]:
         """Run one live score refresh cycle and invalidate today cache. For manual/cron use."""
         async with httpx.AsyncClient(timeout=12.0) as client:
-            try:
-                updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
-            except CircuitBreakerOpen:
-                return {"ok": False, "message": "ESPN circuit breaker open, try again later"}
+            if force:
+                try:
+                    updated = await _refresh_live_scores(db, redis, client)
+                    await espn_circuit_breaker.record_success()
+                except Exception as exc:
+                    logger.warning("live_refresh_force_failed", error=str(exc))
+                    return {"ok": False, "message": f"Force refresh failed: {exc!s}"}
+            else:
+                try:
+                    updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
+                except CircuitBreakerOpen:
+                    return {"ok": False, "message": "ESPN circuit breaker open, try again later or use ?force=true"}
         today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
         try:
             await redis.client.delete(today_key)

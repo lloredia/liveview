@@ -111,6 +111,10 @@ class CircuitBreaker:
             await self._on_failure(exc)
             raise
 
+    async def record_success(self) -> None:
+        """Record a successful call from outside (e.g. after a forced bypass). Closes the circuit."""
+        await self._on_success()
+
     async def _on_success(self) -> None:
         async with self._lock:
             if self._state in (CircuitState.HALF_OPEN, CircuitState.OPEN):

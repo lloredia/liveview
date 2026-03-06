@@ -46,7 +46,30 @@ curl https://backend-api-production-8b9f.up.railway.app/v1/leagues
 
 Should return sport groups with leagues. If empty, the seed/scheduler hasn't created league records.
 
-### 5. Is ESPN reachable?
+### 5. Is ESPN failing? (quick check)
+
+**A) Backend status (is our circuit breaker tripped?)**
+
+```bash
+curl -s https://backend-api-production-8b9f.up.railway.app/v1/status | jq '.providers.espn'
+```
+
+- `state`: `"closed"` = ESPN calls are allowed. `"open"` = **ESPN is treated as failing** (too many errors); no score refresh until it auto-recovers (~120s).
+- `failure_count`: recent failures. If high, ESPN or network is failing from the backend’s perspective.
+
+**B) Call ESPN directly (is ESPN up?)**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"
+# 200 = OK, 4xx/5xx or timeout = ESPN or network issue
+curl -s "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard" | head -c 500
+# Should show JSON with "events" (or "leagues"). If HTML or error, ESPN may be blocking or down.
+```
+
+If (A) shows `state: "open"` → backend has given up on ESPN for ~2 min; wait or fix backend/network.  
+If (B) returns non-200 or no JSON → ESPN or your network to ESPN is failing.
+
+### 6. Is ESPN reachable? (full league list)
 
 ```bash
 curl "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
@@ -58,7 +81,7 @@ curl "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 
 Each should return JSON with an `events` array. If any fail, ESPN may be down for that sport.
 
-### 6. Run the integration test
+### 7. Run the integration test
 
 ```bash
 cd backend
@@ -77,7 +100,7 @@ Shows pass/fail for health, status, leagues, today, scoreboards, and ESPN reacha
 | Scores stuck at 0-0 | No `match_state` row for match | Deploy with fix: live refresh now **creates** `match_state` when missing (ESPN data applied). |
 | Scores stuck at 0-0 | Match has no ESPN `provider_mapping` | Matches must have `provider_mappings` (entity_type=match, provider=espn) for refresh to update them. Ensure scheduler or seed created matches with ESPN mappings. |
 | Final scores never appear (stay 0-0 after game ends) | Refresh only ran for live/scheduled leagues; once all games finished, league was skipped | Deploy with fix: refresh now also includes leagues with matches that **finished in the last 48 hours**, so final scores are fetched and stored. |
-| Scores not updating | ESPN circuit breaker open | Wait 2 min for auto-recovery; check `/v1/status` |
+| Scores not updating | ESPN circuit breaker open | Wait 2 min for auto-recovery; check `/v1/status`; or force one attempt: `POST /v1/refresh?force=true` to bypass circuit and close it on success. |
 | Scores not updating | `espn_live_refresh_enabled = false` | Set `LV_ESPN_LIVE_REFRESH_ENABLED=true` and restart |
 | Wrong phase for NFL games | Old code without football branch | Deploy latest code (includes NFL phase resolution) |
 | Frontend shows "Scores temporarily delayed" | Backend unreachable or returning errors | Check backend health + logs |
