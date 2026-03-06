@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
-from fastapi import FastAPI, WebSocket
+from fastapi import Depends, FastAPI, WebSocket
 from sqlalchemy import func, or_, select, text
 
 from shared.config import get_settings
@@ -905,6 +905,24 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "api"}
+
+    @app.post("/v1/refresh", tags=["system"])
+    async def trigger_refresh(
+        db: DatabaseManager = Depends(get_db),
+        redis: RedisManager = Depends(get_redis),
+    ) -> dict[str, Any]:
+        """Run one live score refresh cycle and invalidate today cache. For manual/cron use."""
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            try:
+                await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
+            except CircuitBreakerOpen:
+                return {"ok": False, "message": "ESPN circuit breaker open, try again later"}
+        today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
+        try:
+            await redis.client.delete(today_key)
+        except Exception:
+            pass
+        return {"ok": True, "message": "Refresh cycle run, today cache invalidated"}
 
     @app.get("/ready", tags=["system"])
     async def readiness() -> Dict[str, Union[str, bool]]:
