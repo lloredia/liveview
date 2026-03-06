@@ -93,7 +93,8 @@ export async function fetchMatch(matchId: string): Promise<MatchDetailResponse> 
 }
 
 export async function fetchLiveCounts(): Promise<TodayResponse> {
-  return apiFetch<TodayResponse>("/v1/today");
+  const tzOffset = new Date().getTimezoneOffset();
+  return apiFetch<TodayResponse>(`/v1/today?tz_offset=${tzOffset}`);
 }
 
 export async function fetchStats(matchId: string): Promise<MatchStatsResponse> {

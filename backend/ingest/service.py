@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
+import time
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
@@ -107,11 +109,25 @@ class IngestService:
             await self._execute_poll(command)
 
     async def _execute_poll(self, command: dict[str, Any]) -> None:
+        """
+        Execute one poll command: select provider, fetch, normalize, publish.
+        Logs ingest.start, ingest.espn_fetch, ingest.matches_found, ingest.published, ingest.complete, ingest.error.
+        """
         canonical_match_id = uuid.UUID(command["canonical_match_id"])
         tier = Tier(command["tier"])
         sport = Sport(command["sport"])
         league_pid = command["league_provider_id"]
         match_pid = command["match_provider_id"]
+        start_wall = time.monotonic()
+        date_fetched = command.get("date") or ""
+
+        logger.info(
+            "ingest.start",
+            event="ingest.start",
+            league_id=str(canonical_match_id),
+            league_slug=league_pid,
+            date=date_fetched,
+        )
 
         try:
             # Select provider
@@ -122,38 +138,92 @@ class IngestService:
             async with atrack_latency(
                 INGEST_PROCESSING, provider=provider_name.value, tier=str(tier.value)
             ):
+                url = ""
+                http_status: int | str = 0
+                fetch_start = time.monotonic()
+                result = None
+
                 if tier == Tier.SCOREBOARD:
                     result = await provider.fetch_scoreboard(sport, league_pid, match_pid)
-                    if result.success and result.scoreboard:
+                    url = f"/{sport.value}/{league_pid}/scoreboard"
+                    http_status = getattr(result, "http_status", 200 if result.success else 0)
+                elif tier == Tier.EVENTS:
+                    result = await provider.fetch_events(sport, league_pid, match_pid)
+                    url = f"/{sport.value}/{league_pid}/summary?event={match_pid}"
+                    http_status = getattr(result, "http_status", 200 if result and result.success else 0)
+                elif tier == Tier.STATS:
+                    result = await provider.fetch_stats(sport, league_pid, match_pid)
+                    url = f"/{sport.value}/{league_pid}/summary?event={match_pid}"
+                    http_status = getattr(result, "http_status", 200 if result and result.success else 0)
+
+                duration_ms = int((time.monotonic() - fetch_start) * 1000)
+                logger.info(
+                    "ingest.espn_fetch",
+                    event="ingest.espn_fetch",
+                    url=url,
+                    http_status=http_status,
+                    duration_ms=duration_ms,
+                )
+
+                matches_found = 0
+                if tier == Tier.SCOREBOARD:
+                    if result and result.success and result.scoreboard:
+                        matches_found = 1
                         async with self._db.session() as session:
                             await self._normalizer.normalize_scoreboard(
                                 session, canonical_match_id, result.scoreboard, provider_name
                             )
-                    elif not result.success:
+                        logger.info("ingest.published", event="ingest.published", count=1)
+                    elif result and not result.success:
                         logger.warning(
                             "scoreboard_fetch_failed",
                             match_id=str(canonical_match_id),
                             provider=provider_name.value,
                             error=result.error,
                         )
-
                 elif tier == Tier.EVENTS:
-                    result = await provider.fetch_events(sport, league_pid, match_pid)
-                    if result.success and result.events is not None:
+                    if result and result.success and result.events is not None:
+                        matches_found = len(result.events)
                         async with self._db.session() as session:
                             await self._normalizer.normalize_events(
                                 session, canonical_match_id, result.events, provider_name
                             )
-
+                        logger.info(
+                            "ingest.published",
+                            event="ingest.published",
+                            count=matches_found,
+                        )
                 elif tier == Tier.STATS:
-                    result = await provider.fetch_stats(sport, league_pid, match_pid)
-                    if result.success and result.stats:
+                    if result and result.success and result.stats:
+                        matches_found = 1
                         async with self._db.session() as session:
                             await self._normalizer.normalize_stats(
                                 session, canonical_match_id, result.stats, provider_name
                             )
+                        logger.info("ingest.published", event="ingest.published", count=1)
+
+                logger.info(
+                    "ingest.matches_found",
+                    event="ingest.matches_found",
+                    count=matches_found,
+                )
+
+            total_duration_ms = int((time.monotonic() - start_wall) * 1000)
+            logger.info(
+                "ingest.complete",
+                event="ingest.complete",
+                total_duration_ms=total_duration_ms,
+            )
 
         except Exception as exc:
+            tb = traceback.format_exc()
+            logger.error(
+                "ingest.error",
+                event="ingest.error",
+                exception_class=type(exc).__name__,
+                message=str(exc),
+                traceback=tb,
+            )
             logger.error(
                 "poll_command_error",
                 match_id=str(canonical_match_id),
@@ -161,6 +231,7 @@ class IngestService:
                 error=str(exc),
                 exc_info=True,
             )
+            raise
 
     async def listen_for_commands(self) -> None:
         """Subscribe to the poll commands channel and process incoming commands."""

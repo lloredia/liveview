@@ -101,7 +101,7 @@ async def league_scoreboard(
     cached = await redis.client.get(cache_key)
     if cached:
         data = json.loads(cached)
-        etag = _compute_etag(cached)
+        etag = _compute_etag_content(cached)
         if_none_match = request.headers.get("if-none-match")
         if if_none_match and if_none_match == etag:
             return Response(status_code=304)
@@ -130,6 +130,7 @@ async def league_scoreboard(
                 MatchStateORM.score_away,
                 MatchStateORM.clock,
                 MatchStateORM.period,
+                MatchStateORM.phase.label("state_phase"),
                 MatchStateORM.extra_data,
                 MatchStateORM.version,
                 home_team.c.id.label("ht_id"),
@@ -169,9 +170,10 @@ async def league_scoreboard(
             if "aggregate_home" in extra and "aggregate_away" in extra:
                 score_obj["aggregate_home"] = extra["aggregate_home"]
                 score_obj["aggregate_away"] = extra["aggregate_away"]
+            phase = getattr(row, "state_phase", None) or row.phase
             matches.append({
                 "id": str(row.id),
-                "phase": row.phase,
+                "phase": phase,
                 "start_time": row.start_time.isoformat() if row.start_time else None,
                 "venue": row.venue,
                 "score": score_obj,
@@ -199,20 +201,37 @@ async def league_scoreboard(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Cache for 2 seconds
-    payload_json = json.dumps(payload, default=str)
-    await redis.client.set(cache_key, payload_json, ex=2)
+    # Dynamic TTL: any live/break -> 10s; any scheduled -> 30s; all finished -> 120s
+    settings = get_settings()
+    ttl_live = getattr(settings, "cache_ttl_live_seconds", 10)
+    live_count = sum(
+        1 for m in matches
+        if (m["phase"] or "").startswith("live") or m["phase"] == "break"
+    )
+    finished_count = sum(
+        1 for m in matches
+        if m["phase"] in ("finished", "postponed", "cancelled")
+    )
+    if live_count > 0:
+        cache_ttl = ttl_live
+    elif finished_count == len(matches) and len(matches) > 0:
+        cache_ttl = 120
+    else:
+        cache_ttl = 30
 
-    etag = _compute_etag(payload_json)
+    payload_json = json.dumps(payload, default=str)
+    await redis.client.set(cache_key, payload_json, ex=cache_ttl)
+
+    etag = _compute_etag_content(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=2"
+    response.headers["Cache-Control"] = f"public, max-age={min(cache_ttl, 30)}"
 
     return payload
 
 
-def _compute_etag(content: str | bytes) -> str:
-    """Compute a weak ETag from content."""
+def _compute_etag_content(content: str | bytes) -> str:
+    """Content-hash ETag: sha256 of payload (stable, no timestamps)."""
     if isinstance(content, str):
         content = content.encode()
-    digest = hashlib.md5(content).hexdigest()[:16]
+    digest = hashlib.sha256(content).hexdigest()[:16]
     return f'W/"{digest}"'

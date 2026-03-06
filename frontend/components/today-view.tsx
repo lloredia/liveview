@@ -25,10 +25,11 @@ async function fetchToday(
   matchIds?: string[],
 ): Promise<TodayResponse> {
   const params = new URLSearchParams();
+  params.set("tz_offset", String(new Date().getTimezoneOffset()));
   if (dateStr) params.set("date", dateStr);
   if (matchIds?.length) params.set("match_ids", matchIds.join(","));
   const qs = params.toString();
-  const url = `${getApiBase()}/v1/today${qs ? `?${qs}` : ""}`;
+  const url = `${getApiBase()}/v1/today?${qs}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
   try {

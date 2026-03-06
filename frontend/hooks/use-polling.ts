@@ -41,10 +41,17 @@ export function usePolling<T>({
   const refresh = useCallback(async () => {
     try {
       const result = await fetcherRef.current();
-      setData(result);
-      setError(null);
-      setLastError(null);
-      setLastSuccessAt(Date.now());
+      // When the API returns 304 Not Modified, the fetcher may return null or cached data;
+      // do not reset state to empty/loading — leave current data untouched.
+      if (result != null) {
+        setData(result);
+        setError(null);
+        setLastError(null);
+        setLastSuccessAt(Date.now());
+      }
+      if (typeof console !== "undefined" && console.debug) {
+        console.debug("[usePolling]", { key, hasData: result != null });
+      }
     } catch (e) {
       const err = e instanceof Error ? e : new Error("Fetch failed");
       setError(err.message);
@@ -52,18 +59,21 @@ export function usePolling<T>({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [key]);
 
   useEffect(() => {
-    const onVisibility = () => {
-      const nowVisible = document.visibilityState === "visible";
-      setVisible(nowVisible);
-      // When tab becomes visible, refetch immediately so scores are up to date
-      if (nowVisible && enabled) refresh();
+    setVisible(document.visibilityState === "visible");
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setVisible(true);
+        // Tab became visible — fire an immediate poll, then let the interval continue
+        if (enabled) refresh();
+      } else {
+        setVisible(false);
+      }
     };
-    onVisibility();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [enabled, refresh]);
 
   const effectiveInterval =

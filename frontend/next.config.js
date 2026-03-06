@@ -10,18 +10,19 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   },
   runtimeCaching: [
     {
-      // Live score endpoints: never cache so Scores/ticker stay fresh
-      urlPattern: /^https?:\/\/[^/]+\/v1\/(today|leagues\/[^/]+\/scoreboard|matches\/[^/]+)(\?.*)?$/i,
-      handler: "NetworkOnly",
-    },
-    {
-      // Cache API responses for 10 seconds (stale-while-revalidate)
-      urlPattern: /^https?:\/\/.*\/v1\/.*/i,
+      // API: NetworkFirst with 4s timeout so fresh data preferred; fallback to cache if network slow/fails
+      urlPattern: /\/v1\//,
       handler: "NetworkFirst",
       options: {
-        cacheName: "api-cache",
-        expiration: { maxEntries: 64, maxAgeSeconds: 10 },
-        networkTimeoutSeconds: 5,
+        cacheName: "liveview-api",
+        networkTimeoutSeconds: 4,
+        expiration: {
+          maxEntries: 50,
+          maxAgeSeconds: 30,
+        },
+        cacheableResponse: {
+          statuses: [0, 200],
+        },
       },
     },
     {

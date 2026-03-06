@@ -58,6 +58,7 @@ from shared.utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from api.ws.manager import WebSocketManager
 from api.live_fallback import espn_retry, tsdb_fallback_for_league
 from api.routes.notifications import router as notifications_router
+from api.routes.admin import router as admin_router
 from api.routes.auth_routes import router as auth_router
 from api.routes.user_routes import router as user_router
 
@@ -310,12 +311,12 @@ async def _refresh_live_scores(
 
     if updated > 0:
         logger.info("live_scores_refreshed", matches_updated=updated)
-        # Invalidate today cache so next poll gets fresh data
-        today_key = f"today:{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).date().isoformat()}"
-        try:
-            await redis.client.delete(today_key)
-        except Exception:
-            pass
+    # Always invalidate today cache after refresh so next GET /today gets DB state (even when updated=0)
+    today_key = f"today:{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).date().isoformat()}"
+    try:
+        await redis.client.delete(today_key)
+    except Exception:
+        pass
     # #region agent log
     _debug_log("app.py:_refresh_live_scores", "refresh cycle done", {"matches_updated": updated, "league_count": len(league_ids)}, "B")
     # #endregion
@@ -618,9 +619,12 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                 extra_json = json.dumps(extra) if extra else "{}"
                 if state_row:
                     # state_row: (score_home, score_away, clock, phase, period, extra_data, version)
+                    # Coerce to int so DB Decimal doesn't prevent updates
+                    db_home = int(state_row[0]) if state_row[0] is not None else 0
+                    db_away = int(state_row[1]) if state_row[1] is not None else 0
                     changed = (
-                        state_row[0] != score_home
-                        or state_row[1] != score_away
+                        db_home != score_home
+                        or db_away != score_away
                         or state_row[2] != clock
                         or state_row[3] != phase.value
                         or (state_row[5] or {}) != extra
@@ -769,59 +773,50 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
 
 async def phase_sync_loop(db: DatabaseManager) -> None:
     """
-    Background task that periodically syncs match phases.
-
-    Runs every 60 seconds and:
-    1. Marks matches as 'live' if their start_time has passed (within 3 hours).
-    2. Marks matches as 'finished' if they started 3+ hours ago and are still
-       'scheduled' or 'live'.
-    3. Syncs match_state.phase to match matches.phase.
+    Background task: last-resort phase sync only.
+    Does NOT transition scheduled->live or live->finished by time; ingest owns status.
+    Only fallback: matches with phase in ('live','scheduled') and start_time < NOW() - 5h -> finished.
+    Syncs match_state.phase -> matches.phase so match row reflects authoritative state from ingest.
     """
+    settings = get_settings()
+    fallback_hours = settings.phase_sync_fallback_hours
+
     while True:
         try:
             await asyncio.sleep(60)
 
+            matches_checked = 0
             async with db.write_session() as session:
-                scheduled = MatchPhase.SCHEDULED.value
-                live_first_half = MatchPhase.LIVE_FIRST_HALF.value
-                finished = MatchPhase.FINISHED.value
+                logger.info(
+                    "phase_sync.tick",
+                    event="phase_sync.tick",
+                    matches_checked=matches_checked,
+                )
 
-                # 1. Auto-live: matches whose start_time has passed (within 3 hours)
-                kickoff_result = await session.execute(text("""
-                    UPDATE matches
-                    SET phase = :live_phase
-                    WHERE phase = :scheduled
-                      AND start_time <= NOW()
-                      AND start_time > NOW() - INTERVAL '3 hours'
-                    RETURNING id
-                """), {"live_phase": live_first_half, "scheduled": scheduled})
-                kickoff_ids = [str(row[0]) for row in kickoff_result.fetchall()]
-
-                # 2. Auto-live: matches with scores > 0 still marked scheduled
-                score_result = await session.execute(text("""
-                    UPDATE matches
-                    SET phase = :live_phase
-                    WHERE phase = :scheduled
-                      AND start_time <= NOW()
-                      AND id IN (
-                          SELECT match_id FROM match_state
-                          WHERE score_home + score_away > 0
-                      )
-                    RETURNING id
-                """), {"live_phase": live_first_half, "scheduled": scheduled})
-                score_ids = [str(row[0]) for row in score_result.fetchall()]
-
-                # 3. Auto-finish: matches started 3+ hours ago still not finished
+                # Fallback only: matches still live/scheduled but started > N hours ago -> finished
                 finished_result = await session.execute(text("""
                     UPDATE matches
-                    SET phase = :finished
-                    WHERE (phase = :scheduled OR phase LIKE 'live_%' OR phase = 'break')
-                      AND start_time < NOW() - INTERVAL '3 hours'
-                    RETURNING id
-                """), {"finished": finished, "scheduled": scheduled})
-                finished_ids = [str(row[0]) for row in finished_result.fetchall()]
+                    SET phase = 'finished'
+                    WHERE phase IN ('live', 'scheduled', 'live_first_half', 'live_second_half',
+                      'live_q1', 'live_q2', 'live_q3', 'live_q4', 'live_halftime', 'break',
+                      'live_p1', 'live_p2', 'live_p3', 'live_ot', 'live_inning')
+                      AND start_time < NOW() - (INTERVAL '1 hour' * :hours)
+                    RETURNING id, phase
+                """), {"hours": fallback_hours})
+                rows = finished_result.fetchall()
+                for row in rows:
+                    match_id_val, old_phase = str(row[0]), (row[1] if len(row) > 1 else "live")
+                    logger.info(
+                        "phase_sync.fallback_transition",
+                        event="phase_sync.fallback_transition",
+                        match_id=match_id_val,
+                        old_phase=old_phase,
+                        new_phase="finished",
+                        reason="elapsed_5h_fallback",
+                    )
+                matches_checked = len(rows)
 
-                # 4. Sync match_state.phase -> matches.phase so match row reflects authoritative state (from ESPN)
+                # Sync match_state.phase -> matches.phase (authoritative from ingest)
                 await session.execute(text("""
                     UPDATE matches m
                     SET phase = ms.phase
@@ -830,16 +825,11 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                       AND m.phase IS DISTINCT FROM ms.phase
                 """))
 
-                # write_session auto-commits
-
-                total_updated = len(finished_ids) + len(kickoff_ids) + len(score_ids)
-                if total_updated > 0:
-                    logger.info(
-                        "phase_sync_completed",
-                        finished=len(finished_ids),
-                        live_kickoff=len(kickoff_ids),
-                        live_score=len(score_ids),
-                    )
+            logger.info(
+                "phase_sync.tick",
+                event="phase_sync.tick",
+                matches_checked=matches_checked,
+            )
 
         except asyncio.CancelledError:
             logger.info("phase_sync_stopped")
@@ -994,6 +984,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
     app.include_router(news_router)
     app.include_router(today_router)
     app.include_router(notifications_router)
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(user_router)
 

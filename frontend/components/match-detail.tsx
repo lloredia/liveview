@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
 import { ApiError, fetchMatch, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
-import { useESPNLive } from "@/hooks/use-espn-live";
 import {
   formatDate,
   formatTime,
@@ -116,6 +115,28 @@ interface ESPNSummaryData {
   awayFormation?: string;
   /** Soccer: substitutions parsed from plays (home and away combined, ordered by time). */
   substitutions?: SubstitutionEntry[];
+}
+
+// Canonical state — authoritative. Source: backend API only. Never overwritten by ESPN.
+export interface CanonicalMatchState {
+  phase: "scheduled" | "live" | "break" | "finished" | "postponed" | "cancelled" | string;
+  score_home: number;
+  score_away: number;
+  clock: string | null;
+  period: string | null;
+  version: number;
+}
+
+// Supplementary state — display-only extras. Source: ESPN (or backend timeline) only. Never affects score/phase.
+export interface SupplementaryMatchData {
+  plays: ESPNPlay[];
+  lineup_home: PlayerStatLine[];
+  lineup_away: PlayerStatLine[];
+  boxscore: { homeTeamStats: ESPNTeamStat[]; awayTeamStats: ESPNTeamStat[] } | null;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
 }
 
 /** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
@@ -492,9 +513,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     if (refreshTrigger != null && refreshTrigger > 0) refreshMatch();
   }, [refreshTrigger, refreshMatch]);
 
-  const { findMatch: findESPN } = useESPNLive(leagueName, 15000);
-
-  // ESPN summary — use league from URL or from match API so play-by-play works without ?league=
+  // ESPN summary (supplementary data only; score/phase come from canonical/backend) — use league from URL or from match API so play-by-play works without ?league=
   const leagueForESPN = leagueName || matchData?.league?.name || "";
   const espnFetcher = useCallback(async (): Promise<ESPNSummaryData | null> => {
     if (!matchData) return null;
@@ -540,6 +559,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     key: `player-stats-${matchId}`,
   });
 
+  // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
   const playsForTab = useMemo(() => {
     if (espnData?.plays?.length) return espnData.plays;
     if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
@@ -602,16 +622,33 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   }
 
   const { match, state } = matchData;
-  const espnLive = findESPN(match.home_team?.name || "", match.away_team?.name || "");
-  const backendIsLive = isLive(match.phase);
-  const useEspn = espnLive && (!backendIsLive || espnLive.isLive || espnLive.isFinished);
-  const effectivePhase = useEspn ? espnLive.phase : match.phase;
-  const effectiveClock = useEspn ? espnLive.clock : state?.clock ?? null;
-  const effectivePeriod = useEspn ? espnLive.period : state?.period ?? null;
-  const effectiveScoreHome = useEspn ? espnLive.homeScore : state?.score_home ?? 0;
-  const effectiveScoreAway = useEspn ? espnLive.awayScore : state?.score_away ?? 0;
-  const live = isLive(effectivePhase);
-  const color = phaseColor(effectivePhase);
+
+  // Canonical state — backend API only. Governs score, phase, clock, period. Never overwritten by ESPN.
+  const canonical: CanonicalMatchState = {
+    phase: match.phase ?? "scheduled",
+    score_home: state?.score_home ?? 0,
+    score_away: state?.score_away ?? 0,
+    clock: state?.clock ?? null,
+    period: state?.period ?? null,
+    version: state?.version ?? 0,
+  };
+
+  // Supplementary state — ESPN (or backend timeline/lineup fallback). For play-by-play, lineup, boxscore only.
+  const supplementary: SupplementaryMatchData = {
+    plays: espnData?.plays ?? [],
+    lineup_home: espnData?.homePlayers?.players ?? [],
+    lineup_away: espnData?.awayPlayers?.players ?? [],
+    boxscore: espnData
+      ? { homeTeamStats: espnData.homeTeamStats, awayTeamStats: espnData.awayTeamStats }
+      : null,
+    homeTeamName: espnData?.homeTeamName,
+    awayTeamName: espnData?.awayTeamName,
+    homeTeamId: espnData?.homeTeamId,
+    awayTeamId: espnData?.awayTeamId,
+  };
+
+  const live = isLive(canonical.phase);
+  const color = phaseColor(canonical.phase);
   const { theme } = useTheme();
   const bigScoreClass =
     theme === "light"
@@ -620,7 +657,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
 
   return (
     <div className="mx-auto max-w-2xl animate-slide-up">
-      <ScoreWatcher scoreHome={effectiveScoreHome} scoreAway={effectiveScoreAway} live={live} />
+      <ScoreWatcher scoreHome={canonical.score_home} scoreAway={canonical.score_away} live={live} />
 
       {/* Back + Actions */}
       <div className="mb-4 flex items-center justify-between">
@@ -642,8 +679,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
               {pinned ? "★ Tracked" : "☆ Track match"}
             </button>
           )}
-          <CalendarButton match={{ id: matchId, phase: effectivePhase, start_time: match.start_time, venue: match.venue, score: { home: effectiveScoreHome, away: effectiveScoreAway }, clock: effectiveClock, period: effectivePeriod, version: 0, home_team: match.home_team as any, away_team: match.away_team as any }} leagueName={leagueName} />
-          <ShareButton title={`${match.home_team?.name} vs ${match.away_team?.name}`} text={`${match.home_team?.short_name} ${effectiveScoreHome} - ${effectiveScoreAway} ${match.away_team?.short_name}`} url={`/match/${matchId}`} />
+          <CalendarButton match={{ id: matchId, phase: canonical.phase, start_time: match.start_time, venue: match.venue, score: { home: canonical.score_home, away: canonical.score_away }, clock: canonical.clock, period: canonical.period, version: canonical.version, home_team: match.home_team as any, away_team: match.away_team as any }} leagueName={leagueName} />
+          <ShareButton title={`${match.home_team?.name} vs ${match.away_team?.name}`} text={`${match.home_team?.short_name} ${canonical.score_home} - ${canonical.score_away} ${match.away_team?.short_name}`} url={`/match/${matchId}`} />
         </div>
       </div>
 
@@ -661,7 +698,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         <div className="mb-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1" style={{ background: live ? "rgba(239,68,68,0.1)" : `${color}15` }}>
           {live && (<div className="relative h-1.5 w-1.5"><div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75" /><div className="relative h-1.5 w-1.5 rounded-full bg-red-500" /></div>)}
           <span className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: live ? "#f87171" : color }}>
-            {phaseLabelWithClock(effectivePhase, effectiveClock)}{effectiveClock ? ` · ${effectiveClock}` : ""}
+            {phaseLabelWithClock(canonical.phase, canonical.clock)}{canonical.clock ? ` · ${canonical.clock}` : ""}
           </span>
         </div>
         <div className="flex items-center justify-center gap-4 md:gap-8">
@@ -672,12 +709,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
           </div>
           <div className="flex items-center gap-3 md:gap-4">
             <AnimatedScore
-              value={effectiveScoreHome}
+              value={canonical.score_home}
               className={live ? bigScoreClass : `font-mono text-5xl font-black text-text-primary md:text-6xl [text-shadow:0_1px_8px_rgba(0,0,0,0.15)]`}
             />
             <span className="text-2xl font-light text-text-muted/40 md:text-3xl">:</span>
             <AnimatedScore
-              value={effectiveScoreAway}
+              value={canonical.score_away}
               className={live ? bigScoreClass : `font-mono text-5xl font-black text-text-primary md:text-6xl [text-shadow:0_1px_8px_rgba(0,0,0,0.15)]`}
             />
           </div>
@@ -714,13 +751,13 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         {activeTab === "play_by_play" && (
           <PlayByPlayTab
             plays={playsForTab}
-            homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
-            awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
-            homeTeamId={espnData?.homeTeamId || ""}
-            awayTeamId={espnData?.awayTeamId || ""}
+            homeTeamName={supplementary.homeTeamName || match.home_team?.short_name || "Home"}
+            awayTeamName={supplementary.awayTeamName || match.away_team?.short_name || "Away"}
+            homeTeamId={supplementary.homeTeamId || ""}
+            awayTeamId={supplementary.awayTeamId || ""}
             loading={playByPlayLoading}
             live={live}
-            phase={effectivePhase}
+            phase={canonical.phase}
           />
         )}
         {activeTab === "player_stats" && (

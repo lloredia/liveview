@@ -1,9 +1,10 @@
 """
 Today REST endpoint.
 
-GET /v1/today?date=YYYY-MM-DD — All matches across all leagues for a given date.
+GET /v1/today?date=YYYY-MM-DD&tz_offset=0 — All matches across all leagues for a given date.
 
-Defaults to today (UTC). Groups matches by league with live/scheduled/finished sections.
+Defaults to today in the user's timezone when tz_offset is provided (minutes from UTC, same as JS getTimezoneOffset()).
+Groups matches by league with live/scheduled/finished sections.
 """
 from __future__ import annotations
 
@@ -11,11 +12,12 @@ import hashlib
 import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func, case, and_, or_
 
+from shared.config import get_settings
 from shared.models.orm import (
     LeagueORM,
     MatchORM,
@@ -33,6 +35,33 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/v1", tags=["today"])
 
 
+def resolve_date_range(
+    date_str: str | None,
+    tz_offset_minutes: int,
+) -> Tuple[datetime, datetime, date]:
+    """
+    Return UTC start/end datetimes for the requested local date.
+    tz_offset_minutes: same as JavaScript getTimezoneOffset() (negative for UTC+, positive for UTC-).
+    Returns (utc_start, utc_end, local_date).
+    """
+    if date_str:
+        try:
+            local_date = date.fromisoformat(date_str)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD.")
+    else:
+        utc_now = datetime.now(timezone.utc)
+        local_now = utc_now - timedelta(minutes=tz_offset_minutes)
+        local_date = local_now.date()
+
+    day_start_local = datetime(local_date.year, local_date.month, local_date.day)
+    utc_start = day_start_local + timedelta(minutes=tz_offset_minutes)
+    utc_end = utc_start + timedelta(hours=24)
+    utc_start = utc_start.replace(tzinfo=timezone.utc)
+    utc_end = utc_end.replace(tzinfo=timezone.utc)
+    return utc_start, utc_end, local_date
+
+
 @router.get("/today")
 async def get_today(
     request: Request,
@@ -40,7 +69,11 @@ async def get_today(
     date_str: Optional[str] = Query(
         None,
         alias="date",
-        description="Date in YYYY-MM-DD format. Defaults to today (UTC).",
+        description="Date in YYYY-MM-DD format. Defaults to today in local time when tz_offset is set.",
+    ),
+    tz_offset: int = Query(
+        0,
+        description="Minutes offset from UTC (same as JavaScript Date.getTimezoneOffset()).",
     ),
     league_ids: Optional[str] = Query(
         None,
@@ -57,34 +90,19 @@ async def get_today(
     Get all matches across all leagues for a given date.
 
     Returns matches grouped by league, sorted by start time.
-    Each league group includes sport info and league metadata.
-    Supports ETag-based conditional requests for efficient polling.
+    tz_offset shifts the requested date to the user's local day (e.g. getTimezoneOffset()).
+    Supports ETag-based conditional requests (content-hash ETag).
     """
-    # Parse date
-    if date_str:
-        try:
-            target_date = date.fromisoformat(date_str)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid date format: {date_str}. Use YYYY-MM-DD.",
-            )
-    else:
-        target_date = datetime.now(timezone.utc).date()
+    try:
+        day_start, day_end, target_date = resolve_date_range(date_str, tz_offset)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    # Date range: full day in UTC
-    day_start = datetime(
-        target_date.year, target_date.month, target_date.day,
-        tzinfo=timezone.utc,
-    )
-    day_end = day_start + timedelta(days=1)
-    is_today_utc = target_date == datetime.now(timezone.utc).date()
-
-    # When viewing "today", also include yesterday's finished and tomorrow's scheduled
+    is_today_utc = target_date == (datetime.now(timezone.utc) - timedelta(minutes=tz_offset)).date()
     yesterday_start = day_start - timedelta(days=1)
     yesterday_end = day_start
     tomorrow_start = day_end
-    tomorrow_end = tomorrow_start + timedelta(days=1)
+    tomorrow_end = day_end + timedelta(days=1)
 
     # Optional filters (when set, we skip Redis cache and filter after query)
     filter_league_ids: set[str] | None = None
@@ -96,16 +114,16 @@ async def get_today(
     use_cache = not (filter_league_ids or filter_match_ids)
 
     # Try Redis cache first (short TTL for live data); skip when filtering
-    cache_key = f"today:{target_date.isoformat()}"
+    cache_key = f"today:{target_date.isoformat()}:{tz_offset}"
     cached = await redis.client.get(cache_key) if use_cache else None
     if cached:
-        etag = _compute_etag(cached)
+        etag = _compute_etag_content(cached)
         if_none_match = request.headers.get("if-none-match")
         if if_none_match and if_none_match == etag:
             return Response(status_code=304)
 
     async with db.read_session() as session:
-        # Matches that started on the selected date
+        # Matches that started in the resolved UTC date range
         date_condition = and_(
             MatchORM.start_time >= day_start,
             MatchORM.start_time < day_end,
@@ -332,21 +350,31 @@ async def get_today(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Shorter TTL when there are live games so scores refresh faster
-    cache_ttl = 5 if live_count > 0 else 15
+    # Dynamic TTL: live/break -> 10s; scheduled only -> 30s; all finished -> 120s
+    settings = get_settings()
+    ttl_live = getattr(settings, "cache_ttl_live_seconds", 10)
+    has_live_or_break = live_count > 0
+    all_finished = finished_count == len(all_matches) and len(all_matches) > 0
+    if has_live_or_break:
+        cache_ttl = ttl_live
+    elif all_finished:
+        cache_ttl = 120
+    else:
+        cache_ttl = 30
+
     payload_json = json.dumps(payload, default=str)
     await redis.client.setex(cache_key, cache_ttl, payload_json)
 
-    etag = _compute_etag(payload_json)
+    etag = _compute_etag_content(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=5"
+    response.headers["Cache-Control"] = f"public, max-age={min(cache_ttl, 30)}"
 
     return payload
 
 
-def _compute_etag(content: str | bytes) -> str:
-    """Compute a weak ETag from content."""
+def _compute_etag_content(content: str | bytes) -> str:
+    """Content-hash ETag: sha256 of payload (stable, no timestamps)."""
     if isinstance(content, str):
         content = content.encode()
-    digest = hashlib.md5(content).hexdigest()[:16]
+    digest = hashlib.sha256(content).hexdigest()[:16]
     return f'W/"{digest}"'

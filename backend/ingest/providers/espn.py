@@ -1,6 +1,7 @@
 """
 ESPN provider connector.
 Fetches data from ESPN's public APIs and normalizes to canonical domain models.
+Phase/status is determined solely via normalize_espn_phase() from ESPN status type name.
 """
 from __future__ import annotations
 
@@ -27,6 +28,63 @@ from shared.utils.redis_manager import RedisManager
 from ingest.providers.base import BaseProvider, ProviderResult
 
 logger = get_logger(__name__)
+
+# Map every known ESPN status.type.name to internal phase string.
+# Used by normalize_espn_phase(); no time-elapsed or score-based heuristics.
+ESPN_STATUS_MAP: dict[str, str] = {
+    "STATUS_SCHEDULED": "scheduled",
+    "STATUS_IN_PROGRESS": "live",
+    "STATUS_HALFTIME": "break",
+    "STATUS_END_PERIOD": "break",
+    "STATUS_OVERTIME": "live",
+    "STATUS_2ND_HALF": "live",
+    "STATUS_FINAL": "finished",
+    "STATUS_FINAL_OT": "finished",
+    "STATUS_FINAL_PEN": "finished",
+    "STATUS_FULL_TIME": "finished",
+    "STATUS_POSTPONED": "postponed",
+    "STATUS_CANCELLED": "cancelled",
+    "STATUS_CANCELED": "cancelled",
+    "STATUS_SUSPENDED": "postponed",
+    "STATUS_RAIN_DELAY": "break",
+    "STATUS_DELAYED": "break",
+    "STATUS_FORFEIT": "cancelled",
+    "STATUS_PRE": "scheduled",
+    "STATUS_POST": "finished",
+}
+
+
+def normalize_espn_phase(espn_status_type_name: str) -> str:
+    """
+    Map ESPN status.type.name to internal phase string.
+    Unknown statuses are logged at WARNING and default to "scheduled" (never "live").
+    """
+    if not espn_status_type_name:
+        return "scheduled"
+    key = espn_status_type_name.strip().upper()
+    if key in ESPN_STATUS_MAP:
+        return ESPN_STATUS_MAP[key]
+    logger.warning(
+        "espn.unknown_status",
+        event="espn.unknown_status",
+        status=espn_status_type_name,
+        defaulting_to="scheduled",
+    )
+    return "scheduled"
+
+
+def _normalized_phase_to_match_phase(normalized: str) -> MatchPhase:
+    """Map normalized phase string from normalize_espn_phase to MatchPhase enum."""
+    m: dict[str, MatchPhase] = {
+        "scheduled": MatchPhase.SCHEDULED,
+        "live": MatchPhase.LIVE_FIRST_HALF,
+        "break": MatchPhase.BREAK,
+        "finished": MatchPhase.FINISHED,
+        "postponed": MatchPhase.POSTPONED,
+        "cancelled": MatchPhase.CANCELLED,
+    }
+    return m.get(normalized, MatchPhase.SCHEDULED)
+
 
 # ESPN sport slug mapping
 _SPORT_SLUGS: dict[Sport, str] = {
@@ -81,105 +139,6 @@ def _parse_soccer_clock_minute(clock: str) -> Optional[int]:
         return int(plus.group(1)) + int(plus.group(2))
     simple = re.search(r"(\d+)\s*'?", s)
     return int(simple.group(1)) if simple else None
-
-
-HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
-
-
-def _parse_espn_phase(
-    status_type: str, status_detail: str, sport: Sport, display_clock: Optional[str] = None,
-    league_id: str = "",
-) -> MatchPhase:
-    """Map ESPN status codes to canonical MatchPhase."""
-    status_type = status_type.lower()
-    detail = status_detail.lower()
-
-    if status_type == "pre":
-        return MatchPhase.SCHEDULED
-    if status_type == "post":
-        return MatchPhase.FINISHED
-    if status_type == "postponed":
-        return MatchPhase.POSTPONED
-    if status_type == "cancelled":
-        return MatchPhase.CANCELLED
-    if status_type == "suspended":
-        return MatchPhase.SUSPENDED
-
-    # Live states by sport
-    if status_type == "in":
-        if sport == Sport.SOCCER:
-            if "half" in detail and "2" in detail:
-                return MatchPhase.LIVE_SECOND_HALF
-            if "half" in detail:
-                return MatchPhase.LIVE_HALFTIME if "time" in detail else MatchPhase.LIVE_FIRST_HALF
-            if "extra" in detail:
-                return MatchPhase.LIVE_EXTRA_TIME
-            if "penal" in detail:
-                return MatchPhase.LIVE_PENALTIES
-            minute = _parse_soccer_clock_minute(display_clock or status_detail)
-            if minute is not None:
-                if minute > 90:
-                    return MatchPhase.LIVE_EXTRA_TIME
-                if minute > 45:
-                    return MatchPhase.LIVE_SECOND_HALF
-            return MatchPhase.LIVE_FIRST_HALF
-
-        if sport == Sport.BASKETBALL:
-            is_halves = league_id in HALVES_BASKETBALL_LEAGUES
-            if is_halves:
-                if "ot" in detail or "overtime" in detail:
-                    return MatchPhase.LIVE_OT
-                if "half" in detail and "time" in detail:
-                    return MatchPhase.LIVE_HALFTIME
-                if "half" in detail:
-                    return MatchPhase.BREAK
-                if "2nd" in detail:
-                    return MatchPhase.LIVE_H2
-                return MatchPhase.LIVE_H1
-            if "1st" in detail:
-                return MatchPhase.LIVE_Q1
-            if "2nd" in detail:
-                return MatchPhase.LIVE_Q2
-            if "3rd" in detail:
-                return MatchPhase.LIVE_Q3
-            if "4th" in detail:
-                return MatchPhase.LIVE_Q4
-            if "ot" in detail or "overtime" in detail:
-                return MatchPhase.LIVE_OT
-            if "half" in detail:
-                return MatchPhase.BREAK
-            return MatchPhase.LIVE_Q1
-
-        if sport == Sport.HOCKEY:
-            if "1st" in detail:
-                return MatchPhase.LIVE_P1
-            if "2nd" in detail:
-                return MatchPhase.LIVE_P2
-            if "3rd" in detail:
-                return MatchPhase.LIVE_P3
-            if "ot" in detail:
-                return MatchPhase.LIVE_OT
-            return MatchPhase.LIVE_P1
-
-        if sport == Sport.BASEBALL:
-            return MatchPhase.LIVE_INNING
-
-        if sport == Sport.FOOTBALL:
-            if "1st" in detail:
-                return MatchPhase.LIVE_Q1
-            if "2nd" in detail:
-                return MatchPhase.LIVE_Q2
-            if "3rd" in detail:
-                return MatchPhase.LIVE_Q3
-            if "4th" in detail:
-                return MatchPhase.LIVE_Q4
-            if "ot" in detail or "overtime" in detail:
-                return MatchPhase.LIVE_OT
-            if "half" in detail:
-                return MatchPhase.BREAK
-            return MatchPhase.LIVE_Q1
-
-    return MatchPhase.SCHEDULED
 
 
 def _parse_espn_event_type(play_type: str, sport: Sport) -> EventType:
@@ -378,8 +337,9 @@ class ESPNProvider(BaseProvider):
                 continue
 
             status = comp.get("status", {})
-            status_type = status.get("type", {}).get("name", "pre")
-            status_detail = status.get("type", {}).get("detail", "")
+            status_type_name = (status.get("type") or {}).get("name", "STATUS_SCHEDULED")
+            normalized = normalize_espn_phase(status_type_name)
+            phase_enum = _normalized_phase_to_match_phase(normalized)
 
             results.append({
                 "provider_match_id": str(event.get("id")),
@@ -388,7 +348,7 @@ class ESPNProvider(BaseProvider):
                 "home_team_name": home.get("team", {}).get("displayName", ""),
                 "away_team_name": away.get("team", {}).get("displayName", ""),
                 "start_time": event.get("date", ""),
-                "phase": _parse_espn_phase(status_type, status_detail, sport).value,
+                "phase": phase_enum.value,
                 "venue": comp.get("venue", {}).get("fullName", ""),
             })
         return results
@@ -419,10 +379,9 @@ class ESPNProvider(BaseProvider):
             ))
 
         status = comp.get("status", {})
-        status_type = status.get("type", {}).get("name", "pre")
-        status_detail = status.get("type", {}).get("detail", "")
+        status_type_name = (status.get("type") or {}).get("name", "STATUS_SCHEDULED")
+        phase = _normalized_phase_to_match_phase(normalize_espn_phase(status_type_name))
         clock = status.get("displayClock", "")
-        phase = _parse_espn_phase(status_type, status_detail, sport, display_clock=clock, league_id=league_id)
 
         start_str = event.get("date", "")
         try:

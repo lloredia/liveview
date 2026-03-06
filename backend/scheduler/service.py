@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import signal
 import time
+import traceback
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -379,6 +381,13 @@ class SchedulerService:
                 json.dumps(command),
             )
 
+            logger.info(
+                "scheduler.trigger_fired",
+                event="scheduler.trigger_fired",
+                league_id=str(task.canonical_match_id),
+                league_slug=task.league_provider_id,
+                triggered_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
             logger.debug(
                 "poll_command_dispatched",
                 match_id=str(task.canonical_match_id),
@@ -505,6 +514,15 @@ class ScheduleSyncService:
                     sport_id = sports_db.get(league_cfg["sport"])
                     if not sport_id:
                         continue
+                    league_slug = league_cfg["espn_league"]
+                    triggered_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    logger.info(
+                        "scheduler.trigger_fired",
+                        event="scheduler.trigger_fired",
+                        league_id="",
+                        league_slug=league_slug,
+                        triggered_at=triggered_at,
+                    )
                     try:
                         new, updated = await self._sync_league_date(
                             client, league_cfg, sport_id, date_str,
@@ -512,6 +530,14 @@ class ScheduleSyncService:
                         total_new += new
                         total_updated += updated
                     except Exception as exc:
+                        logger.error(
+                            "scheduler.trigger_failed",
+                            event="scheduler.trigger_failed",
+                            league_id="",
+                            league_slug=league_slug,
+                            error=str(exc),
+                            traceback=traceback.format_exc(),
+                        )
                         logger.warning(
                             "schedule_sync_league_error",
                             league=league_cfg["name"],
@@ -772,6 +798,12 @@ async def main() -> None:
     """Scheduler service entrypoint."""
     settings = get_settings()
     setup_logging("scheduler")
+    logger.info(
+        "scheduler.startup",
+        event="scheduler.startup",
+        service="scheduler",
+        pid=os.getpid(),
+    )
     start_metrics_server(9092)
     start_health_server("scheduler")
 

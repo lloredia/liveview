@@ -7,8 +7,9 @@ import type { NewsArticle } from "@/lib/types";
 function makeArticle(
   overrides: Partial<NewsArticle> & { id: string; published_at: string }
 ): NewsArticle {
+  const { id, published_at, sport, trending_score, ...rest } = overrides;
   return {
-    id: overrides.id,
+    id,
     title: "Title",
     summary: null,
     content_snippet: null,
@@ -16,14 +17,14 @@ function makeArticle(
     source_url: "https://example.com/1",
     image_url: null,
     category: "general",
-    sport: overrides.sport ?? null,
+    sport: sport ?? null,
     leagues: [],
     teams: [],
-    published_at: overrides.published_at,
+    published_at,
     fetched_at: new Date().toISOString(),
-    trending_score: overrides.trending_score ?? 0,
+    trending_score: trending_score ?? 0,
     is_breaking: false,
-    ...overrides,
+    ...rest,
   };
 }
 

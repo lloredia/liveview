@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_workers: int = 1
     cors_origins: list[str] = ["*"]
+    admin_key: str = Field(
+        default="",
+        description="Secret for POST /v1/admin/ingest/{league_slug}. Required in X-Admin-Key header. Empty = endpoint disabled.",
+    )
 
     # ── WebSocket ────────────────────────────────────────────
     ws_heartbeat_interval_s: float = 15.0
@@ -140,6 +144,18 @@ class Settings(BaseSettings):
     # ── Builder ──────────────────────────────────────────────
     builder_reconciliation_interval_s: float = 10.0
     builder_synthetic_confidence_min: float = 0.3
+
+    # ── Phase sync (fallback only; ingest owns status) ─────────────────────
+    phase_sync_fallback_hours: int = Field(
+        default=5,
+        description="Matches with phase live/scheduled and start_time older than this many hours are set to finished (fallback only).",
+    )
+
+    # ── Cache TTL (today / scoreboard) ────────────────────────────────────
+    cache_ttl_live_seconds: int = Field(
+        default=10,
+        description="Redis cache TTL in seconds when any match is live or in break.",
+    )
 
     # ── Feature flags ────────────────────────────────────────
     espn_live_refresh_enabled: bool = True

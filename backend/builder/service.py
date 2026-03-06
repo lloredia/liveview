@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -243,13 +244,22 @@ class BuilderService:
         Handle an incoming scoreboard delta from the fanout channel.
         Parses the match ID from the channel, loads the previous state,
         generates synthetic events, and persists them.
+        Phase is taken from the ingest payload (normalized via normalize_espn_phase upstream).
         """
+        match_id_str = ""
         try:
             # Channel format: fanout:match:{match_id}:tier:0
             parts = channel.split(":")
             if len(parts) < 4:
                 return
             match_id_str = parts[2]
+
+            logger.info(
+                "builder.event_received",
+                event="builder.event_received",
+                match_id=match_id_str,
+                league_id="",
+            )
 
             data = json.loads(message)
             current_sb = MatchScoreboard.model_validate(data)
@@ -279,10 +289,29 @@ class BuilderService:
                     types=[e.event_type.value for e in synthetic_events],
                 )
 
-            # Update previous state
+            # Update previous state (state written from payload; phase is authoritative from ingest)
             await self._save_previous_scoreboard(match_id_str, current_sb)
 
+            score_home = current_sb.score.home if current_sb.score else 0
+            score_away = current_sb.score.away if current_sb.score else 0
+            logger.info(
+                "builder.state_written",
+                event="builder.state_written",
+                match_id=match_id_str,
+                phase=current_sb.phase.value if current_sb.phase else "",
+                score_home=score_home,
+                score_away=score_away,
+                version=0,
+            )
+
         except Exception as exc:
+            logger.error(
+                "builder.error",
+                event="builder.error",
+                match_id=match_id_str,
+                exception=type(exc).__name__,
+                traceback=traceback.format_exc(),
+            )
             logger.error(
                 "scoreboard_delta_handler_error",
                 channel=channel,
