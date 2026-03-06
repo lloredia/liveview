@@ -102,6 +102,7 @@ async def get_match_center(
                 MatchStateORM.score_away,
                 MatchStateORM.clock,
                 MatchStateORM.period,
+                MatchStateORM.phase.label("state_phase"),
                 MatchStateORM.score_breakdown,
                 MatchStateORM.extra_data,
                 MatchStateORM.version,
@@ -144,10 +145,13 @@ async def get_match_center(
             _event_orm_to_dict(e) for e in events_result.scalars().all()
         ]
 
+    # Prefer state.phase when present so finished games show FINAL even if match.phase was stale
+    phase = getattr(row, "state_phase", None) if state else None
+    phase = phase if phase is not None else row.phase
     payload = {
         "match": {
             "id": str(row.id),
-            "phase": row.phase,
+            "phase": phase,
             "start_time": row.start_time.isoformat() if row.start_time else None,
             "venue": row.venue,
             "home_team": home_team,

@@ -725,13 +725,13 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                 """), {"finished": finished, "scheduled": scheduled})
                 finished_ids = [str(row[0]) for row in finished_result.fetchall()]
 
-                # 4. Sync match_state.phase to match matches.phase
+                # 4. Sync match_state.phase -> matches.phase so match row reflects authoritative state (from ESPN)
                 await session.execute(text("""
-                    UPDATE match_state ms
-                    SET phase = m.phase
-                    FROM matches m
-                    WHERE ms.match_id = m.id
-                      AND ms.phase != m.phase
+                    UPDATE matches m
+                    SET phase = ms.phase
+                    FROM match_state ms
+                    WHERE m.id = ms.match_id
+                      AND m.phase IS DISTINCT FROM ms.phase
                 """))
 
                 # write_session auto-commits

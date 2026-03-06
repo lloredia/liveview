@@ -155,6 +155,7 @@ async def get_today(
                 MatchStateORM.score_away,
                 MatchStateORM.clock,
                 MatchStateORM.period,
+                MatchStateORM.phase.label("state_phase"),
                 MatchStateORM.score_breakdown,
                 MatchStateORM.extra_data,
                 MatchStateORM.version,
@@ -272,9 +273,11 @@ async def get_today(
             score_obj["aggregate_home"] = extra["aggregate_home"]
             score_obj["aggregate_away"] = extra["aggregate_away"]
 
+        phase = getattr(row, "state_phase", None) if row.score_home is not None else None
+        phase = phase if phase is not None else (row.phase or "scheduled")
         match_data = {
             "id": str(row.id),
-            "phase": row.phase or "scheduled",
+            "phase": phase,
             "start_time": row.start_time.isoformat() if row.start_time else None,
             "venue": row.venue,
             "score": score_obj,
