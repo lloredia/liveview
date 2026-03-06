@@ -123,7 +123,6 @@ class IngestService:
 
         logger.info(
             "ingest.start",
-            event="ingest.start",
             league_id=str(canonical_match_id),
             league_slug=league_pid,
             date=date_fetched,
@@ -159,7 +158,6 @@ class IngestService:
                 duration_ms = int((time.monotonic() - fetch_start) * 1000)
                 logger.info(
                     "ingest.espn_fetch",
-                    event="ingest.espn_fetch",
                     url=url,
                     http_status=http_status,
                     duration_ms=duration_ms,
@@ -173,7 +171,7 @@ class IngestService:
                             await self._normalizer.normalize_scoreboard(
                                 session, canonical_match_id, result.scoreboard, provider_name
                             )
-                        logger.info("ingest.published", event="ingest.published", count=1)
+                        logger.info("ingest.published", count=1)
                     elif result and not result.success:
                         logger.warning(
                             "scoreboard_fetch_failed",
@@ -190,7 +188,6 @@ class IngestService:
                             )
                         logger.info(
                             "ingest.published",
-                            event="ingest.published",
                             count=matches_found,
                         )
                 elif tier == Tier.STATS:
@@ -200,18 +197,16 @@ class IngestService:
                             await self._normalizer.normalize_stats(
                                 session, canonical_match_id, result.stats, provider_name
                             )
-                        logger.info("ingest.published", event="ingest.published", count=1)
+                        logger.info("ingest.published", count=1)
 
                 logger.info(
                     "ingest.matches_found",
-                    event="ingest.matches_found",
                     count=matches_found,
                 )
 
             total_duration_ms = int((time.monotonic() - start_wall) * 1000)
             logger.info(
                 "ingest.complete",
-                event="ingest.complete",
                 total_duration_ms=total_duration_ms,
             )
 
@@ -219,7 +214,6 @@ class IngestService:
             tb = traceback.format_exc()
             logger.error(
                 "ingest.error",
-                event="ingest.error",
                 exception_class=type(exc).__name__,
                 message=str(exc),
                 traceback=tb,

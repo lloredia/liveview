@@ -54,7 +54,6 @@ async def trigger_manual_ingest(
         client_ip = forwarded.split(",")[0].strip()
     logger.info(
         "admin.ingest_trigger",
-        event="admin.ingest_trigger",
         league_slug=league_slug,
         source_ip=client_ip,
     )
@@ -69,7 +68,6 @@ async def trigger_manual_ingest(
     except Exception as exc:
         logger.error(
             "admin.ingest_trigger_error",
-            event="admin.ingest_trigger_error",
             league_slug=league_slug,
             error=str(exc),
         )

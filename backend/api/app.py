@@ -789,7 +789,6 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             async with db.write_session() as session:
                 logger.info(
                     "phase_sync.tick",
-                    event="phase_sync.tick",
                     matches_checked=matches_checked,
                 )
 
@@ -808,7 +807,6 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                     match_id_val, old_phase = str(row[0]), (row[1] if len(row) > 1 else "live")
                     logger.info(
                         "phase_sync.fallback_transition",
-                        event="phase_sync.fallback_transition",
                         match_id=match_id_val,
                         old_phase=old_phase,
                         new_phase="finished",
@@ -827,7 +825,6 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
 
             logger.info(
                 "phase_sync.tick",
-                event="phase_sync.tick",
                 matches_checked=matches_checked,
             )
 

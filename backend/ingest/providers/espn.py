@@ -66,7 +66,6 @@ def normalize_espn_phase(espn_status_type_name: str) -> str:
         return ESPN_STATUS_MAP[key]
     logger.warning(
         "espn.unknown_status",
-        event="espn.unknown_status",
         status=espn_status_type_name,
         defaulting_to="scheduled",
     )

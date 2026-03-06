@@ -383,7 +383,6 @@ class SchedulerService:
 
             logger.info(
                 "scheduler.trigger_fired",
-                event="scheduler.trigger_fired",
                 league_id=str(task.canonical_match_id),
                 league_slug=task.league_provider_id,
                 triggered_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -518,7 +517,6 @@ class ScheduleSyncService:
                     triggered_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                     logger.info(
                         "scheduler.trigger_fired",
-                        event="scheduler.trigger_fired",
                         league_id="",
                         league_slug=league_slug,
                         triggered_at=triggered_at,
@@ -532,7 +530,6 @@ class ScheduleSyncService:
                     except Exception as exc:
                         logger.error(
                             "scheduler.trigger_failed",
-                            event="scheduler.trigger_failed",
                             league_id="",
                             league_slug=league_slug,
                             error=str(exc),
@@ -800,7 +797,6 @@ async def main() -> None:
     setup_logging("scheduler")
     logger.info(
         "scheduler.startup",
-        event="scheduler.startup",
         service="scheduler",
         pid=os.getpid(),
     )

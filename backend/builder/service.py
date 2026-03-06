@@ -256,7 +256,6 @@ class BuilderService:
 
             logger.info(
                 "builder.event_received",
-                event="builder.event_received",
                 match_id=match_id_str,
                 league_id="",
             )
@@ -296,7 +295,6 @@ class BuilderService:
             score_away = current_sb.score.away if current_sb.score else 0
             logger.info(
                 "builder.state_written",
-                event="builder.state_written",
                 match_id=match_id_str,
                 phase=current_sb.phase.value if current_sb.phase else "",
                 score_home=score_home,
@@ -307,7 +305,6 @@ class BuilderService:
         except Exception as exc:
             logger.error(
                 "builder.error",
-                event="builder.error",
                 match_id=match_id_str,
                 exception=type(exc).__name__,
                 traceback=traceback.format_exc(),
