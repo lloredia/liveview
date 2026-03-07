@@ -208,7 +208,8 @@ export function TodayView({
     () => (effectiveData?.leagues || []).map((l) => l.league_name),
     [effectiveData],
   );
-  const { patchMatch } = useESPNLiveMulti(leagueNames, hasLive ? 10000 : 30000);
+  // Backend (API) is canonical for scores on the list; do not overwrite with ESPN (avoids 0-0 when ESPN fails or lags)
+  useESPNLiveMulti(leagueNames, hasLive ? 10000 : 30000);
 
   useEffect(() => {
     setHasLive((effectiveData?.live ?? 0) > 0);
@@ -266,11 +267,10 @@ export function TodayView({
             return favSet.has(m.home_team.id) || favSet.has(m.away_team.id);
           return true;
         });
-        const patched = filtered.map((m) => patchMatch(m));
-        return { ...league, matches: patched };
+        return { ...league, matches: filtered };
       })
       .filter((league) => league.matches.length > 0);
-  }, [effectiveData, filter, pinnedIds, favoriteTeamIds, patchMatch]);
+  }, [effectiveData, filter, pinnedIds, favoriteTeamIds]);
 
   const liveCountForTab = useMemo(() => {
     return effectiveData?.live ?? headerLiveCount ?? 0;
