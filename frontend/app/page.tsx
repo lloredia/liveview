@@ -273,6 +273,19 @@ function HomeContent() {
     setSelectedLeague(current);
   }, [selectedLeague]);
 
+  const retryConnection = useCallback(() => {
+    setError(null);
+    fetchLeagues()
+      .then((data) => {
+        setLeagues(data);
+        setConnected(true);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Connection failed");
+        setConnected(false);
+      });
+  }, []);
+
   useEffect(() => {
     const handleResize = () => setSidebarOpen(window.innerWidth >= 768);
     handleResize();
@@ -317,13 +330,22 @@ function HomeContent() {
 
               {error && (
                 <div role="alert" className="mx-3 mb-3 rounded border border-accent-red/20 bg-accent-red/5 px-3 py-2 text-[12px] text-accent-red md:mx-0">
-                  Cannot connect to API
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Cannot connect to API</span>
+                    <button
+                      type="button"
+                      onClick={retryConnection}
+                      className="rounded bg-accent-red/20 px-2 py-1 text-[11px] font-medium text-accent-red hover:bg-accent-red/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-red focus-visible:outline-offset-2"
+                    >
+                      Retry
+                    </button>
+                  </div>
                   <span className="block text-[10px] opacity-60">{error}</span>
-                  {(error.includes("404") || error.includes("timed out") || error.includes("not reachable")) && (
-                    <span className="mt-2 block text-[11px] text-text-secondary">
-                      Not running the backend locally? Add <strong>NEXT_PUBLIC_API_URL=https://backend-api-production-8b9f.up.railway.app</strong> to <code className="rounded bg-black/20 px-1">frontend/.env.local</code>, then restart the dev server.
-                    </span>
-                  )}
+                  <span className="mt-2 block text-[11px] text-text-secondary">
+                    Make sure the backend is running. Using a deployed API? Set{" "}
+                    <strong>NEXT_PUBLIC_API_URL</strong> in <code className="rounded bg-black/20 px-1">frontend/.env.local</code> (e.g.{" "}
+                    <strong className="break-all">https://backend-api-production-8b9f.up.railway.app</strong>), then restart the dev server.
+                  </span>
                 </div>
               )}
 
