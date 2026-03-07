@@ -53,7 +53,7 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
     >
       <TeamLogo url={match.home_team.logo_url} name={match.home_team.short_name} size={14} />
       <span className="font-medium">{match.home_team.short_name}</span>
-      <span className={scoreClass}>
+      <span className={scoreClass} aria-live="polite" aria-atomic="true">
         <TickerScore value={match.score.home} />
         <span className="text-text-dim/40 mx-0.5">-</span>
         <TickerScore value={match.score.away} />
@@ -104,7 +104,9 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
   return (
     <div
       className="flex h-9 items-center border-b border-glass-border glass-surface-elevated glass-blur overflow-hidden"
-      aria-hidden="true"
+      role="region"
+      aria-label="Live scores ticker"
+      aria-live="polite"
     >
       {/* Fixed LIVE label */}
       <div className="relative z-10 flex shrink-0 items-center gap-1.5 border-r border-glass-border px-3 bg-glass-elevated">

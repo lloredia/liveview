@@ -10,34 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import pathlib
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, Tuple
-
-# #region agent log
-_DEBUG_LOG_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "debug-38b46f.log"
-
-def _debug_log(msg: str, data: dict[str, Any], hypothesis_id: str = "") -> None:
-    payload = {
-        "sessionId": "38b46f",
-        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
-        "location": "today.py",
-        "message": msg,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-    }
-    line = json.dumps(payload)
-    logger.info("DEBUG-38b46f %s", line)
-    for base in (_DEBUG_LOG_PATH.parent, pathlib.Path.cwd(), pathlib.Path.cwd().parent):
-        try:
-            p = base / "debug-38b46f.log"
-            with open(p, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-            return
-        except Exception:
-            continue
-# #endregion
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func, case, and_, or_
@@ -276,7 +251,6 @@ async def get_today(
     # Group matches by league (dedupe: "today" query can return same match via date and live conditions)
     league_groups: dict[str, dict[str, Any]] = {}
     seen_match_ids: set[uuid.UUID] = set()
-    _debug_logged_one: bool = False
 
     for row in rows:
         if row.id in seen_match_ids:
@@ -332,15 +306,6 @@ async def get_today(
             "away_team": teams.get("away_team", {}),
         }
         league_groups[lid]["matches"].append(match_data)
-        # #region agent log
-        if not _debug_logged_one and phase and (str(phase).startswith("live") or phase == "break"):
-            _debug_log(
-                "today_match_row_sample",
-                {"match_id": str(row.id), "row_score_home": row.score_home, "row_score_away": row.score_away, "state_phase": getattr(row, "state_phase", None), "phase": phase, "score_obj": score_obj},
-                "H1_H4_H5",
-            )
-            _debug_logged_one = True
-        # #endregion
 
     # Sort league groups: leagues with live matches first, then by match count
     def league_sort_key(group: dict[str, Any]) -> tuple[int, int]:
@@ -403,19 +368,6 @@ async def get_today(
     etag = _compute_etag_content(payload_json)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = f"public, max-age={min(cache_ttl, 30)}"
-
-    # #region agent log
-    try:
-        first_league = (payload.get("leagues") or [])[:1]
-        first_matches = (first_league[0].get("matches") or [])[:3] if first_league else []
-        _debug_log(
-            "today_payload_sample",
-            {"league_name": first_league[0].get("league_name") if first_league else None, "matches": [{"id": m.get("id"), "phase": m.get("phase"), "score": m.get("score")} for m in first_matches]},
-            "H1_H3",
-        )
-    except Exception:
-        pass
-    # #endregion
 
     return payload
 

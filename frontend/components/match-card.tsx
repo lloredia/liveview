@@ -267,7 +267,12 @@ export const MatchCard = memo(function MatchCard({
       </div>
 
       {/* Score */}
-      <div className="flex shrink-0 flex-col items-center justify-center gap-0">
+      <div
+        className="flex shrink-0 flex-col items-center justify-center gap-0"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label={`Score: ${match.score.home} to ${match.score.away}`}
+      >
         <div className="flex items-center justify-center gap-1">
           {scheduled ? (
             <span className="text-label-md text-text-muted">vs</span>

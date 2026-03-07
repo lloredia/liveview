@@ -1,6 +1,7 @@
 "use client";
 
 import { getApiBase } from "@/lib/api";
+import { getBackendToken } from "@/lib/auth-api";
 
 const STORAGE_KEY_LEAGUES = "lv_fav_leagues";
 
@@ -47,40 +48,38 @@ export function isFavoriteLeague(id: string): boolean {
 
 /**
  * Sync a favorite change to the backend if the user is logged in.
- * Fire-and-forget — doesn't block the UI.
+ * Fire-and-forget — doesn't block the UI. Uses session-backed JWT from auth-api.
  */
 function syncFavoriteToCloud(targetId: string, type: string, add: boolean): void {
-  try {
-    const token = localStorage.getItem("lv_token");
-    if (!token) return;
-
-    const apiBase = getApiBase();
-
-    if (add) {
-      fetch(`${apiBase}/v1/user/favorites`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ favorite_type: type, target_id: targetId }),
-      }).catch(() => {});
-    } else {
-      fetch(`${apiBase}/v1/user/favorites/${type}/${targetId}`, {
+  getBackendToken()
+    .then((token) => {
+      if (!token) return;
+      const apiBase = getApiBase();
+      if (add) {
+        return fetch(`${apiBase}/v1/user/favorites`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ favorite_type: type, target_id: targetId }),
+        });
+      }
+      return fetch(`${apiBase}/v1/user/favorites/${type}/${encodeURIComponent(targetId)}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
-    }
-  } catch {}
+      });
+    })
+    .catch(() => {});
 }
 
 /**
  * Load favorites from the cloud and merge with local.
- * Call this after login.
+ * Call this after login. Uses session-backed JWT from auth-api.
  */
 export async function loadCloudFavorites(): Promise<void> {
   try {
-    const token = localStorage.getItem("lv_token");
+    const token = await getBackendToken();
     if (!token) return;
 
     const res = await fetch(`${getApiBase()}/v1/user/favorites`, {

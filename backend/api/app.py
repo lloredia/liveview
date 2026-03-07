@@ -18,12 +18,11 @@ import signal
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
 from fastapi import Depends, FastAPI, Query, WebSocket
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import bindparam, func, or_, select, text
 
 from shared.config import get_settings
 from shared.models.enums import MatchPhase
@@ -63,31 +62,6 @@ from api.routes.auth_routes import router as auth_router
 from api.routes.user_routes import router as user_router
 
 logger = get_logger(__name__)
-
-# #region agent log
-def _debug_log(location: str, message: str, data: dict[str, Any], hypothesis_id: str = "") -> None:
-    payload = {
-        "sessionId": "38b46f",
-        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-    }
-    line = json.dumps(payload)
-    logger.info("DEBUG-38b46f %s", line)
-    try:
-        for base in (Path.cwd(), Path.cwd().parent, Path(__file__).resolve().parent.parent.parent):
-            log_path = base / "debug-38b46f.log"
-            try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-                return
-            except OSError:
-                continue
-    except Exception:
-        pass
-# #endregion
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 LIVE_REFRESH_INTERVAL_S = 15
@@ -254,14 +228,8 @@ async def _refresh_live_scores(
 
     if not league_ids:
         LIVE_GAMES_DETECTED.set(0)
-        # #region agent log
-        _debug_log("app.py:_refresh_live_scores", "no leagues to refresh", {"league_count": 0}, "E")
-        # #endregion
         return 0
 
-    # #region agent log
-    _debug_log("app.py:_refresh_live_scores", "leagues to refresh", {"league_count": len(league_ids), "league_ids": league_ids[:5]}, "A")
-    # #endregion
     LIVE_GAMES_DETECTED.set(len(league_ids))
     settings = get_settings()
     use_fallback = getattr(settings, "live_refresh_use_fallback", True)
@@ -317,9 +285,6 @@ async def _refresh_live_scores(
         await redis.client.delete(today_key)
     except Exception:
         pass
-    # #region agent log
-    _debug_log("app.py:_refresh_live_scores", "refresh cycle done", {"matches_updated": updated, "league_count": len(league_ids)}, "B")
-    # #endregion
     return updated
 
 
@@ -496,7 +461,6 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
     _notif_queue: list[tuple[str, Any]] = []
 
     count = 0
-    skip_log_count = 0
     async with db.write_session() as session:
         for idx, event in enumerate(events):
             try:
@@ -541,11 +505,6 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                             },
                         )
                     else:
-                        # #region agent log
-                        if skip_log_count < 2:
-                            _debug_log("app.py:_apply_espn_events", "event skipped no match_id", {"espn_id": espn_id, "league": espn_league_id}, "B")
-                            skip_log_count += 1
-                        # #endregion
                         continue
 
                 score_home = 0
@@ -571,16 +530,6 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         if "aggregateScore" in c:
                             aggregate_away = agg
                         away_stats = _extract_team_stats(c)
-
-                # #region agent log
-                if count == 0 and events:
-                    _debug_log("app.py:_apply_espn_events", "first event scores", {
-                        "espn_id": espn_id, "league": espn_league_id, "match_source": match_source,
-                        "score_home": score_home, "score_away": score_away,
-                        "first_competitor_keys": list(competitors[0].keys()) if competitors else [],
-                        "has_linescores": bool(competitors and competitors[0].get("linescores")) if competitors else False,
-                    }, "C")
-                # #endregion
 
                 status_obj = comp.get("status", event.get("status", {}))
                 if not isinstance(status_obj, dict):
@@ -771,15 +720,21 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
     return count
 
 
+def _non_terminal_phase_values() -> tuple[str, ...]:
+    """Phases that can be fallback-transitioned to finished after N hours (derived from enum)."""
+    return tuple(p.value for p in MatchPhase if not p.is_terminal)
+
+
 async def phase_sync_loop(db: DatabaseManager) -> None:
     """
     Background task: last-resort phase sync only.
     Does NOT transition scheduled->live or live->finished by time; ingest owns status.
-    Only fallback: matches with phase in ('live','scheduled') and start_time < NOW() - 5h -> finished.
+    Only fallback: matches with phase in non-terminal phases and start_time < NOW() - N hours -> finished.
     Syncs match_state.phase -> matches.phase so match row reflects authoritative state from ingest.
     """
     settings = get_settings()
     fallback_hours = settings.phase_sync_fallback_hours
+    non_terminal = _non_terminal_phase_values()
 
     while True:
         try:
@@ -792,16 +747,18 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                     matches_checked=matches_checked,
                 )
 
-                # Fallback only: matches still live/scheduled but started > N hours ago -> finished
-                finished_result = await session.execute(text("""
+                # Fallback only: matches still in non-terminal phase but started > N hours ago -> finished
+                stmt = text("""
                     UPDATE matches
                     SET phase = 'finished'
-                    WHERE phase IN ('live', 'scheduled', 'live_first_half', 'live_second_half',
-                      'live_q1', 'live_q2', 'live_q3', 'live_q4', 'live_halftime', 'break',
-                      'live_p1', 'live_p2', 'live_p3', 'live_ot', 'live_inning')
+                    WHERE phase IN :phases
                       AND start_time < NOW() - (INTERVAL '1 hour' * :hours)
                     RETURNING id, phase
-                """), {"hours": fallback_hours})
+                """).bindparams(bindparam("phases", expanding=True))
+                finished_result = await session.execute(
+                    stmt,
+                    {"phases": list(non_terminal), "hours": fallback_hours},
+                )
                 rows = finished_result.fetchall()
                 for row in rows:
                     match_id_val, old_phase = str(row[0]), (row[1] if len(row) > 1 else "live")
@@ -836,16 +793,15 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             await asyncio.sleep(10)
 
 
-NEWS_FETCH_INTERVAL_S = 300
-
-
 async def news_fetch_loop(db: DatabaseManager) -> None:
-    """Background task: fetch RSS feeds and store news every 5 minutes."""
+    """Background task: fetch RSS feeds and store news. Interval from LV_NEWS_FETCH_INTERVAL_S."""
     await asyncio.sleep(10)  # let startup settle
-    logger.info("news_fetch_started")
+    settings = get_settings()
+    interval = max(60, getattr(settings, "news_fetch_interval_s", 300))
+    logger.info("news_fetch_started", interval_s=interval)
     while True:
         try:
-            await asyncio.sleep(NEWS_FETCH_INTERVAL_S)
+            await asyncio.sleep(interval)
             await fetch_and_store_news(db)
         except asyncio.CancelledError:
             logger.info("news_fetch_stopped")

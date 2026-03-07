@@ -51,7 +51,9 @@ export async function initCapacitorPush(): Promise<void> {
 
     const permResult = await PushNotifications.requestPermissions();
     if (permResult.receive !== "granted") {
-      console.log("[cap-push] Permission not granted");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[cap-push] Permission not granted");
+      }
       return;
     }
     const { hapticLightImpact } = await import("./haptics");
@@ -60,7 +62,6 @@ export async function initCapacitorPush(): Promise<void> {
     await PushNotifications.register();
 
     PushNotifications.addListener("registration", async (token) => {
-      console.log("[cap-push] APNs token:", token.value.substring(0, 12) + "...");
       await ensureDeviceRegistered();
       const deviceId = await getDeviceIdAsync();
       if (!deviceId) return;
@@ -73,15 +74,21 @@ export async function initCapacitorPush(): Promise<void> {
           apns_token: token.value,
           bundle_id: "com.liveview.tracker",
         }),
-      }).catch((err) => console.error("[cap-push] Token sync failed:", err));
+      }).catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[cap-push] Token sync failed:", err);
+        }
+      });
     });
 
     PushNotifications.addListener("registrationError", (err) => {
-      console.error("[cap-push] Registration error:", err);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[cap-push] Registration error:", err);
+      }
     });
 
-    PushNotifications.addListener("pushNotificationReceived", (notification) => {
-      console.log("[cap-push] Received:", notification.title);
+    PushNotifications.addListener("pushNotificationReceived", () => {
+      // Notification received (no token or title logging in production)
     });
 
     // Action listener also registered early via registerPushActionListener() for cold start
@@ -94,6 +101,8 @@ export async function initCapacitorPush(): Promise<void> {
       }
     });
   } catch (err) {
-    console.warn("[cap-push] Not available:", err);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[cap-push] Not available:", err);
+    }
   }
 }

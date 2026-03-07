@@ -6,18 +6,26 @@ import { auth } from "@/auth";
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
 
-const SECRET = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
 const TOKEN_TTL_S = 3600; // 1 hour
+
+function getSecret(): string {
+  const s = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  return (s && String(s).trim()) || "";
+}
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!SECRET) {
-    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+  const secret = getSecret();
+  if (!secret) {
+    return NextResponse.json(
+      { error: "Server misconfiguration: NEXTAUTH_SECRET or AUTH_SECRET required" },
+      { status: 500 }
+    );
   }
-  const secret = new TextEncoder().encode(SECRET);
+  const secret = new TextEncoder().encode(getSecret());
   const token = await new SignJWT({})
     .setSubject(session.user.id)
     .setExpirationTime(Math.floor(Date.now() / 1000) + TOKEN_TTL_S)

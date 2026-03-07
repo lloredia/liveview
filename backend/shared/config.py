@@ -157,6 +157,12 @@ class Settings(BaseSettings):
         description="Redis cache TTL in seconds when any match is live or in break.",
     )
 
+    # ── News ──────────────────────────────────────────────────
+    news_fetch_interval_s: int = Field(
+        default=300,
+        description="Interval in seconds between RSS news fetch runs (default 5 min).",
+    )
+
     # ── Feature flags ────────────────────────────────────────
     espn_live_refresh_enabled: bool = True
     live_refresh_use_fallback: bool = True

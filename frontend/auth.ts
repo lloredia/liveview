@@ -65,7 +65,7 @@ if (!secret && (process.env.GOOGLE_CLIENT_ID || process.env.APPLE_ID)) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret,
+  ...(secret ? { secret } : {}),
   providers,
   session: {
     strategy: "jwt",

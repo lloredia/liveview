@@ -41,7 +41,9 @@ export async function subscribeToWebPush(): Promise<boolean> {
     if (!granted) return false;
   }
   if (!VAPID_PUBLIC_KEY) {
-    console.warn("[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY not set");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY not set");
+    }
     return false;
   }
 
@@ -62,7 +64,9 @@ export async function subscribeToWebPush(): Promise<boolean> {
     await syncSubscriptionToBackend(subscription);
     return true;
   } catch (err) {
-    console.error("[push] Subscribe failed:", err);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[push] Subscribe failed:", err);
+    }
     return false;
   }
 }
@@ -90,7 +94,9 @@ export async function unsubscribeFromWebPush(): Promise<void> {
     }
     await subscription.unsubscribe();
   } catch (err) {
-    console.error("[push] Unsubscribe failed:", err);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[push] Unsubscribe failed:", err);
+    }
   }
 }
 

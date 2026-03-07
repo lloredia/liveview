@@ -22,12 +22,16 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/v1", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-OAUTH_SECRET = os.environ.get("OAUTH_ENSURE_SECRET") or os.environ.get("NEXTAUTH_SECRET") or ""
+def _get_oauth_secret() -> str:
+    return (os.environ.get("OAUTH_ENSURE_SECRET") or os.environ.get("NEXTAUTH_SECRET") or "").strip()
 
 
 def _require_oauth_secret(x_oauth_secret: Optional[str] = Header(None, alias="X-OAuth-Secret")) -> None:
-    if not OAUTH_SECRET or x_oauth_secret != OAUTH_SECRET:
-        raise HTTPException(401, "Unauthorized")
+    secret = _get_oauth_secret()
+    if not secret:
+        raise HTTPException(503, detail="OAuth not configured")
+    if x_oauth_secret != secret:
+        raise HTTPException(401, detail="Unauthorized")
 
 
 class RegisterRequest(BaseModel):
