@@ -18,14 +18,14 @@ export async function GET() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const secret = getSecret();
-  if (!secret) {
+  const secretStr = getSecret();
+  if (!secretStr) {
     return NextResponse.json(
       { error: "Server misconfiguration: NEXTAUTH_SECRET or AUTH_SECRET required" },
       { status: 500 }
     );
   }
-  const secret = new TextEncoder().encode(getSecret());
+  const secret = new TextEncoder().encode(secretStr);
   const token = await new SignJWT({})
     .setSubject(session.user.id)
     .setExpirationTime(Math.floor(Date.now() / 1000) + TOKEN_TTL_S)
