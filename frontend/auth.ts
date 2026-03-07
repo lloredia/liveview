@@ -57,7 +57,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
+const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+if (!secret && (process.env.GOOGLE_CLIENT_ID || process.env.APPLE_ID)) {
+  console.warn(
+    "[NextAuth] NEXTAUTH_SECRET (or AUTH_SECRET) is not set. OAuth sign-in may fail with a Configuration error."
+  );
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret,
   providers,
   session: {
     strategy: "jwt",

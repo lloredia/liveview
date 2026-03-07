@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * Returns online status. Uses a stable initial value (true) so server and client
+ * match during hydration; then syncs to navigator.onLine in useEffect.
+ */
 export function useOnlineStatus(): boolean {
-  const [online, setOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
+    setOnline(navigator.onLine);
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
-    setOnline(navigator.onLine);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     return () => {

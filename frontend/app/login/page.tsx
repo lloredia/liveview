@@ -22,6 +22,11 @@ function LoginContent() {
   const from = searchParams.get("from") ?? undefined;
   const oauthError = searchParams.get("error");
 
+  // Build Google redirect URI hint for Configuration error (must match Google Cloud Console exactly)
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  const googleCallbackUrl = origin ? `${origin}/api/auth/callback/google` : "";
+
   // Show OAuth error from NextAuth redirect (e.g. OAuthCallback, Configuration, etc.)
   const errorMessage =
     error ||
@@ -30,7 +35,9 @@ function LoginContent() {
       : oauthError === "OAuthCreateAccount" || oauthError === "OAuthCallback"
         ? "Sign-in failed. Try again or use Email to continue."
         : oauthError === "Configuration"
-          ? "Sign-in is not configured. Please use Email to sign in."
+          ? googleCallbackUrl
+            ? "Sign-in with Google/Apple failed. In Google Cloud Console, add this exact Authorized redirect URI: " + googleCallbackUrl
+            : "Sign-in is not configured. Please use Email to sign in."
           : oauthError
             ? "Sign-in failed. Try again or use Email."
             : "");
