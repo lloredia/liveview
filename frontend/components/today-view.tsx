@@ -40,7 +40,27 @@ async function fetchToday(
     });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return res.json();
+    const data = await res.json();
+    // #region agent log
+    try {
+      const leagues = (data as { leagues?: unknown[] }).leagues ?? [];
+      const firstLeague = leagues[0] as { league_name?: string; matches?: { id?: string; phase?: string; score?: { home?: number; away?: number } }[] } | undefined;
+      const firstMatches = firstLeague?.matches?.slice(0, 2) ?? [];
+      fetch("http://127.0.0.1:7506/ingest/9a56292c-fb27-4851-a728-6f0a441c7e7a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "38b46f" },
+        body: JSON.stringify({
+          sessionId: "38b46f",
+          location: "today-view.tsx:fetchToday",
+          message: "today_response_sample",
+          data: { league_name: firstLeague?.league_name, matches: firstMatches?.map((m) => ({ id: m?.id, phase: m?.phase, score: m?.score })) },
+          hypothesisId: "H2_H3",
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    } catch (_) {}
+    // #endregion
+    return data;
   } catch (e) {
     clearTimeout(timeout);
     const err = e instanceof Error ? e : new Error(String(e));
