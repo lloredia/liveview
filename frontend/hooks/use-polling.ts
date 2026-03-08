@@ -49,7 +49,11 @@ export function usePolling<T>({
         setLastError(null);
         setLastSuccessAt(Date.now());
       }
-      if (typeof console !== "undefined" && console.debug) {
+      if (
+        process.env.NODE_ENV !== "production" &&
+        typeof console !== "undefined" &&
+        console.debug
+      ) {
         console.debug("[usePolling]", { key, hasData: result != null });
       }
     } catch (e) {

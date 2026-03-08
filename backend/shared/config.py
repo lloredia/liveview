@@ -191,6 +191,31 @@ class Settings(BaseSettings):
             return "postgresql+asyncpg://***"
 
 
+class SportRadarSettings(BaseSettings):
+    """SportRadar provider configuration. Instantiate in app lifespan only."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="LV_SPORTRADAR_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    api_key: str = ""
+    access_level: str = Field(default="trial", description="trial or production")
+    daily_limit: int = Field(default=1000, description="Daily request quota")
+    include_raw: bool = Field(default=False, description="Include raw API response in ProviderMatch")
+    cb_threshold: int = Field(default=5, description="Circuit breaker failure threshold")
+    cb_recovery_s: float = Field(default=60.0, description="Circuit breaker recovery timeout seconds")
+
+    @model_validator(mode="after")
+    def require_api_key(self) -> "SportRadarSettings":
+        if not (self.api_key and str(self.api_key).strip()):
+            raise ValueError("LV_SPORTRADAR_API_KEY must be set and non-empty")
+        return self
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Singleton access to validated settings."""

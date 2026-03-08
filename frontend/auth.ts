@@ -57,8 +57,14 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
-const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-if (!secret && (process.env.GOOGLE_CLIENT_ID || process.env.APPLE_ID)) {
+const secret = (process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "").trim();
+const hasOAuth = !!(process.env.GOOGLE_CLIENT_ID || process.env.APPLE_ID);
+if (!secret && hasOAuth) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "NEXTAUTH_SECRET or AUTH_SECRET must be set when using OAuth (Apple/Google) in production."
+    );
+  }
   console.warn(
     "[NextAuth] NEXTAUTH_SECRET (or AUTH_SECRET) is not set. OAuth sign-in may fail with a Configuration error."
   );

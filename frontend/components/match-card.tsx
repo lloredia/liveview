@@ -72,8 +72,11 @@ function LiveClock({
       setDisplay(inningLabel);
       return;
     }
-    if (serverClock && /^\d+:\d{2}$/.test(serverClock)) {
-      const [m, s] = serverClock.split(":").map(Number);
+    // Parse M:SS or MM:SS (optional .decimals) so we can tick every second between API polls
+    const clockMatch = serverClock?.trim().match(/^(\d+):(\d{2})(?:\.\d+)?$/);
+    if (clockMatch) {
+      const m = parseInt(clockMatch[1], 10);
+      const s = parseInt(clockMatch[2], 10);
       const baseSecs = m * 60 + s;
       const capturedAt = Date.now();
 
@@ -99,7 +102,8 @@ function LiveClock({
       return () => clearInterval(id);
     }
 
-    if (!serverClock && startTime) {
+    // No clock from API: use start_time for elapsed time so the display at least ticks
+    if (!serverClock && startTime && (phase.startsWith("live_") || phase === "break")) {
       const startMs = new Date(startTime).getTime();
       const tick = () => {
         const elapsed = Math.max(0, Date.now() - startMs);

@@ -60,6 +60,7 @@ from api.routes.notifications import router as notifications_router
 from api.routes.admin import router as admin_router
 from api.routes.auth_routes import router as auth_router
 from api.routes.user_routes import router as user_router
+from auth.deps import ensure_jwt_secret
 
 logger = get_logger(__name__)
 
@@ -155,12 +156,12 @@ espn_circuit_breaker = CircuitBreaker(
 )
 
 
-async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> None:
+async def live_score_refresh_loop(
+    db: DatabaseManager, redis: RedisManager, app: FastAPI
+) -> None:
     """
-    Background task that fetches live scores from ESPN every 30s.
-    Discovers which leagues have live/recently-started matches,
-    hits ESPN's scoreboard API, and updates scores + clock + phase in the DB.
-    Uses a circuit breaker to avoid hammering ESPN when it's unresponsive.
+    Background task that fetches live scores via provider router (SportRadar primary, ESPN fallback).
+    Discovers which leagues have live/scheduled/recently-finished matches and updates DB.
     """
     await asyncio.sleep(5)  # let startup settle
     settings = get_settings()
@@ -169,44 +170,35 @@ async def live_score_refresh_loop(db: DatabaseManager, redis: RedisManager) -> N
         return
     logger.info("live_score_refresh_started")
 
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        # Run one refresh immediately so scores are fresh right after deploy/cold start
+    try:
+        await _refresh_live_scores_via_router(db, redis, app)
+    except Exception as exc:
+        logger.warning("live_score_refresh_startup_error", error=str(exc))
+
+    while True:
         try:
-            await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
+            await asyncio.sleep(LIVE_REFRESH_INTERVAL_S)
+            await _refresh_live_scores_via_router(db, redis, app)
+        except asyncio.CancelledError:
+            logger.info("live_score_refresh_stopped")
+            break
         except Exception as exc:
-            logger.warning("live_score_refresh_startup_error", error=str(exc))
-
-        while True:
-            try:
-                await asyncio.sleep(LIVE_REFRESH_INTERVAL_S)
-                await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
-            except asyncio.CancelledError:
-                logger.info("live_score_refresh_stopped")
-                break
-            except CircuitBreakerOpen as exc:
-                logger.warning("espn_circuit_open", retry_after=exc.retry_after)
-                await asyncio.sleep(min(exc.retry_after, 30))
-            except Exception as exc:
-                logger.error("live_score_refresh_error", error=str(exc), exc_info=True)
-                await asyncio.sleep(10)
+            logger.error("live_score_refresh_error", error=str(exc), exc_info=True)
+            await asyncio.sleep(10)
 
 
-async def _refresh_live_scores(
-    db: DatabaseManager, redis: RedisManager, client: httpx.AsyncClient,
+async def _refresh_live_scores_via_router(
+    db: DatabaseManager, redis: RedisManager, app: FastAPI
 ) -> int:
-    """One cycle of live score refresh. Returns number of matches updated."""
-    # Find leagues that have live/scheduled matches OR recently finished (so we get final scores)
+    """One cycle of live score refresh via provider router (SportRadar primary, ESPN fallback)."""
     async with db.read_session() as session:
         live_phases = [p.value for p in MatchPhase if p.is_live]
         live_phases.append(MatchPhase.BREAK.value)
         live_phases.append(MatchPhase.PRE_MATCH.value)
         live_phases.append(MatchPhase.SCHEDULED.value)
         finished_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-
         stmt = (
-            select(
-                ProviderMappingORM.provider_id.label("espn_league_id"),
-            )
+            select(ProviderMappingORM.provider_id.label("espn_league_id"))
             .select_from(MatchORM)
             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
             .join(
@@ -231,61 +223,66 @@ async def _refresh_live_scores(
         return 0
 
     LIVE_GAMES_DETECTED.set(len(league_ids))
-    settings = get_settings()
-    use_fallback = getattr(settings, "live_refresh_use_fallback", True)
+    provider_router = getattr(app.state, "provider_router", None)
+    if not provider_router:
+        logger.warning("live_refresh_no_provider_router")
+        return 0
 
+    fetch_date = datetime.now(timezone.utc).date()
     updated = 0
-    for espn_league_id in league_ids:
-        path = SPORT_LEAGUE_ESPN_PATHS.get(espn_league_id)
-        if not path:
-            continue
-        sport = ESPN_LEAGUE_SPORT.get(espn_league_id, "soccer")
-        espn_ok = False
+    for league_slug in league_ids:
+        sport = ESPN_LEAGUE_SPORT.get(league_slug, "soccer")
         try:
-            url = f"{ESPN_BASE}/{path}/scoreboard"
-            resp = await client.get(url, timeout=10.0)
-            resp.raise_for_status()
-            data = resp.json()
-            events = data.get("events", [])
-            updated += await _apply_espn_events(db, events, sport, espn_league_id)
-            espn_ok = True
+            result = await provider_router.fetch_daily_schedule(league_slug, fetch_date)
+            matches = result.matches
+            if result.from_fallback:
+                logger.warning(
+                    "serving_from_espn_fallback",
+                    extra={"league_slug": league_slug, "date": str(fetch_date)},
+                )
+            league_updated = await _apply_provider_matches(db, matches, league_slug, sport)
+            updated += league_updated
+            if league_updated and matches:
+                LIVE_REFRESH_UPDATES.labels(provider=matches[0].provider_name).inc(league_updated)
         except Exception as exc:
-            LIVE_REFRESH_ERRORS.labels(provider="espn", league=espn_league_id).inc()
-            logger.warning("live_refresh_espn_failed", league=espn_league_id, error=str(exc))
-
-            retry_data = await espn_retry(client, path, backoff_s=2.0)
-            if retry_data:
-                events = retry_data.get("events", [])
-                espn_count = await _apply_espn_events(db, events, sport, espn_league_id)
-                updated += espn_count
-                espn_ok = True
-                LIVE_REFRESH_UPDATES.labels(provider="espn").inc(espn_count)
-                logger.info("live_refresh_espn_retry_ok", league=espn_league_id)
-
-        if espn_ok:
-            LIVE_REFRESH_UPDATES.labels(provider="espn").inc(updated)
-
-        if not espn_ok and use_fallback:
-            LIVE_REFRESH_FALLBACKS.labels(fallback_provider="thesportsdb", league=espn_league_id).inc()
-            try:
-                fb_count = await tsdb_fallback_for_league(client, db, espn_league_id, sport)
-                updated += fb_count
-                LIVE_REFRESH_UPDATES.labels(provider="thesportsdb").inc(fb_count)
-                if fb_count:
-                    logger.info("live_refresh_fallback_used", league=espn_league_id, provider="thesportsdb", matches=fb_count)
-            except Exception as fb_exc:
-                LIVE_REFRESH_ERRORS.labels(provider="thesportsdb", league=espn_league_id).inc()
-                logger.warning("live_refresh_fallback_error", league=espn_league_id, error=str(fb_exc))
+            LIVE_REFRESH_ERRORS.labels(provider="sportradar", league=league_slug).inc()
+            logger.warning("live_refresh_provider_failed", league_slug=league_slug, error=str(exc))
 
     if updated > 0:
         logger.info("live_scores_refreshed", matches_updated=updated)
-    # Always invalidate today cache after refresh so next GET /today gets DB state (even when updated=0)
-    today_key = f"today:{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).date().isoformat()}"
+    today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
     try:
         await redis.client.delete(today_key)
     except Exception:
         pass
     return updated
+
+
+# LEGACY ESPN — remove after provider_router validation in staging.
+# async def _refresh_live_scores(
+#     db: DatabaseManager, redis: RedisManager, client: httpx.AsyncClient,
+# ) -> int:
+#     """One cycle of live score refresh. Returns number of matches updated."""
+#     async with db.read_session() as session:
+#         live_phases = [p.value for p in MatchPhase if p.is_live]
+#         live_phases.append(MatchPhase.BREAK.value)
+#         live_phases.append(MatchPhase.PRE_MATCH.value)
+#         live_phases.append(MatchPhase.SCHEDULED.value)
+#         finished_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+#         stmt = (
+#             select(ProviderMappingORM.provider_id.label("espn_league_id"))
+#             .select_from(MatchORM)
+#             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
+#             .join(...)
+#         )
+#         league_ids = [...]
+#     for espn_league_id in league_ids:
+#         url = f"{ESPN_BASE}/{path}/scoreboard"
+#         resp = await client.get(url, timeout=10.0)
+#         data = resp.json()
+#         events = data.get("events", [])
+#         updated += await _apply_espn_events(db, events, sport, espn_league_id)
+#     ...
 
 
 def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id: str = "") -> MatchPhase:
@@ -451,6 +448,194 @@ async def _resolve_match_from_espn_event(
         )
     ).fetchone()
     return match_row[0] if match_row else None
+
+
+def _provider_status_to_phase(status_value: str) -> str:
+    """Map infra MatchStatus value to matches.phase / match_state.phase string."""
+    m = {
+        "scheduled": "scheduled",
+        "pre_match": "pre_match",
+        "live": "live_first_half",
+        "break": "break",
+        "live_halftime": "live_halftime",
+        "finished": "finished",
+        "postponed": "postponed",
+        "cancelled": "cancelled",
+        "suspended": "suspended",
+    }
+    return m.get((status_value or "").lower(), "scheduled")
+
+
+async def _apply_provider_matches(
+    db: DatabaseManager,
+    matches: list[Any],
+    league_slug: str,
+    sport: str,
+) -> int:
+    """Apply ProviderMatch list to DB: update match phase and match_state. Returns count updated."""
+    from infra.providers.base import ProviderMatch
+
+    if not matches:
+        return 0
+    _notif_queue: list[tuple[str, Any]] = []
+    count = 0
+    async with db.write_session() as session:
+        for pm in matches:
+            if not isinstance(pm, ProviderMatch):
+                continue
+            try:
+                mapping_row = (
+                    await session.execute(
+                        text(
+                            "SELECT canonical_id FROM provider_mappings "
+                            "WHERE entity_type = 'match' AND provider = :provider AND provider_id = :pid"
+                        ),
+                        {"provider": pm.provider_name, "pid": pm.provider_id},
+                    )
+                ).fetchone()
+                match_id = mapping_row[0] if mapping_row else None
+                if not match_id and pm.provider_name == "sportradar":
+                    mapping_row = (
+                        await session.execute(
+                            text(
+                                "SELECT canonical_id FROM provider_mappings "
+                                "WHERE entity_type = 'match' AND provider = 'espn' AND provider_id = :pid"
+                            ),
+                            {"pid": pm.provider_id},
+                        )
+                    ).fetchone()
+                    match_id = mapping_row[0] if mapping_row else None
+                if not match_id:
+                    continue
+
+                phase_str = _provider_status_to_phase(pm.status.value)
+                await session.execute(
+                    text("UPDATE matches SET phase = :phase WHERE id = :id"),
+                    {"phase": phase_str, "id": match_id},
+                )
+                state_row = (
+                    await session.execute(
+                        text(
+                            "SELECT score_home, score_away, clock, phase, period, extra_data, version "
+                            "FROM match_state WHERE match_id = :match_id"
+                        ),
+                        {"match_id": match_id},
+                    )
+                ).fetchone()
+                clock_val = pm.clock or ""
+                period_val = pm.period or ""
+                extra_json = "{}"
+                if state_row:
+                    db_home = int(state_row[0]) if state_row[0] is not None else 0
+                    db_away = int(state_row[1]) if state_row[1] is not None else 0
+                    changed = (
+                        db_home != pm.score.home
+                        or db_away != pm.score.away
+                        or state_row[2] != clock_val
+                        or state_row[3] != phase_str
+                    )
+                    if changed:
+                        new_version = (state_row[6] or 0) + 1
+                        await session.execute(
+                            text("""
+                                UPDATE match_state SET
+                                    score_home = :score_home, score_away = :score_away,
+                                    clock = :clock, phase = :phase, period = :period,
+                                    extra_data = :extra_data::jsonb, version = :version
+                                WHERE match_id = :match_id
+                            """),
+                            {
+                                "score_home": pm.score.home,
+                                "score_away": pm.score.away,
+                                "clock": clock_val,
+                                "phase": phase_str,
+                                "period": period_val,
+                                "extra_data": extra_json,
+                                "version": new_version,
+                                "match_id": match_id,
+                            },
+                        )
+                        count += 1
+                        name_row = (
+                            await session.execute(
+                                text(
+                                    "SELECT ht.name, ht.short_name, at.name, at.short_name, l.name "
+                                    "FROM matches m "
+                                    "JOIN teams ht ON m.home_team_id = ht.id "
+                                    "JOIN teams at ON m.away_team_id = at.id "
+                                    "JOIN leagues l ON m.league_id = l.id "
+                                    "WHERE m.id = :match_id"
+                                ),
+                                {"match_id": match_id},
+                            )
+                        ).fetchone()
+                        home_name = name_row[0] if name_row else pm.home_team.name
+                        home_short = name_row[1] if name_row else (pm.home_team.short_name or "HOM")
+                        away_name = name_row[2] if name_row else pm.away_team.name
+                        away_short = name_row[3] if name_row else (pm.away_team.short_name or "AWY")
+                        league_name = name_row[4] if name_row else league_slug
+                        _notif_queue.append((str(match_id), {
+                            "score_home": pm.score.home,
+                            "score_away": pm.score.away,
+                            "phase": phase_str,
+                            "clock": pm.clock,
+                            "period": pm.period,
+                            "sport": sport,
+                            "league": league_name,
+                            "home_name": home_name,
+                            "away_name": away_name,
+                            "home_short": home_short,
+                            "away_short": away_short,
+                        }))
+                else:
+                    await session.execute(
+                        text("""
+                            INSERT INTO match_state (match_id, score_home, score_away, score_breakdown, clock, phase, period, extra_data, version, seq)
+                            VALUES (:match_id, :score_home, :score_away, '[]', :clock, :phase, :period, '{}'::jsonb, 1, 0)
+                        """),
+                        {
+                            "match_id": match_id,
+                            "score_home": pm.score.home,
+                            "score_away": pm.score.away,
+                            "clock": clock_val,
+                            "phase": phase_str,
+                            "period": period_val,
+                        },
+                    )
+                    count += 1
+            except Exception as evt_exc:
+                await session.rollback()
+                logger.warning(
+                    "provider_match_apply_error",
+                    provider_id=pm.provider_id,
+                    provider_name=pm.provider_name,
+                    error=str(evt_exc),
+                )
+
+    if _notif_queue:
+        try:
+            from notifications.dispatcher import process_game_update
+            from notifications.engine import GameState
+            for game_id, info in _notif_queue:
+                state = GameState(
+                    game_id=game_id,
+                    score_home=info["score_home"],
+                    score_away=info["score_away"],
+                    phase=info["phase"],
+                    clock=info.get("clock"),
+                    period=info.get("period"),
+                    sport=info["sport"],
+                    league=info["league"],
+                    home_name=info["home_name"],
+                    away_name=info["away_name"],
+                    home_short=info["home_short"],
+                    away_short=info["away_short"],
+                )
+                await process_game_update(db, game_id, state)
+        except Exception as notif_exc:
+            logger.warning("notification_processing_error", error=str(notif_exc))
+
+    return count
 
 
 async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:
@@ -870,15 +1055,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize dependency injection
     init_dependencies(redis, db)
 
+    # Fail fast if JWT secret missing (required for /v1/me, /v1/user/*, etc.)
+    ensure_jwt_secret()
+
     # Start WebSocket manager
     _ws_manager = WebSocketManager(redis, settings)
     await _ws_manager.start()
 
+    # Provider router: SportRadar primary, ESPN fallback
+    from infra.providers import CircuitBreaker, ProviderRouter
+    from infra.providers.espn import ESPNClient
+    from infra.providers.sportradar import SportRadarClient
+    from shared.config import SportRadarSettings
+
+    sr_cfg = SportRadarSettings()
+    sportradar = SportRadarClient(
+        api_key=sr_cfg.api_key,
+        access_level=sr_cfg.access_level,
+        daily_limit=sr_cfg.daily_limit,
+        redis_client=redis.client,
+        include_raw=sr_cfg.include_raw,
+    )
+    espn = ESPNClient()
+    provider_router = ProviderRouter(
+        primary=sportradar,
+        fallback=espn,
+        primary_circuit=CircuitBreaker(
+            name="sportradar",
+            failure_threshold=sr_cfg.cb_threshold,
+            recovery_timeout_s=sr_cfg.cb_recovery_s,
+        ),
+    )
+    app.state.provider_router = provider_router
+
     # Start background phase sync
     phase_sync_task = asyncio.create_task(phase_sync_loop(db))
 
-    # Start live score refresh (fetches from ESPN every 30s)
-    live_refresh_task = asyncio.create_task(live_score_refresh_loop(db, redis))
+    # Start live score refresh (SportRadar primary, ESPN fallback)
+    live_refresh_task = asyncio.create_task(live_score_refresh_loop(db, redis, app))
 
     # Start news RSS aggregation (every 5 min)
     news_fetch_task = asyncio.create_task(news_fetch_loop(db))
@@ -910,6 +1124,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if _ws_manager:
         await _ws_manager.stop()
+    if getattr(app.state, "provider_router", None):
+        await app.state.provider_router.close()
     await db.disconnect()
     await redis.disconnect()
     logger.info("api_service_stopped")

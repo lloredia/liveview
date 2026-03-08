@@ -20,6 +20,11 @@ def _get_jwt_secret() -> str:
     return s
 
 
+def ensure_jwt_secret() -> None:
+    """Validate JWT secret is set (for startup fail-fast). Raises RuntimeError if missing."""
+    _get_jwt_secret()
+
+
 security = HTTPBearer(auto_error=False)
 
 

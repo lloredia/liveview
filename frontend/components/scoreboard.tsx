@@ -56,7 +56,7 @@ export function Scoreboard({
   const [hasLive, setHasLive] = useState(false);
   const { data, loading, error, lastSuccessAt } = usePolling({
     fetcher,
-    interval: hasLive ? 10000 : 20000,
+    interval: hasLive ? 5000 : 20000,
     enabled: !!leagueId,
     key: leagueId,
   });

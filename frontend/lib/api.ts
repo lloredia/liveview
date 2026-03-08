@@ -16,7 +16,17 @@ const REQUEST_TIMEOUT_MS = 25_000;
 
 /** Single source of truth for API base URL (used by all API calls and env docs). */
 export function getApiBase(): string {
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  if (
+    typeof window !== "undefined" &&
+    process.env.NODE_ENV === "production" &&
+    (base.includes("localhost") || base.includes("127.0.0.1"))
+  ) {
+    console.error(
+      "[LiveView] NEXT_PUBLIC_API_URL should not point to localhost in production. Set it in your deployment environment."
+    );
+  }
+  return base;
 }
 
 /** Timeout in ms for API requests (exported for use in non-apiFetch callers e.g. today cache). */

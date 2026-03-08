@@ -5,6 +5,7 @@ All endpoints require X-Admin-Key header matching LV_ADMIN_KEY.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -20,6 +21,9 @@ router = APIRouter(tags=["admin"])
 
 # Channel the ingest service can subscribe to for manual league ingest triggers
 INGEST_MANUAL_TRIGGER_CHANNEL = "ingest:manual_trigger"
+
+# League slug: alphanumeric, dots, hyphens, underscores only; 2–80 chars (e.g. eng.1, uefa.champions)
+LEAGUE_SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9._-]{2,80}$")
 
 
 def _require_admin_key(x_admin_key: str | None = Header(None, alias="X-Admin-Key")) -> str:
@@ -48,6 +52,11 @@ async def trigger_manual_ingest(
     The ingest service may subscribe to ingest:manual_trigger and run a league fetch when it receives this message.
     Requires X-Admin-Key header to match LV_ADMIN_KEY.
     """
+    if not LEAGUE_SLUG_PATTERN.match(league_slug):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid league_slug: use only letters, numbers, dots, hyphens, underscores (2–80 chars)",
+        )
     client_ip = request.client.host if request.client else ""
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
