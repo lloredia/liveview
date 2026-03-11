@@ -21,6 +21,7 @@ passlib[bcrypt]>=1.7.4
 opentelemetry-api>=1.21.0,<2.0
 opentelemetry-sdk>=1.21.0,<2.0
 opentelemetry-exporter-jaeger>=1.21.0,<2.0
+Deprecated>=1.2.0
 opentelemetry-instrumentation-fastapi>=0.42b0,<1.0
 opentelemetry-instrumentation-sqlalchemy>=0.42b0,<1.0
 opentelemetry-instrumentation-httpx>=0.42b0,<1.0
