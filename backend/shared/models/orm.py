@@ -38,6 +38,7 @@ class SportORM(Base):
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     sport_type: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     leagues: Mapped[list["LeagueORM"]] = relationship(back_populates="sport")
     teams: Mapped[list["TeamORM"]] = relationship(back_populates="sport")
@@ -55,6 +56,7 @@ class LeagueORM(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     sport: Mapped["SportORM"] = relationship(back_populates="leagues")
     seasons: Mapped[list["SeasonORM"]] = relationship(back_populates="league")
@@ -71,6 +73,7 @@ class SeasonORM(Base):
     end_date: Mapped[Optional[date]] = mapped_column(Date)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     league: Mapped["LeagueORM"] = relationship(back_populates="seasons")
 
@@ -88,6 +91,7 @@ class TeamORM(Base):
     venue: Mapped[Optional[str]] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     sport: Mapped["SportORM"] = relationship(back_populates="teams")
     players: Mapped[list["PlayerORM"]] = relationship(back_populates="team")
@@ -106,6 +110,7 @@ class PlayerORM(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     team: Mapped[Optional["TeamORM"]] = relationship(back_populates="players")
 
@@ -127,6 +132,7 @@ class MatchORM(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     league: Mapped["LeagueORM"] = relationship(back_populates="matches")
     home_team: Mapped["TeamORM"] = relationship(foreign_keys=[home_team_id])

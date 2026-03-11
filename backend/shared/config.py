@@ -220,11 +220,9 @@ class SportRadarSettings(BaseSettings):
     cb_threshold: int = Field(default=5, description="Circuit breaker failure threshold")
     cb_recovery_s: float = Field(default=60.0, description="Circuit breaker recovery timeout seconds")
 
-    @model_validator(mode="after")
-    def require_api_key(self) -> "SportRadarSettings":
-        if not (self.api_key and str(self.api_key).strip()):
-            raise ValueError("LV_SPORTRADAR_API_KEY must be set and non-empty")
-        return self
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.api_key and str(self.api_key).strip())
 
 
 @lru_cache(maxsize=1)

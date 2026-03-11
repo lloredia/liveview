@@ -45,6 +45,7 @@ from shared.utils.metrics import (
     LIVE_GAMES_DETECTED,
 )
 from shared.utils.redis_manager import RedisManager
+from shared.tracing import init_tracing, shutdown_tracing
 
 from api.dependencies import get_db, get_redis, init_dependencies
 from api.middleware import setup_middleware
@@ -1043,6 +1044,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     settings = get_settings()
     setup_logging("api")
+    init_tracing()  # Initialize OpenTelemetry distributed tracing
     start_metrics_server(9090)
 
     # Initialize infrastructure (retry so healthcheck can pass once ready)
@@ -1069,23 +1071,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from shared.config import SportRadarSettings
 
     sr_cfg = SportRadarSettings()
-    sportradar = SportRadarClient(
-        api_key=sr_cfg.api_key,
-        access_level=sr_cfg.access_level,
-        daily_limit=sr_cfg.daily_limit,
-        redis_client=redis.client,
-        include_raw=sr_cfg.include_raw,
-    )
     espn = ESPNClient()
-    provider_router = ProviderRouter(
-        primary=sportradar,
-        fallback=espn,
-        primary_circuit=CircuitBreaker(
-            name="sportradar",
-            failure_threshold=sr_cfg.cb_threshold,
-            recovery_timeout_s=sr_cfg.cb_recovery_s,
-        ),
-    )
+    if sr_cfg.is_configured:
+        sportradar = SportRadarClient(
+            api_key=sr_cfg.api_key,
+            access_level=sr_cfg.access_level,
+            daily_limit=sr_cfg.daily_limit,
+            redis_client=redis.client,
+            include_raw=sr_cfg.include_raw,
+        )
+        provider_router = ProviderRouter(
+            primary=sportradar,
+            fallback=espn,
+            primary_circuit=CircuitBreaker(
+                name="sportradar",
+                failure_threshold=sr_cfg.cb_threshold,
+                recovery_timeout_s=sr_cfg.cb_recovery_s,
+            ),
+        )
+        logger.info("provider_router_started", primary="sportradar", fallback="espn")
+    else:
+        logger.warning("sportradar_api_key_missing", msg="LV_SPORTRADAR_API_KEY not set, using ESPN only")
+        provider_router = ProviderRouter(
+            primary=espn,
+            fallback=espn,
+            primary_circuit=CircuitBreaker(name="espn", failure_threshold=10, recovery_timeout_s=30.0),
+        )
+        logger.info("provider_router_started", primary="espn", fallback="espn")
     app.state.provider_router = provider_router
 
     # Start background phase sync
@@ -1128,6 +1140,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await app.state.provider_router.close()
     await db.disconnect()
     await redis.disconnect()
+    shutdown_tracing()  # Flush pending traces to Jaeger
     logger.info("api_service_stopped")
 
 

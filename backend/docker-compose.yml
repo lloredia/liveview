@@ -4,6 +4,11 @@ x-common-env: &common-env
   LV_LOG_LEVEL: info
   LV_SPORTRADAR_API_KEY: ${SPORTRADAR_API_KEY:-}
   LV_THESPORTSDB_API_KEY: ${THESPORTSDB_API_KEY:-2}
+  OTEL_ENABLED: "true"
+  OTEL_JAEGER_AGENT_HOST: "jaeger"
+  OTEL_JAEGER_AGENT_PORT: "6831"
+  OTEL_TRACES_SAMPLE_RATE: "0.5"
+  OTEL_SERVICE_NAME: "liveview-api"
 
 services:
   # ── Infrastructure ──────────────────────────────────────
@@ -58,6 +63,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     restart: unless-stopped
 
@@ -128,6 +135,22 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  # ── Observability ───────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "6831:6831/udp"  # Jaeger agent (thrift compact)
+      - "4317:4317"  # OTLP gRPC receiver
+      - "4318:4318"  # OTLP HTTP receiver
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/services"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:

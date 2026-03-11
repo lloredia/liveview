@@ -6,6 +6,7 @@ import { GlobalErrorHandler } from "@/components/global-error-handler";
 import { PushOnFirstInteraction } from "@/components/push-on-first-interaction";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { AuthGateProvider } from "@/components/auth/auth-gate-context";
+import "@/sentry.client.config"; // Initialize Sentry on client
 
 export const metadata: Metadata = {
   title: "LiveView — Real-Time Sports Tracker",
