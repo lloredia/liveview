@@ -9,12 +9,17 @@
  */
 
 import { getApiBase } from "./api";
+import type { CapacitorInstance } from "@capacitor/core";
 
 const DEVICE_ID_KEY = "lv_device_id";
 
+interface WindowWithCapacitor extends Window {
+  Capacitor?: CapacitorInstance;
+}
+
 function isCapacitorIOS(): boolean {
   if (typeof window === "undefined") return false;
-  const cap = (window as any).Capacitor;
+  const cap = (window as WindowWithCapacitor).Capacitor;
   return cap?.getPlatform?.() === "ios";
 }
 
@@ -56,7 +61,7 @@ export async function getDeviceIdAsync(): Promise<string | null> {
     try {
       const { Preferences } = await import("@capacitor/preferences");
       const { value } = await Preferences.get({ key: DEVICE_ID_KEY });
-      if (value) (window as any).__lv_device_id = value;
+      if (value) (window as WindowWithCapacitor).__lv_device_id = value;
       return value ?? null;
     } catch {
       return null;
@@ -69,7 +74,7 @@ async function setDeviceIdIOS(id: string): Promise<void> {
   try {
     const { Preferences } = await import("@capacitor/preferences");
     await Preferences.set({ key: DEVICE_ID_KEY, value: id });
-    (window as any).__lv_device_id = id;
+    (window as WindowWithCapacitor).__lv_device_id = id;
   } catch {
     // Fallback to localStorage if Preferences unavailable
     localStorage.setItem(DEVICE_ID_KEY, id);
@@ -82,7 +87,7 @@ function setDeviceIdWeb(id: string): void {
 
 function getPlatform(): "web" | "ios" {
   if (typeof window !== "undefined") {
-    const cap = (window as any).Capacitor;
+    const cap = (window as WindowWithCapacitor).Capacitor;
     if (cap?.getPlatform?.() === "ios") return "ios";
   }
   return "web";

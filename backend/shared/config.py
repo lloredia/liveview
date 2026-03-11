@@ -190,6 +190,17 @@ class Settings(BaseSettings):
         except Exception:
             return "postgresql+asyncpg://***"
 
+    @model_validator(mode="after")
+    def validate_critical_secrets_in_production(self) -> "Settings":
+        """Ensure critical secrets are set in production."""
+        if self.environment == Environment.PRODUCTION:
+            if not self.database_url or str(self.database_url).startswith("postgresql+asyncpg://liveview:liveview@postgres"):
+                raise ValueError("DATABASE_URL must be set and point to prod database in production")
+            if not self.redis_url or str(self.redis_url).startswith("redis://redis:6379"):
+                raise ValueError("REDIS_URL must be set and point to prod Redis in production")
+            # Note: AUTH_JWT_SECRET is checked in auth.deps.ensure_jwt_secret()
+        return self
+
 
 class SportRadarSettings(BaseSettings):
     """SportRadar provider configuration. Instantiate in app lifespan only."""

@@ -122,6 +122,95 @@ The **Today** view shows matches from the database. If you see "No matches on th
 
 If the frontend shows "Showing cached matches" and no matches, the last API request may have failed (e.g. wrong `NEXT_PUBLIC_API_URL`, network, or backend down). Use **Try again** to refetch.
 
+## Troubleshooting
+
+### WebSocket connects but no messages
+
+**Symptoms:** Connection opens successfully, but no scoreboard/event updates come through.
+
+**Steps:**
+1. Check Redis is running:
+   ```bash
+   redis-cli ping
+   # Expected: PONG
+   ```
+2. Check scheduler is running (logs should show `scheduler_leader_elected`):
+   ```bash
+   docker logs liveview-scheduler 2>&1 | grep scheduler_leader
+   ```
+3. Check provider is in allowlist and functioning:
+   ```bash
+   curl http://localhost:8000/metrics | grep provider_requests
+   ```
+
+### No scores updating (matches show as scheduled)
+
+**Symptoms:** Matches appear but scores never update, phase stays `scheduled`.
+
+**Steps:**
+1. Check provider health:
+   ```bash
+   curl http://localhost:8000/metrics | grep provider_health
+   ```
+2. Check ESPN API is accessible:
+   ```bash
+   curl -I https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard
+   # Expected: 200 OK
+   ```
+3. Check ingest service is polling (logs should show `live_score_refresh`):
+   ```bash
+   docker logs liveview-api 2>&1 | grep live_score_refresh
+   ```
+4. Verify provider keys are set (if using SportRadar):
+   ```bash
+   echo $SPORTRADAR_API_KEY  # Should not be empty
+   ```
+
+### High 500 errors or database connection failures
+
+**Symptoms:** Frontend shows errors, backend logs show database/Redis connection errors.
+
+**Steps:**
+1. Check database connectivity:
+   ```bash
+   psql -U liveview -h localhost liveview
+   # If fails, check POSTGRES_HOST and POSTGRES_PASSWORD
+   ```
+2. Check Redis connectivity:
+   ```bash
+   redis-cli -u $REDIS_URL ping
+   # Expected: PONG
+   ```
+3. Check container health:
+   ```bash
+   docker ps | grep liveview
+   docker logs liveview-api --tail 50
+   ```
+4. Restart services if needed:
+   ```bash
+   docker compose restart api
+   docker compose restart scheduler
+   ```
+
+### WebSocket slow or delayed updates
+
+**Symptoms:** WS connects okay, but updates are delayed or very infrequent.
+
+**Steps:**
+1. Check subscriber count (may be throttling polling):
+   ```bash
+   curl http://localhost:8000/metrics | grep ws_connections
+   ```
+2. Check health of primary provider (ESPN/Sportradar):
+   ```bash
+   curl http://localhost:8000/metrics | grep provider_health | head -5
+   ```
+3. Increase polling frequency (reduce `scheduler_max_poll_interval_s`):
+   ```bash
+   export LV_SCHEDULER_MAX_POLL_INTERVAL_S=30  # down from 120s
+   docker compose restart scheduler
+   ```
+
 ## REST API
 
 ### `GET /v1/leagues`

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/** Maximum image size: 10MB */
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+/** Allowed image hosts (whitelist) */
+const ALLOWED_HOSTS = ['espn.com', 'thescoreapi.com', 'football-data.org'];
+
 /** Blocklist: private/local hostnames (SSRF protection). Allow all other public hostnames. */
 function isAllowedUrl(url: string): boolean {
   try {
@@ -35,6 +41,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "URL not allowed" }, { status: 403 });
   }
 
+  // Validate host is in allowlist
+  try {
+    const urlObj = new URL(decoded);
+    const isAllowed = ALLOWED_HOSTS.some(host => urlObj.hostname.endsWith(host));
+    if (!isAllowed) {
+      return NextResponse.json({ error: "Host not in allowlist" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+  }
+
   try {
     const parsed = new URL(decoded);
     const origin = `${parsed.protocol}//${parsed.host}`;
@@ -59,6 +76,11 @@ export async function GET(request: NextRequest) {
     }
 
     const body = await res.arrayBuffer();
+
+    // Enforce max image size
+    if (body.byteLength > MAX_IMAGE_SIZE) {
+      return NextResponse.json({ error: "Image too large (max 10MB)" }, { status: 413 });
+    }
     const cacheControl = "public, s-maxage=86400, stale-while-revalidate=604800";
 
     return new NextResponse(body, {
