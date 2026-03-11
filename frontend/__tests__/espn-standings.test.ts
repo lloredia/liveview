@@ -12,6 +12,16 @@ import {
 
 // ── parseStandingsEntry ─────────────────────────────────────────────
 
+interface ESPNStandingsEntry {
+  team?: {
+    displayName?: string;
+    name?: string;
+    abbreviation?: string;
+    logos?: { href?: string }[];
+  };
+  stats?: { name?: string; value?: number }[];
+}
+
 describe("parseStandingsEntry", () => {
   it("parses a soccer entry with standard stat names", () => {
     const entry = {
@@ -32,7 +42,7 @@ describe("parseStandingsEntry", () => {
         { name: "points", value: 45 },
       ],
     };
-    const row = _parseStandingsEntry(entry as any);
+    const row = _parseStandingsEntry(entry as ESPNStandingsEntry);
     expect(row.teamName).toBe("Arsenal");
     expect(row.teamAbbr).toBe("ARS");
     expect(row.teamLogo).toBe("https://logo.png");
@@ -60,7 +70,7 @@ describe("parseStandingsEntry", () => {
         { name: "PTS", value: 30 },
       ],
     };
-    const row = _parseStandingsEntry(entry as any);
+    const row = _parseStandingsEntry(entry as ESPNStandingsEntry);
     expect(row.gamesPlayed).toBe(50);
     expect(row.wins).toBe(30);
     expect(row.goalsFor).toBe(5000);
@@ -70,7 +80,7 @@ describe("parseStandingsEntry", () => {
 
   it("handles missing team data gracefully", () => {
     const entry = { stats: [] };
-    const row = _parseStandingsEntry(entry as any);
+    const row = _parseStandingsEntry(entry as ESPNStandingsEntry);
     expect(row.teamName).toBe("Unknown");
     expect(row.teamLogo).toBeNull();
     expect(row.gamesPlayed).toBe(0);

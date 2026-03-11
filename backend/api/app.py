@@ -46,6 +46,7 @@ from shared.utils.metrics import (
 )
 from shared.utils.redis_manager import RedisManager
 from shared.tracing import init_tracing, shutdown_tracing
+from shared.query_monitoring import init_query_monitoring
 
 from api.dependencies import get_db, get_redis, init_dependencies
 from api.middleware import setup_middleware
@@ -1053,6 +1054,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await _connect_with_retry(redis.connect, "Redis")
     await _connect_with_retry(db.connect, "Database")
+
+    # Initialize database query monitoring (slow query detection + Prometheus metrics)
+    slow_query_threshold_ms = int(getattr(settings, 'slow_query_threshold_ms', 500))
+    init_query_monitoring(db.engine, slow_query_threshold_ms=slow_query_threshold_ms)
 
     # Initialize dependency injection
     init_dependencies(redis, db)

@@ -15,6 +15,7 @@ const DEVICE_ID_KEY = "lv_device_id";
 
 interface WindowWithCapacitor extends Window {
   Capacitor?: CapacitorInstance;
+  __lv_device_id?: string;
 }
 
 function isCapacitorIOS(): boolean {
@@ -45,7 +46,7 @@ export function getDeviceId(): string | null {
   if (isCapacitorIOS()) {
     // On iOS we use Preferences but this sync getter can't await.
     // Caller that needs iOS id should use ensureDeviceRegistered() or getDeviceIdAsync().
-    const stored = (window as any).__lv_device_id as string | undefined;
+    const stored = (window as WindowWithCapacitor).__lv_device_id;
     return stored ?? null;
   }
   return localStorage.getItem(DEVICE_ID_KEY);

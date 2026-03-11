@@ -5,8 +5,9 @@ import Credentials from "next-auth/providers/credentials";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const providers: any[] = [
+import type { Provider } from "next-auth/providers";
+
+const providers: Provider[] = [
   Credentials({
       name: "Email",
       credentials: {

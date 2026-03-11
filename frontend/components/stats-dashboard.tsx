@@ -103,7 +103,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
         const sbUrl = "/api/espn/site/" + prefix + "/scoreboard";
         const sbRes = await fetch(sbUrl);
         const sbData = sbRes.ok ? await sbRes.json() : { events: [] };
-        const events: any[] = sbData.events || [];
+        const events: ESPNEvent[] = sbData.events || [];
 
         let totalPoints = 0;
         let totalMatches = 0;
@@ -117,9 +117,9 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
           if (!comp.status?.type?.completed) continue;
 
           totalMatches++;
-          const competitors = comp.competitors || [];
-          const home = competitors.find((c: any) => c.homeAway === "home");
-          const away = competitors.find((c: any) => c.homeAway === "away");
+          const competitors: ESPNCompetitor[] = comp.competitors || [];
+          const home = competitors.find((c) => c.homeAway === "home");
+          const away = competitors.find((c) => c.homeAway === "away");
 
           if (home && away) {
             const hs = parseInt(home.score || "0", 10);
@@ -144,9 +144,9 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
         for (const evt of events) {
           const comp = evt.competitions?.[0];
           if (!comp) continue;
-          const competitors = comp.competitors || [];
+          const competitors: ESPNCompetitor[] = comp.competitors || [];
           for (const c of competitors) {
-            const teamLeaders = c.leaders || [];
+            const teamLeaders: LeaderCategory[] = c.leaders || [];
             for (const cat of teamLeaders) {
               const catName = cat.displayName || cat.name || "";
               if (!catName || catName === "Rating") continue;
@@ -201,7 +201,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 entryStats[s.name] = Number(s.value) || 0;
               }
               const streakStr = (entry.stats || []).find(
-                (s: any) => s.name === "streak" || s.abbreviation === "STRK"
+                (s: { name?: string; abbreviation?: string }) => s.name === "streak" || s.abbreviation === "STRK"
               )?.displayValue || "";
 
               const wins = entryStats["wins"] || entryStats["W"] || 0;

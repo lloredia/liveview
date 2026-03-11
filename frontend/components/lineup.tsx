@@ -4,6 +4,16 @@ import { useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { TeamLogo } from "./team-logo";
 
+interface ESPNSearchTeamWrapper {
+  team: {
+    displayName?: string;
+    shortDisplayName?: string;
+    abbreviation?: string;
+    name?: string;
+    id?: string;
+  };
+}
+
 interface LineupProps {
   homeTeamName: string;
   awayTeamName: string;
@@ -63,9 +73,9 @@ async function findTeamId(
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
-    const teams = data?.sports?.[0]?.leagues?.[0]?.teams || [];
+    const teams: ESPNSearchTeamWrapper[] = data?.sports?.[0]?.leagues?.[0]?.teams || [];
 
-    const match = teams.find((t: any) => {
+    const match = teams.find((t) => {
       const team = t.team;
       const name = teamName.toLowerCase();
       return (

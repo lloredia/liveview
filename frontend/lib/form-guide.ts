@@ -23,6 +23,17 @@ const ESPN_TEAM_SCHEDULE_MAP: Record<string, string> = {
  * Fetch a team's recent results from ESPN to build a form guide.
  * Returns last 5 completed matches as W/L/D results.
  */
+
+interface ESPNCompetitor {
+  team?: {
+    abbreviation?: string;
+    displayName?: string;
+    id?: string;
+  };
+  score?: string | number;
+  winner?: boolean;
+}
+
 export async function fetchTeamForm(
   teamId: string,
   teamName: string,
@@ -51,11 +62,12 @@ export async function fetchTeamForm(
 
       const competitors = competition.competitors || [];
       const us = competitors.find(
-        (c: any) => c.team?.abbreviation?.toLowerCase() === teamName.toLowerCase() ||
+        (c: ESPNCompetitor) =>
+          c.team?.abbreviation?.toLowerCase() === teamName.toLowerCase() ||
           c.team?.displayName?.toLowerCase() === teamName.toLowerCase() ||
           c.team?.id === teamId,
       );
-      const them = competitors.find((c: any) => c !== us);
+      const them = competitors.find((c: ESPNCompetitor) => c !== us);
 
       if (!us || !them) continue;
 

@@ -295,6 +295,25 @@ function teamNamesMatch(a: string, b: string): boolean {
   return false;
 }
 
+
+// Raw types from ESPN scoreboard API (subset used here)
+interface ESPNCompetitorBasic {
+  homeAway?: string;
+  team?: {
+    displayName?: string;
+    name?: string;
+    shortDisplayName?: string;
+    abbreviation?: string;
+  };
+}
+interface ESPNCompetitionBasic {
+  competitors?: ESPNCompetitorBasic[];
+}
+interface ESPNEventBasic {
+  id?: string;
+  competitions?: ESPNCompetitionBasic[];
+}
+
 async function findEspnEventId(
   homeTeamName: string, awayTeamName: string, sport: string, slug: string,
 ): Promise<string | null> {
@@ -303,14 +322,14 @@ async function findEspnEventId(
     const res = await fetch(`/api/espn/site/${prefix}/scoreboard`);
     if (!res.ok) return null;
     const data = await res.json();
-    const events: any[] = data.events || [];
+    const events: ESPNEventBasic[] = data.events || [];
 
     for (const evt of events) {
       const comp = evt.competitions?.[0];
       if (!comp) continue;
-      const competitors = comp.competitors || [];
-      const homeComp = competitors.find((c: any) => c.homeAway === "home");
-      const awayComp = competitors.find((c: any) => c.homeAway === "away");
+      const competitors: ESPNCompetitorBasic[] = comp.competitors || [];
+      const homeComp = competitors.find((c) => c.homeAway === "home");
+      const awayComp = competitors.find((c) => c.homeAway === "away");
       if (!homeComp || !awayComp) continue;
       const homeDisplay = homeComp.team?.displayName || homeComp.team?.name || "";
       const awayDisplay = awayComp.team?.displayName || awayComp.team?.name || "";
@@ -324,7 +343,22 @@ async function findEspnEventId(
   } catch { return null; }
 }
 
-function extractPlayerStats(competitor: any): { players: PlayerStatLine[]; statColumns: string[] } {
+interface StatGroup {
+  labels?: string[];
+  athletes?: AthleteStat[];
+}
+interface AthleteStat {
+  athlete?: {
+    displayName?: string;
+    shortName?: string;
+    jersey?: string;
+    position?: { abbreviation?: string };
+  };
+  stats?: string[];
+  starter?: boolean;
+}
+
+function extractPlayerStats(competitor: { statistics?: StatGroup[] }): { players: PlayerStatLine[]; statColumns: string[] } {
   const players: PlayerStatLine[] = [];
   const statColumns: string[] = [];
   const statGroups = competitor.statistics || [];
@@ -332,7 +366,7 @@ function extractPlayerStats(competitor: any): { players: PlayerStatLine[]; statC
 
   const primaryGroup = statGroups[0];
   const labels: string[] = primaryGroup.labels || [];
-  const athletes: any[] = primaryGroup.athletes || [];
+  const athletes: AthleteStat[] = primaryGroup.athletes || [];
   for (const label of labels) { if (!statColumns.includes(label)) statColumns.push(label); }
 
   for (const athlete of athletes) {
@@ -346,7 +380,7 @@ function extractPlayerStats(competitor: any): { players: PlayerStatLine[]; statC
   for (let i = 1; i < statGroups.length; i++) {
     const group = statGroups[i];
     const gl: string[] = group.labels || [];
-    const ga: any[] = group.athletes || [];
+    const ga: AthleteStat[] = group.athletes || [];
     for (const l of gl) { if (!statColumns.includes(l)) statColumns.push(l); }
     for (const athlete of ga) {
       const ath = athlete.athlete || {};

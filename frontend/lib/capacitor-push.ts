@@ -15,9 +15,13 @@
 import { getApiBase } from "./api";
 import { getDeviceIdAsync, ensureDeviceRegistered } from "./device";
 
+interface WindowWithCapacitor extends Window {
+  Capacitor?: { getPlatform?: () => string };
+}
+
 function isCapacitorIOS(): boolean {
   if (typeof window === "undefined") return false;
-  const cap = (window as any).Capacitor;
+  const cap = (window as WindowWithCapacitor).Capacitor;
   return cap?.getPlatform?.() === "ios";
 }
 

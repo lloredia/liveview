@@ -68,6 +68,17 @@ export function MatchForm({ homeTeamName, awayTeamName, leagueName }: MatchFormP
 /**
  * Search ESPN for a team by name, then fetch their schedule.
  */
+
+interface ESPNSearchTeamWrapper {
+  team: {
+    displayName?: string;
+    shortDisplayName?: string;
+    abbreviation?: string;
+    name?: string;
+    id?: string;
+  };
+}
+
 async function fetchTeamFormByName(
   teamName: string,
   sport: string,
@@ -80,9 +91,9 @@ async function fetchTeamFormByName(
     if (!searchRes.ok) return { teamName, results: [] };
 
     const searchData = await searchRes.json();
-    const teams = searchData?.sports?.[0]?.leagues?.[0]?.teams || [];
+    const teams: ESPNSearchTeamWrapper[] = searchData?.sports?.[0]?.leagues?.[0]?.teams || [];
 
-    const match = teams.find((t: any) => {
+    const match = teams.find((t) => {
       const team = t.team;
       return (
         team.displayName?.toLowerCase() === teamName.toLowerCase() ||

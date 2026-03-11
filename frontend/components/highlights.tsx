@@ -103,18 +103,18 @@ export function Highlights({
         }
 
         const sbData = await sbRes.json();
-        const events: any[] = sbData.events || [];
+        const events: ESPNEvent[] = sbData.events || [];
         const hn = homeTeamName.toLowerCase();
         const an = awayTeamName.toLowerCase();
 
-        let evt: any = null;
+        let evt: ESPNEvent | null = null;
         for (const e of events) {
-          const comps = e.competitions?.[0]?.competitors || [];
+          const comps: ESPNCompetitor[] = e.competitions?.[0]?.competitors || [];
           const dn = comps.map(
-            (c: any) => (c.team?.displayName || "").toLowerCase()
+            (c) => (c.team?.displayName || "").toLowerCase()
           );
           const sn = comps.map(
-            (c: any) => (c.team?.shortDisplayName || "").toLowerCase()
+            (c) => (c.team?.shortDisplayName || "").toLowerCase()
           );
           const all = [...dn, ...sn];
           if (
@@ -155,11 +155,11 @@ export function Highlights({
 
         const sum = await sumRes.json();
         const found: VideoItem[] = [];
-        const allVids: any[] = [
+        const allVids: ESPNVideo[] = [
           ...(sum.videos || []),
           ...(sum.highlights || []),
         ];
-        const articles: any[] = sum.news?.articles || [];
+        const articles: ESPNArticle[] = sum.news?.articles || [];
         for (const ar of articles) {
           if (ar.videos) allVids.push(...ar.videos);
         }

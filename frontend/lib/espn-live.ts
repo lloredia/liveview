@@ -24,6 +24,29 @@ export interface ESPNLiveMatch {
   isFinished: boolean;
 }
 
+// Raw types returned by ESPN API (minimum subset we care about)
+interface RawESPNCompetitor {
+  homeAway?: string;
+  score?: string | number;
+  winner?: boolean;
+  team?: {
+    abbreviation?: string;
+    displayName?: string;
+    id?: string;
+  };
+}
+interface RawESPNCompetition {
+  competitors?: RawESPNCompetitor[];
+  status?: {
+    type?: { name?: string; detail?: string };
+    displayClock?: string;
+  };
+}
+interface RawESPNEvent {
+  competitions?: RawESPNCompetition[];
+  date?: string;
+}
+
 const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
   NBA: { sport: "basketball", slug: "nba" },
   WNBA: { sport: "basketball", slug: "wnba" },
@@ -180,16 +203,16 @@ export async function fetchESPNScoreboard(
     if (!res.ok) return [];
 
     const data = await res.json();
-    const events: any[] = data.events || [];
+    const events: RawESPNEvent[] = data.events || [];
     const results: ESPNLiveMatch[] = [];
 
     for (const evt of events) {
       const comp = evt.competitions?.[0];
       if (!comp) continue;
 
-      const competitors = comp.competitors || [];
-      const home = competitors.find((c: any) => c.homeAway === "home");
-      const away = competitors.find((c: any) => c.homeAway === "away");
+      const competitors: RawESPNCompetitor[] = comp.competitors || [];
+      const home = competitors.find((c) => c.homeAway === "home");
+      const away = competitors.find((c) => c.homeAway === "away");
       if (!home || !away) continue;
 
       const status = comp.status || {};

@@ -77,6 +77,11 @@ function syncFavoriteToCloud(targetId: string, type: string, add: boolean): void
  * Load favorites from the cloud and merge with local.
  * Call this after login. Uses session-backed JWT from auth-api.
  */
+interface FavoriteRecord {
+  type: string;
+  target_id: string;
+}
+
 export async function loadCloudFavorites(): Promise<void> {
   try {
     const token = await getBackendToken();
@@ -90,8 +95,8 @@ export async function loadCloudFavorites(): Promise<void> {
     const data = await res.json();
 
     const cloudLeagues = (data.favorites || [])
-      .filter((f: any) => f.type === "league")
-      .map((f: any) => f.target_id);
+      .filter((f: FavoriteRecord) => f.type === "league")
+      .map((f: FavoriteRecord) => f.target_id);
 
     // Merge: cloud + local (deduplicate)
     const local = getStored(STORAGE_KEY_LEAGUES);

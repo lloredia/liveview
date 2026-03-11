@@ -200,7 +200,7 @@ test.describe("LiveView E2E Tests", () => {
 
         // Browser's native validation should apply
         const isInvalid = await emailInput.evaluate(
-          (el: any) => !el.checkValidity()
+          (el: HTMLInputElement) => !el.checkValidity()
         );
         
         // May be validated by browser or by app

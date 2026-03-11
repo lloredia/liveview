@@ -11,7 +11,7 @@ export interface InboxItem {
   event_type: string;
   title: string;
   body: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   is_read: boolean;
   created_at: string;
 }
