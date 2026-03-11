@@ -1,0 +1,298 @@
+# GitHub Actions CI configuration for LiveView tests
+# Runs: unit tests, integration tests, E2E tests, security tests, and load tests
+
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: liveview
+          POSTGRES_PASSWORD: liveview
+          POSTGRES_DB: liveview_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest-asyncio pytest-cov
+
+      - name: Run unit tests
+        run: |
+          cd backend
+          pytest tests/ -v --cov=. --cov-report=xml --cov-fail-under=70
+        env:
+          LV_DATABASE_URL: postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_test
+          LV_REDIS_URL: redis://localhost:6379/0
+
+      - name: Run integration tests
+        run: |
+          cd backend
+          pytest tests/test_integration_api.py -v
+        env:
+          LV_DATABASE_URL: postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_test
+          LV_REDIS_URL: redis://localhost:6379/1
+
+      - name: Run migration tests
+        run: |
+          cd backend
+          pytest tests/test_migrations.py -v
+        env:
+          LV_DATABASE_URL: postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_migrations_test
+          LV_REDIS_URL: redis://localhost:6379/2
+
+      - name: Run security tests
+        run: |
+          cd backend
+          pytest tests/test_security.py -v
+        env:
+          LV_DATABASE_URL: postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_security_test
+          LV_REDIS_URL: redis://localhost:6379/3
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd frontend
+          npm test -- --coverage --collectCoverageFrom="app/**/*.{ts,tsx}"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./frontend/coverage/coverage-final.json
+          flags: frontend
+          fail_ci_if_error: false
+
+      - name: Install Playwright browsers
+        run: |
+          cd frontend
+          npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npm run build
+          npm start &
+          sleep 5
+          npx playwright test frontend/e2e/ --reporter=html
+        timeout-minutes: 10
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+  load-tests:
+    name: Load Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: liveview
+          POSTGRES_PASSWORD: liveview
+          POSTGRES_DB: liveview_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install locust
+
+      - name: Start backend server
+        run: |
+          cd backend
+          python -m api.service &
+          sleep 5
+        env:
+          LV_DATABASE_URL: postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_test
+          LV_REDIS_URL: redis://localhost:6379/0
+
+      - name: Run load tests (Locust)
+        run: |
+          cd backend
+          locust -f scripts/load_test_locust.py \
+            --host=http://localhost:8000 \
+            --users=10 \
+            --spawn-rate=2 \
+            --run-time=1m \
+            --headless
+        timeout-minutes: 5
+
+      - name: Run load tests (k6)
+        if: success() || failure()
+        run: |
+          cd backend
+          # Install k6
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6-stable.list
+          sudo apt-get update
+          sudo apt-get install k6
+          
+          # Run tests
+          k6 run scripts/load_test_k6.js --vus 10 --duration 1m
+        timeout-minutes: 5
+
+  lint-and-format:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install linters
+        run: |
+          pip install ruff mypy
+
+      - name: Lint Python code
+        run: |
+          cd backend
+          ruff check . --fix
+
+      - name: Type check Python code
+        run: |
+          cd backend
+          mypy . --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install ESLint
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Lint TypeScript code
+        run: |
+          cd frontend
+          npm run lint
+        continue-on-error: true
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: backend
+          target: api
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        run: |
+          cd frontend
+          npm ci
+          npm run build
