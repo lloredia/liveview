@@ -119,12 +119,11 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple in-memory sliding-window rate limiter per client IP."""
+    """Redis-backed fixed-window rate limiter per client IP."""
 
     def __init__(self, app: FastAPI, rpm: int = RATE_LIMIT_RPM) -> None:
         super().__init__(app)
         self._rpm = rpm
-        self._buckets: dict[str, list[float]] = {}
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -134,23 +133,58 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-        window = self._buckets.setdefault(client_ip, [])
 
-        window[:] = [t for t in window if now - t < RATE_LIMIT_WINDOW_S]
-
-        if len(window) >= self._rpm:
-            return JSONResponse(
-                status_code=429,
-                content={"error": "rate_limit_exceeded", "message": f"Max {self._rpm} requests per minute"},
-                headers={"Retry-After": str(RATE_LIMIT_WINDOW_S)},
-            )
-
-        window.append(now)
+        # Try Redis-backed limiting; fall back to allowing the request if Redis is unavailable
+        redis = getattr(request.app.state, "redis", None)
+        if redis is not None:
+            try:
+                key = f"ratelimit:{client_ip}"
+                current = await redis.client.incr(key)
+                if current == 1:
+                    await redis.client.expire(key, RATE_LIMIT_WINDOW_S)
+                remaining = max(0, self._rpm - current)
+                if current > self._rpm:
+                    return JSONResponse(
+                        status_code=429,
+                        content={"error": "rate_limit_exceeded", "message": f"Max {self._rpm} requests per minute"},
+                        headers={"Retry-After": str(RATE_LIMIT_WINDOW_S)},
+                    )
+            except Exception:
+                current = 0
+                remaining = self._rpm
 
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(self._rpm)
-        response.headers["X-RateLimit-Remaining"] = str(max(0, self._rpm - len(window)))
+        if redis is not None:
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+        return response
+
+
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self' wss: https:; "
+    "frame-ancestors 'none'"
+)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Injects security headers on every response."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = _CSP
+        # Only set HSTS over HTTPS (Railway/Vercel terminate TLS)
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 
@@ -193,6 +227,7 @@ def setup_middleware(app: FastAPI) -> None:
     so CORS must be registered LAST to execute FIRST (outermost).
     """
     setup_exception_handlers(app)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(RateLimitMiddleware)

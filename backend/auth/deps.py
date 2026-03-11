@@ -12,11 +12,10 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-# Same secret as NextAuth (NEXTAUTH_SECRET or AUTH_JWT_SECRET)
 def _get_jwt_secret() -> str:
-    s = os.environ.get("AUTH_JWT_SECRET") or os.environ.get("NEXTAUTH_SECRET")
+    s = os.environ.get("AUTH_JWT_SECRET")
     if not s:
-        raise RuntimeError("AUTH_JWT_SECRET or NEXTAUTH_SECRET must be set for auth")
+        raise RuntimeError("AUTH_JWT_SECRET must be set for auth (separate from NEXTAUTH_SECRET)")
     return s
 
 

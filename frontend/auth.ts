@@ -18,7 +18,7 @@ const providers: any[] = [
         try {
           const res = await fetch(`${apiBase}/v1/auth/login`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
             body: JSON.stringify({
               email: String(credentials.email).trim(),
               password: String(credentials.password),
@@ -88,13 +88,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name;
         // Credentials: user.id is already our backend UUID. OAuth: get-or-create backend user and use its id.
         if (account?.provider === "google" || account?.provider === "apple") {
-          const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+          const oauthSecret = process.env.OAUTH_ENSURE_SECRET;
           try {
             const res = await fetch(`${apiBase}/v1/auth/oauth-ensure`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                ...(secret ? { "X-OAuth-Secret": secret } : {}),
+                ...(oauthSecret ? { "X-OAuth-Secret": oauthSecret } : {}),
               },
               body: JSON.stringify({
                 provider: account.provider,

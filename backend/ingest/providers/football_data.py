@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, Optional
 
 from shared.models.domain import (
@@ -204,6 +205,8 @@ class FootballDataProvider(BaseProvider):
         for g in data.get("goals", []):
             ev_type = EventType.PENALTY if (g.get("type") or "").upper() == "PENALTY" else EventType.GOAL
             score = g.get("score") or {}
+            _scorer_name = (g.get("scorer") or {}).get("name")
+            _assist_name = (g.get("assist") or {}).get("name") if g.get("assist") else None
             events.append(MatchEvent(
                 match_id=match_id,
                 event_type=ev_type,
@@ -212,9 +215,9 @@ class FootballDataProvider(BaseProvider):
                 period=None,
                 team_id=None,
                 player_id=None,
-                player_name=(g.get("scorer") or {}).get("name"),
+                player_name=escape(_scorer_name) if _scorer_name else None,
                 secondary_player_id=None,
-                secondary_player_name=(g.get("assist") or {}).get("name") if g.get("assist") else None,
+                secondary_player_name=escape(_assist_name) if _assist_name else None,
                 detail=None,
                 score_home=score.get("home"),
                 score_away=score.get("away"),
@@ -227,6 +230,7 @@ class FootballDataProvider(BaseProvider):
         for b in data.get("bookings", []):
             card = (b.get("card") or "").upper()
             ev_type = EventType.RED_CARD if "RED" in card else EventType.YELLOW_CARD
+            _player_name = (b.get("player") or {}).get("name")
             events.append(MatchEvent(
                 match_id=match_id,
                 event_type=ev_type,
@@ -235,7 +239,7 @@ class FootballDataProvider(BaseProvider):
                 period=None,
                 team_id=None,
                 player_id=None,
-                player_name=(b.get("player") or {}).get("name"),
+                player_name=escape(_player_name) if _player_name else None,
                 secondary_player_id=None,
                 secondary_player_name=None,
                 detail=None,

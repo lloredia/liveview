@@ -38,7 +38,7 @@ function SignupContent() {
       try {
         res = await fetch(`${API_BASE}/v1/auth/register`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
           body: JSON.stringify({
             email: email.trim(),
             password,

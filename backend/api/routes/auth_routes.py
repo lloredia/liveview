@@ -8,7 +8,7 @@ import os
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -23,7 +23,13 @@ router = APIRouter(prefix="/v1", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def _get_oauth_secret() -> str:
-    return (os.environ.get("OAUTH_ENSURE_SECRET") or os.environ.get("NEXTAUTH_SECRET") or "").strip()
+    return (os.environ.get("OAUTH_ENSURE_SECRET") or "").strip()
+
+
+def _require_ajax(x_requested_with: Optional[str] = Header(None, alias="X-Requested-With")) -> None:
+    """CSRF mitigation: require X-Requested-With: XMLHttpRequest on state-changing auth endpoints."""
+    if x_requested_with != "XMLHttpRequest":
+        raise HTTPException(403, detail="CSRF check failed: X-Requested-With header required")
 
 
 def _require_oauth_secret(x_oauth_secret: Optional[str] = Header(None, alias="X-OAuth-Secret")) -> None:
@@ -55,6 +61,7 @@ class UserResponse(BaseModel):
 async def register(
     req: RegisterRequest,
     db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
 ):
     """Create a new user with email/password. Used by frontend signup."""
     async with db.write_session() as session:
@@ -89,6 +96,7 @@ async def register(
 async def login(
     req: LoginRequest,
     db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
 ):
     """Validate email/password and return user. Used by NextAuth Credentials provider."""
     async with db.read_session() as session:

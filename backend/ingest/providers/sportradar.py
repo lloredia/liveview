@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, Optional
 
 from shared.models.domain import (
@@ -322,8 +323,10 @@ class SportradarProvider(BaseProvider):
             player_name = None
             if players and isinstance(players, list) and len(players) > 0:
                 p = players[0]
-                player_name = p.get("name", p.get("full_name", ""))
+                raw_name = p.get("name", p.get("full_name", ""))
+                player_name = escape(raw_name) if raw_name else None
 
+            raw_detail = entry.get("commentary", entry.get("description", et))
             events.append(MatchEvent(
                 match_id=match_id,
                 event_type=_map_sr_event_type(et),
@@ -331,7 +334,7 @@ class SportradarProvider(BaseProvider):
                 period=str(entry.get("period", "")),
                 team_id=team_id,
                 player_name=player_name,
-                detail=entry.get("commentary", entry.get("description", et)),
+                detail=escape(raw_detail) if raw_detail else None,
                 score_home=entry.get("home_score"),
                 score_away=entry.get("away_score"),
                 synthetic=False,

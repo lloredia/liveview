@@ -4,6 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getWsUrl } from "@/lib/api";
 import type { WSMessage } from "@/lib/types";
 
+async function fetchBackendToken(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/auth/backend-token");
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data as { token?: string }).token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface UseWebSocketOptions {
   matchId: string | null | undefined;
   tiers?: number[];
@@ -47,12 +58,19 @@ export function useWebSocket({
     reconnectAttempts.current = 0;
 
     const currentTiers = tiersKey.split(",").map(Number);
+    let destroyed = false;
 
-    const connect = () => {
-      if (matchIdRef.current !== matchId || reconnectAttempts.current > 10) return;
+    const connect = async () => {
+      if (matchIdRef.current !== matchId || reconnectAttempts.current > 10 || destroyed) return;
+
+      const token = await fetchBackendToken();
+
+      if (destroyed || matchIdRef.current !== matchId) return;
 
       try {
-        const ws = new WebSocket(getWsUrl());
+        const baseUrl = getWsUrl();
+        const url = token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+        const ws = new WebSocket(url);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -90,10 +108,10 @@ export function useWebSocket({
           setConnected(false);
           wsRef.current = null;
 
-          if (matchIdRef.current === matchId && reconnectAttempts.current <= 10) {
+          if (matchIdRef.current === matchId && reconnectAttempts.current <= 10 && !destroyed) {
             const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000);
             reconnectAttempts.current += 1;
-            reconnectTimer.current = setTimeout(connect, delay);
+            reconnectTimer.current = setTimeout(() => { connect(); }, delay);
           }
         };
       } catch {
@@ -104,6 +122,7 @@ export function useWebSocket({
     connect();
 
     return () => {
+      destroyed = true;
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;

@@ -60,7 +60,7 @@ from api.routes.notifications import router as notifications_router
 from api.routes.admin import router as admin_router
 from api.routes.auth_routes import router as auth_router
 from api.routes.user_routes import router as user_router
-from auth.deps import ensure_jwt_secret
+from auth.deps import ensure_jwt_secret, _get_jwt_secret
 
 logger = get_logger(__name__)
 
@@ -1303,9 +1303,11 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
 
     # WebSocket endpoint
     @app.websocket("/v1/ws")
-    async def websocket_endpoint(ws: WebSocket) -> None:
+    async def websocket_endpoint(ws: WebSocket, token: Optional[str] = Query(None)) -> None:
         """
         WebSocket endpoint for real-time match updates.
+
+        Requires a valid JWT in the ?token= query parameter (same token used for REST API).
 
         Client operations:
         - subscribe: {"op": "subscribe", "match_id": "...", "tiers": [0, 1]}
@@ -1321,6 +1323,20 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
         """
         if _ws_manager is None:
             await ws.close(code=1013, reason="service_unavailable")
+            return
+        if not token:
+            await ws.close(code=4001, reason="auth_required")
+            return
+        try:
+            import jwt as pyjwt
+            pyjwt.decode(
+                token,
+                _get_jwt_secret(),
+                algorithms=["HS256"],
+                options={"require": ["exp", "sub"]},
+            )
+        except Exception:
+            await ws.close(code=4003, reason="invalid_token")
             return
         await _ws_manager.handle_connection(ws)
 
