@@ -15,15 +15,25 @@ Environment variables:
 import os
 from typing import Optional
 
-from opentelemetry import trace, metrics
+from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+try:
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    _JAEGER_AVAILABLE = True
+except (ImportError, Exception):
+    _JAEGER_AVAILABLE = False
+
+try:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+    _INSTRUMENTATION_AVAILABLE = True
+except (ImportError, Exception):
+    _INSTRUMENTATION_AVAILABLE = False
 
 # Configuration
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -50,39 +60,36 @@ def init_tracing() -> None:
         return
 
     try:
-        # Create resource with service name
         resource = Resource(attributes={
             SERVICE_NAME: OTEL_SERVICE_NAME,
             "environment": OTEL_ENV,
         })
 
-        # Create Jaeger exporter
-        jaeger_exporter = JaegerExporter(
-            agent_host_name=OTEL_JAEGER_HOST,
-            agent_port=OTEL_JAEGER_PORT,
-        )
-
-        # Create tracer provider with exporter
         _tracer_provider = TracerProvider(resource=resource)
-        _tracer_provider.add_span_processor(SimpleSpanProcessor(jaeger_exporter))
 
-        # Set as global tracer
+        if _JAEGER_AVAILABLE:
+            jaeger_exporter = JaegerExporter(
+                agent_host_name=OTEL_JAEGER_HOST,
+                agent_port=OTEL_JAEGER_PORT,
+            )
+            _tracer_provider.add_span_processor(SimpleSpanProcessor(jaeger_exporter))
+            print(
+                f"✓ OpenTelemetry initialized: {OTEL_SERVICE_NAME} → "
+                f"Jaeger({OTEL_JAEGER_HOST}:{OTEL_JAEGER_PORT})"
+            )
+        else:
+            print(f"✓ OpenTelemetry initialized: {OTEL_SERVICE_NAME} (no Jaeger exporter)")
+
         trace.set_tracer_provider(_tracer_provider)
 
-        # Instrument libraries
-        FastAPIInstrumentor().instrument()
-        SQLAlchemyInstrumentor().instrument(
-            enable_commenter=True,
-            commenter_options={"db_driver": "asyncpg"},
-        )
-        HTTPXClientInstrumentor().instrument()
-        RedisInstrumentor().instrument()
-
-        print(
-            f"✓ OpenTelemetry initialized: {OTEL_SERVICE_NAME} → "
-            f"Jaeger({OTEL_JAEGER_HOST}:{OTEL_JAEGER_PORT}) "
-            f"Sample Rate: {OTEL_SAMPLE_RATE}"
-        )
+        if _INSTRUMENTATION_AVAILABLE:
+            FastAPIInstrumentor().instrument()
+            SQLAlchemyInstrumentor().instrument(
+                enable_commenter=True,
+                commenter_options={"db_driver": "asyncpg"},
+            )
+            HTTPXClientInstrumentor().instrument()
+            RedisInstrumentor().instrument()
 
     except Exception as e:
         print(f"⚠ OpenTelemetry initialization failed: {e}")
