@@ -1,13 +1,9 @@
-"""
-End-to-end tests using Playwright.
-
-Tests full user journeys: login → view matches → interact with app
-
-Run with: npx playwright test frontend/e2e/
-
-Requires:
-- npm install -D @playwright/test
-"""
+/**
+ * End-to-end tests using Playwright.
+ * Tests full user journeys: login → view matches → interact with app
+ * Run with: npx playwright test frontend/e2e/
+ * Requires: npm install -D @playwright/test
+ */
 import { test, expect } from "@playwright/test";
 
 test.describe("LiveView E2E Tests", () => {

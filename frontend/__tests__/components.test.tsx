@@ -1,13 +1,10 @@
-"""
-Component tests for frontend components.
-
-Tests form validation, error states, loading states, and user interactions.
-
-Run with: npm test -- frontend/__tests__/components
-"""
+/**
+ * Component tests for frontend components.
+ * Tests form validation, error states, loading states, and user interactions.
+ * Run with: npm test -- frontend/__tests__/components
+ */
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 
 // Mock next/navigation
@@ -35,7 +32,7 @@ describe("Form Validation", () => {
       );
 
       const input = getByRole("textbox");
-      await userEvent.type(input, "invalidemail");
+      fireEvent.change(input, { target: { value: "invalidemail" } });
       fireEvent.blur(input);
 
       // Validation error should be visible
