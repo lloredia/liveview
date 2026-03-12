@@ -1,4 +1,10 @@
 #!/bin/bash
+set -e
+
+# Run database migrations before starting any service
+echo "Running database migrations..."
+python run_migrations.py
+
 case "$SERVICE_TYPE" in
   api)       exec python -m api.service ;;
   ingest)    exec python -m ingest.service ;;
