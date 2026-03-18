@@ -182,6 +182,12 @@ async def _fetch_match_center_match(client: AsyncClient, match_id: str) -> tuple
     return payload["match"], payload["state"]
 
 
+async def _fetch_match_details(client: AsyncClient, match_id: str) -> dict:
+    response = await client.get(f"/v1/matches/{match_id}/details")
+    assert response.status_code == 200
+    return response.json()
+
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.parametrize("match_kind", ["live", "finished"])
@@ -210,3 +216,55 @@ async def test_score_and_phase_are_consistent_across_today_scoreboard_and_match_
     assert match_center_state["score_home"] == expected["score_home"]
     assert match_center_state["score_away"] == expected["score_away"]
 
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_match_details_preserve_canonical_score_and_phase_when_supplementary_conflicts(
+    client,
+    seeded_matches,
+    monkeypatch,
+):
+    live_match = seeded_matches["matches"]["live"]
+
+    async def fake_supplementary(*args, **kwargs):
+        return {
+            "source": "espn",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "sport": "soccer",
+            "plays": [],
+            "team_stats": {"home": [], "away": []},
+            "player_stats": {
+                "home": {"teamName": "Arsenal", "players": [], "statColumns": []},
+                "away": {"teamName": "Chelsea", "players": [], "statColumns": []},
+            },
+            "formations": {"home": "4-3-3", "away": "4-2-3-1"},
+            "injuries": {"home": [], "away": []},
+            "team_display": {
+                "home_name": "Arsenal",
+                "away_name": "Chelsea",
+                "home_team_id": "espn-home",
+                "away_team_id": "espn-away",
+            },
+            "substitutions": None,
+            # Intentionally conflicting with canonical 2-1 live state
+            "warning": "conflicting supplementary payload",
+        }
+
+    monkeypatch.setattr(
+        "api.routes.matches._fetch_espn_supplementary_summary",
+        fake_supplementary,
+    )
+
+    details = await _fetch_match_details(client, live_match["id"])
+    match_center_match, match_center_state = await _fetch_match_center_match(client, live_match["id"])
+
+    assert details["phase"] == live_match["phase"]
+    assert match_center_match["phase"] == live_match["phase"]
+    assert match_center_state is not None
+    assert match_center_state["score_home"] == live_match["score_home"]
+    assert match_center_state["score_away"] == live_match["score_away"]
+
+    assert details["supplementary"]["espn"]["source"] == "espn"
+    assert details["supplementary"]["espn"]["team_display"]["home_name"] == "Arsenal"
+    assert details["supplementary"]["espn"]["team_display"]["away_name"] == "Chelsea"
+    assert details["supplementary"]["espn"]["warning"] == "conflicting supplementary payload"

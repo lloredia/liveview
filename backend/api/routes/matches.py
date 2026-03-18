@@ -616,11 +616,25 @@ async def get_match_stats(
 @router.get("/{match_id}/details")
 async def get_match_details(
     match_id: uuid.UUID,
+    request: Request,
     response: Response,
     db: DatabaseManager = Depends(get_db),
+    redis: RedisManager = Depends(get_redis),
 ) -> dict[str, Any]:
     """Get combined backend detail sections for the match center tabs."""
     _no_store(response)
+    cache_key = f"snap:match:{match_id}:details"
+    cached = await redis.client.get(cache_key)
+    if cached:
+        etag = _compute_etag(cached)
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match and if_none_match == etag:
+            not_modified = Response(status_code=304)
+            not_modified.headers["ETag"] = etag
+            _no_store(not_modified)
+            return not_modified
+        response.headers["ETag"] = etag
+        return json.loads(cached)
 
     async with db.read_session() as session:
         ht = TeamORM.__table__.alias("ht")
@@ -706,7 +720,7 @@ async def get_match_details(
         )
     }
 
-    return {
+    payload = {
         "match_id": str(match_id),
         "phase": match_row.phase,
         "timeline": {
@@ -726,6 +740,12 @@ async def get_match_details(
         "supplementary": supplementary,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+    payload_json = json.dumps(payload, default=str)
+    response.headers["ETag"] = _compute_etag(payload_json)
+    phase = str(match_row.phase or "").lower()
+    cache_ttl = 15 if phase.startswith("live") or phase == "break" else 60
+    await redis.client.set(cache_key, payload_json, ex=cache_ttl)
+    return payload
 
 
 # Football-Data.org competition codes for lineup lookup (soccer)
