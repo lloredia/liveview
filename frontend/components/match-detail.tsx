@@ -166,7 +166,7 @@ interface MatchCenterTeamStatsSection {
 
 /** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
 function backendEventsToPlays(events: MatchEvent[]): ESPNPlay[] {
-  const periodLabel = (p: string | null) => (p === "HT" || p === "1" ? "1st" : p === "2" ? "2nd" : p || "1");
+  const periodLabel = (p: string | null) => (p === "1" ? "1st" : p === "2" ? "2nd" : p || "1");
   return events.map((e, i) => ({
     id: e.id,
     text: e.detail || e.event_type || "—",

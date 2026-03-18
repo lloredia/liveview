@@ -147,6 +147,17 @@ async def _invalidate_match_detail_cache(
     await redis.client.delete(*keys)
 
 
+async def _invalidate_match_scoreboard_cache(
+    redis: RedisManager,
+    match_ids: set[str] | None = None,
+) -> None:
+    """Invalidate cached match-center scoreboard snapshots for changed matches."""
+    if not match_ids:
+        return
+    keys = [f"snap:match:{match_id}:scoreboard" for match_id in match_ids]
+    await redis.client.delete(*keys)
+
+
 async def _invalidate_match_stats_cache(
     redis: RedisManager,
     match_ids: set[str] | None = None,
@@ -300,6 +311,7 @@ async def _refresh_live_scores_via_router(
     try:
         await _invalidate_today_cache(redis)
         await _invalidate_scoreboard_cache(redis, changed_league_ids)
+        await _invalidate_match_scoreboard_cache(redis, changed_match_ids)
         await _invalidate_match_detail_cache(redis, changed_match_ids)
         await _invalidate_match_stats_cache(redis, changed_match_ids)
     except Exception:
@@ -1298,7 +1310,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
         db: DatabaseManager = Depends(get_db),
         redis: RedisManager = Depends(get_redis),
     ) -> dict[str, Any]:
-        """Run one live score refresh cycle and invalidate today cache. For manual/cron use."""
+        """Run one live score refresh cycle and invalidate live-facing caches. For manual/cron use."""
         async with httpx.AsyncClient(timeout=12.0) as client:
             if force:
                 try:
@@ -1314,9 +1326,18 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
                     return {"ok": False, "message": "ESPN circuit breaker open, try again later or use ?force=true"}
         try:
             await _invalidate_today_cache(redis)
+            async with db.read_session() as session:
+                league_rows = await session.execute(select(LeagueORM.id))
+                match_rows = await session.execute(select(MatchORM.id))
+                all_league_ids = {str(row.id) for row in league_rows}
+                all_match_ids = {str(row.id) for row in match_rows}
+            await _invalidate_scoreboard_cache(redis, all_league_ids)
+            await _invalidate_match_scoreboard_cache(redis, all_match_ids)
+            await _invalidate_match_detail_cache(redis, all_match_ids)
+            await _invalidate_match_stats_cache(redis, all_match_ids)
         except Exception:
-            logger.warning("today_cache_invalidation_failed", exc_info=True)
-        return {"ok": True, "message": "Refresh cycle run, today cache invalidated", "matches_updated": updated, "build": "live_scores_raw_sql"}
+            logger.warning("manual_refresh_cache_invalidation_failed", exc_info=True)
+        return {"ok": True, "message": "Refresh cycle run, live caches invalidated", "matches_updated": updated, "build": "live_scores_raw_sql"}
 
     @app.get("/ready", tags=["system"])
     async def readiness() -> Dict[str, Union[str, bool]]:
