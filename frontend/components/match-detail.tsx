@@ -567,10 +567,10 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   }, [activeTab, isSoccer]);
 
   const timelineFetcher = useCallback(() => fetchTimeline(matchId), [matchId]);
-  const { data: timelineData } = usePolling<TimelineResponse>({
+  const { data: timelineData, loading: timelineLoading } = usePolling<TimelineResponse>({
     fetcher: timelineFetcher,
     interval: 15000,
-    enabled: !!matchData && (!espnData || (espnData.plays || []).length === 0),
+    enabled: !!matchData,
     key: `timeline-${matchId}`,
   });
 
@@ -594,12 +594,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
 
   // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
   const playsForTab = useMemo(() => {
-    if (espnData?.plays?.length) return espnData.plays;
     if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
+    if (espnData?.plays?.length) return espnData.plays;
     return backendEventsToPlays(matchData?.recent_events || []);
   }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
 
-  const playByPlayLoading = espnLoading && !espnData && playsForTab.length === 0;
+  const playByPlayLoading = (timelineLoading || espnLoading) && playsForTab.length === 0;
 
   if (matchLoading && !matchData) {
     return (

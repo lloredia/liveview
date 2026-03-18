@@ -64,6 +64,11 @@ def _state_payload(row: Any, state: Any) -> dict[str, Any]:
     return out
 
 
+def _no_store(response: Response) -> None:
+    """Mark match-center detail responses as uncached by clients/proxies."""
+    response.headers["Cache-Control"] = "no-store"
+
+
 @router.get("/{match_id}")
 async def get_match_center(
     match_id: uuid.UUID,
@@ -86,7 +91,10 @@ async def get_match_center(
         etag = _compute_etag(cached)
         if_none_match = request.headers.get("if-none-match")
         if if_none_match and if_none_match == etag:
-            return Response(status_code=304)
+            not_modified = Response(status_code=304)
+            not_modified.headers["ETag"] = etag
+            _no_store(not_modified)
+            return not_modified
 
     async with db.read_session() as session:
         ht = TeamORM.__table__.alias("ht")
@@ -235,7 +243,7 @@ async def get_match_timeline(
     }
 
     # Short cache — timeline changes frequently during live matches
-    response.headers["Cache-Control"] = "no-store"
+    _no_store(response)
     return payload
 
 
@@ -259,10 +267,13 @@ async def get_match_stats(
         etag = _compute_etag(cached)
         if_none_match = request.headers.get("if-none-match")
         if if_none_match and if_none_match == etag:
-            return Response(status_code=304)
+            not_modified = Response(status_code=304)
+            not_modified.headers["ETag"] = etag
+            _no_store(not_modified)
+            return not_modified
         data = json.loads(cached)
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = "public, max-age=5"
+        _no_store(response)
         return data
 
     async with db.read_session() as session:
@@ -314,7 +325,7 @@ async def get_match_stats(
     payload_json = json.dumps(payload, default=str)
     etag = _compute_etag(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=5"
+    _no_store(response)
 
     return payload
 
@@ -384,6 +395,7 @@ def _team_names_match(our_home: str, our_away: str, fd_home: str, fd_away: str) 
 @router.get("/{match_id}/lineup")
 async def get_match_lineup(
     match_id: uuid.UUID,
+    response: Response,
     db: DatabaseManager = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -393,6 +405,7 @@ async def get_match_lineup(
     provider_mappings or by league + date + team names. Returns home/away
     formation, lineup, and bench when available.
     """
+    _no_store(response)
     settings = get_settings()
     if not settings.football_data_api_key:
         return {"source": None, "home": None, "away": None, "message": "Football-Data.org API key not configured"}
@@ -586,6 +599,7 @@ def _build_player_stats_from_fd_match(data: dict) -> dict[str, Any]:
 @router.get("/{match_id}/player-stats")
 async def get_match_player_stats(
     match_id: uuid.UUID,
+    response: Response,
     db: DatabaseManager = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -594,6 +608,7 @@ async def get_match_player_stats(
     Returns home/away players with G, A, YC, RC derived from lineup + goals + bookings.
     Same shape as ESPN boxscore players for the Player Stats tab.
     """
+    _no_store(response)
     settings = get_settings()
     if not settings.football_data_api_key:
         return {"source": None, "home": None, "away": None, "message": "Football-Data.org API key not configured"}

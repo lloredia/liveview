@@ -142,6 +142,151 @@ test.describe("LiveView E2E Tests", () => {
         }
       }
     });
+
+    test("should render backend match-center fallback data in play-by-play and lineup tabs", async ({
+      page,
+    }) => {
+      await page.route("**/v1/matches/test-match", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match: {
+              id: "test-match",
+              phase: "live",
+              start_time: "2026-03-18T19:00:00Z",
+              venue: "Emirates Stadium",
+              home_team: {
+                id: "home-1",
+                name: "Arsenal",
+                short_name: "ARS",
+                logo_url: null,
+              },
+              away_team: {
+                id: "away-1",
+                name: "Chelsea",
+                short_name: "CHE",
+                logo_url: null,
+              },
+            },
+            state: {
+              score_home: 1,
+              score_away: 0,
+              clock: "63'",
+              period: "2",
+              period_scores: [],
+              version: 7,
+            },
+            recent_events: [],
+            league: {
+              id: "premier-league",
+              name: "Premier League",
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/timeline**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            events: [
+              {
+                id: "evt-1",
+                event_type: "goal",
+                minute: 63,
+                second: 0,
+                period: "1",
+                team_id: "home-1",
+                player_name: "Bukayo Saka",
+                detail: "Goal by Bukayo Saka",
+                score_home: 1,
+                score_away: 0,
+                synthetic: false,
+                confidence: 1,
+                seq: 1,
+              },
+            ],
+            count: 1,
+            next_seq: null,
+            has_more: false,
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/lineup", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            source: "football_data",
+            home: {
+              formation: "4-3-3",
+              lineup: [
+                {
+                  id: 1,
+                  name: "David Raya",
+                  position: "GK",
+                  shirt_number: 22,
+                },
+              ],
+              bench: [
+                {
+                  id: 2,
+                  name: "Leandro Trossard",
+                  position: "FW",
+                  shirt_number: 19,
+                },
+              ],
+            },
+            away: {
+              formation: "4-2-3-1",
+              lineup: [
+                {
+                  id: 3,
+                  name: "Robert Sanchez",
+                  position: "GK",
+                  shirt_number: 1,
+                },
+              ],
+              bench: [
+                {
+                  id: 4,
+                  name: "Mykhailo Mudryk",
+                  position: "FW",
+                  shirt_number: 10,
+                },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route("**/api/espn/site/**", async (route) => {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "not found" }),
+        });
+      });
+
+      await goto(page, `/match/test-match?league=Premier%20League`);
+
+      await page.getByRole("button", { name: "Play-by-Play" }).click();
+      await expect(page.getByRole("button", { name: /1st/i })).toBeVisible();
+      await expect(page.getByText("Goal by Bukayo Saka")).toBeVisible();
+
+      await page.getByRole("button", { name: "Lineup" }).click();
+      await expect(page.getByText("Data by Football-Data.org")).toBeVisible();
+      await expect(page.getByText("David Raya")).toBeVisible();
+      await expect(page.getByText("Robert Sanchez")).toBeVisible();
+      await expect(page.getByText("Bench")).toBeVisible();
+      await expect(page.getByText("Leandro Trossard")).toBeVisible();
+    });
   });
 
   test.describe("Authentication", () => {
