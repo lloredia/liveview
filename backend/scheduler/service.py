@@ -30,6 +30,7 @@ from shared.models.orm import (
     SportORM,
     TeamORM,
 )
+from shared.provider_mapping import ensure_provider_mapping_consistency
 from shared.utils.database import DatabaseManager
 from shared.utils.health_server import start_health_server
 from shared.utils.logging import get_logger, setup_logging
@@ -699,12 +700,13 @@ class ScheduleSyncService:
             ))
             await session.flush()
 
-        mapping_ok = await self._ensure_provider_mapping_consistency(
+        mapping_ok = await ensure_provider_mapping_consistency(
             session,
             entity_type="league",
             canonical_id=league_id,
             provider="espn",
             provider_id=espn_league_id,
+            conflict_event="schedule_sync_provider_mapping_conflict",
         )
         if not mapping_ok:
             raise ValueError(f"Conflicting league mapping for ESPN league {espn_league_id}")
@@ -743,12 +745,13 @@ class ScheduleSyncService:
             short_name=short_name, logo_url=logo_url,
         ))
         await session.flush()
-        mapping_ok = await self._ensure_provider_mapping_consistency(
+        mapping_ok = await ensure_provider_mapping_consistency(
             session,
             entity_type="team",
             canonical_id=team_id,
             provider="espn",
             provider_id=scoped_id,
+            conflict_event="schedule_sync_provider_mapping_conflict",
         )
         if not mapping_ok:
             raise ValueError(f"Conflicting team mapping for ESPN team {scoped_id}")
@@ -856,12 +859,13 @@ class ScheduleSyncService:
             )
         )).scalar_one_or_none()
         if existing_match:
-            mapping_ok = await self._ensure_provider_mapping_consistency(
+            mapping_ok = await ensure_provider_mapping_consistency(
                 session,
                 entity_type="match",
                 canonical_id=existing_match.id,
                 provider="espn",
                 provider_id=espn_event_id,
+                conflict_event="schedule_sync_provider_mapping_conflict",
             )
             if not mapping_ok:
                 raise ValueError(f"Conflicting match mapping for ESPN event {espn_event_id}")
@@ -901,12 +905,13 @@ class ScheduleSyncService:
             clock=clock, phase=phase.value, extra_data=extra_data,
         ))
         await session.flush()
-        mapping_ok = await self._ensure_provider_mapping_consistency(
+        mapping_ok = await ensure_provider_mapping_consistency(
             session,
             entity_type="match",
             canonical_id=match_id,
             provider="espn",
             provider_id=espn_event_id,
+            conflict_event="schedule_sync_provider_mapping_conflict",
         )
         if not mapping_ok:
             raise ValueError(f"Conflicting match mapping for ESPN event {espn_event_id}")

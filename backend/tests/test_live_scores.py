@@ -11,7 +11,6 @@ from types import SimpleNamespace
 import uuid
 
 from api.app import (
-    _ensure_provider_mapping_consistency,
     _non_terminal_phase_values,
     _resolve_match_from_provider_match,
     _resolve_phase,
@@ -19,6 +18,7 @@ from api.app import (
 )
 from api.live_fallback import TSDB_STATUS_TO_PHASE, TSDB_LEAGUE_MAP, _safe_int
 from shared.models.enums import MatchPhase
+from shared.provider_mapping import ensure_provider_mapping_consistency
 
 
 # ── _resolve_phase ──────────────────────────────────────────────────────
@@ -321,24 +321,26 @@ async def test_ensure_provider_mapping_consistency_refuses_conflicting_remap() -
     executed: list[str] = []
 
     class _FakeResult:
-        def __init__(self, row=None) -> None:
-            self._row = row
+        def __init__(self, mapping=None) -> None:
+            self._mapping = mapping
 
-        def fetchone(self):
-            return self._row
+        def scalar_one_or_none(self):
+            return self._mapping
 
     class _FakeSession:
         async def execute(self, stmt, params=None):  # type: ignore[no-untyped-def]
             executed.append(str(stmt))
-            if "SELECT canonical_id FROM provider_mappings" in str(stmt):
-                return _FakeResult(row=(existing_id,))
+            if "FROM provider_mappings" in str(stmt):
+                return _FakeResult(mapping=SimpleNamespace(canonical_id=existing_id))
             raise AssertionError("Conflict path should not write to provider_mappings")
 
-    persisted = await _ensure_provider_mapping_consistency(
+    persisted = await ensure_provider_mapping_consistency(
         _FakeSession(),
+        entity_type="match",
         provider="sportradar",
         provider_id="sr:match:1",
         canonical_id=attempted_id,
+        conflict_event="provider_mapping_conflict",
     )
 
     assert persisted is False

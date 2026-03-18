@@ -45,7 +45,9 @@ from shared.utils.metrics import (
     LIVE_REFRESH_FALLBACKS,
     LIVE_REFRESH_UPDATES,
     LIVE_GAMES_DETECTED,
+    PROVIDER_MAPPING_UNRESOLVED,
 )
+from shared.provider_mapping import ensure_provider_mapping_consistency
 from shared.utils.redis_manager import RedisManager
 from shared.tracing import init_tracing, shutdown_tracing
 from shared.query_monitoring import init_query_monitoring
@@ -515,59 +517,6 @@ async def _resolve_match_from_provider_match(
     return None
 
 
-async def _ensure_provider_mapping_consistency(
-    session: Any,
-    provider: str,
-    provider_id: str,
-    canonical_id: uuid_mod.UUID,
-) -> bool:
-    """Persist a provider mapping without allowing weak fallback resolution to remap an existing provider id."""
-    existing_row = (
-        await session.execute(
-            text(
-                "SELECT canonical_id FROM provider_mappings "
-                "WHERE entity_type = 'match' AND provider = :provider AND provider_id = :provider_id"
-            ),
-            {"provider": provider, "provider_id": provider_id},
-        )
-    ).fetchone()
-
-    if existing_row:
-        existing_canonical_id = existing_row[0]
-        if existing_canonical_id != canonical_id:
-            logger.warning(
-                "provider_mapping_conflict",
-                provider=provider,
-                provider_id=provider_id,
-                existing_canonical_id=str(existing_canonical_id),
-                attempted_canonical_id=str(canonical_id),
-            )
-            return False
-        await session.execute(
-            text(
-                "UPDATE provider_mappings SET updated_at = NOW() "
-                "WHERE entity_type = 'match' AND provider = :provider AND provider_id = :provider_id"
-            ),
-            {"provider": provider, "provider_id": provider_id},
-        )
-        return True
-
-    await session.execute(
-        text(
-            "INSERT INTO provider_mappings "
-            "(id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
-            "VALUES (:id, 'match', :canonical_id, :provider, :provider_id, '{}'::jsonb, NOW(), NOW())"
-        ),
-        {
-            "id": uuid_mod.uuid4(),
-            "canonical_id": canonical_id,
-            "provider": provider,
-            "provider_id": provider_id,
-        },
-    )
-    return True
-
-
 def _provider_status_to_phase(status_value: str) -> str:
     """Map infra MatchStatus value to matches.phase / match_state.phase string."""
     m = {
@@ -618,8 +567,10 @@ async def _apply_provider_matches(
                     if resolved:
                         match_id, canonical_league_id = resolved
                         changed_league_ids.add(str(canonical_league_id))
-                        mapping_persisted = await _ensure_provider_mapping_consistency(
+                        mapping_persisted = await ensure_provider_mapping_consistency(
                             session,
+                            entity_type="match",
+                            conflict_event="provider_mapping_conflict",
                             provider="sportradar",
                             provider_id=pm.provider_id,
                             canonical_id=match_id,
@@ -627,6 +578,16 @@ async def _apply_provider_matches(
                         if not mapping_persisted:
                             match_id = None
                 if not match_id:
+                    PROVIDER_MAPPING_UNRESOLVED.labels(
+                        provider=getattr(pm, "provider_name", "unknown"),
+                        reason="match_not_resolved",
+                    ).inc()
+                    logger.warning(
+                        "provider_match_unresolved",
+                        provider=getattr(pm, "provider_name", "unknown"),
+                        provider_match_id=getattr(pm, "provider_id", ""),
+                        league_slug=league_slug,
+                    )
                     continue
 
                 league_row = (
@@ -807,8 +768,10 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     )
                     match_source = "fallback" if match_id else None
                     if match_id:
-                        persisted = await _ensure_provider_mapping_consistency(
+                        persisted = await ensure_provider_mapping_consistency(
                             session,
+                            entity_type="match",
+                            conflict_event="provider_mapping_conflict",
                             provider="espn",
                             provider_id=espn_id,
                             canonical_id=match_id,
@@ -816,6 +779,16 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                         if not persisted:
                             continue
                     else:
+                        PROVIDER_MAPPING_UNRESOLVED.labels(
+                            provider="espn",
+                            reason="match_not_resolved",
+                        ).inc()
+                        logger.warning(
+                            "provider_match_unresolved",
+                            provider="espn",
+                            provider_match_id=espn_id,
+                            league_slug=espn_league_id,
+                        )
                         continue
 
                 score_home = 0

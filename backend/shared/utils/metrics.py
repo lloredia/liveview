@@ -118,6 +118,16 @@ LIVE_GAMES_DETECTED = Gauge(
     "lv_live_games_detected",
     "Number of live/active leagues detected in last refresh cycle",
 )
+PROVIDER_MAPPING_CONFLICTS = Counter(
+    "lv_provider_mapping_conflicts_total",
+    "Conflicting attempts to assign an existing provider id to a different canonical entity",
+    ["provider", "entity_type"],
+)
+PROVIDER_MAPPING_UNRESOLVED = Counter(
+    "lv_provider_mapping_unresolved_total",
+    "Provider matches that could not be resolved to a canonical entity",
+    ["provider", "reason"],
+)
 
 # ── Info ────────────────────────────────────────────────────────────────
 SERVICE_INFO = Info("lv_service", "Service build information")
