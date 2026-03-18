@@ -76,6 +76,27 @@ def _canonical_phase(match_phase: str | None, state_phase: str | None) -> str | 
     return state_phase if state_phase is not None else match_phase
 
 
+def _build_team_stats_payload(match_id: uuid.UUID, match_row: Any, stats: Any) -> dict[str, Any]:
+    """Build the canonical team-stats payload shared by /stats and /details."""
+    teams_stats = []
+    if stats:
+        for side, team_id, team_name, stats_data in [
+            ("home", match_row.home_team_id, match_row.ht_short or match_row.ht_name, stats.home_stats),
+            ("away", match_row.away_team_id, match_row.at_short or match_row.at_name, stats.away_stats),
+        ]:
+            teams_stats.append({
+                "team_id": str(team_id) if team_id else None,
+                "team_name": team_name,
+                "side": side,
+                "stats": stats_data or {},
+            })
+    return {
+        "match_id": str(match_id),
+        "teams": teams_stats,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 _LEAGUE_TO_ESPN_MAP: dict[str, dict[str, str]] = {
     "Premier League": {"sport": "soccer", "slug": "eng.1"},
     "La Liga": {"sport": "soccer", "slug": "esp.1"},
@@ -599,24 +620,7 @@ async def get_match_stats(
         stats_result = await session.execute(stats_stmt)
         stats = stats_result.scalar_one_or_none()
 
-        teams_stats = []
-        if stats:
-            for side, team_id, team_name, stats_data in [
-                ("home", match_row.home_team_id, match_row.ht_short or match_row.ht_name, stats.home_stats),
-                ("away", match_row.away_team_id, match_row.at_short or match_row.at_name, stats.away_stats),
-            ]:
-                teams_stats.append({
-                    "team_id": str(team_id) if team_id else None,
-                    "team_name": team_name,
-                    "side": side,
-                    "stats": stats_data or {},
-                })
-
-    payload = {
-        "match_id": str(match_id),
-        "teams": teams_stats,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    payload = _build_team_stats_payload(match_id, match_row, stats)
 
     payload_json = json.dumps(payload, default=str)
     etag = _compute_etag(payload_json)
@@ -694,19 +698,6 @@ async def get_match_details(
         stats_result = await session.execute(stats_stmt)
         stats = stats_result.scalar_one_or_none()
 
-        teams_stats = []
-        if stats:
-            for side, team_id, team_name, stats_data in [
-                ("home", match_row.home_team_id, match_row.ht_short or match_row.ht_name, stats.home_stats),
-                ("away", match_row.away_team_id, match_row.at_short or match_row.at_name, stats.away_stats),
-            ]:
-                teams_stats.append({
-                    "team_id": str(team_id) if team_id else None,
-                    "team_name": team_name,
-                    "side": side,
-                    "stats": stats_data or {},
-                })
-
     soccer_details = None
     settings = get_settings()
     if settings.football_data_api_key:
@@ -748,11 +739,7 @@ async def get_match_details(
             "next_seq": events[-1]["seq"] if events else None,
             "has_more": len(events) == 100,
         },
-        "stats": {
-            "match_id": str(match_id),
-            "teams": teams_stats,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        },
+        "stats": _build_team_stats_payload(match_id, match_row, stats),
         "soccer_details": soccer_details,
         "supplementary": supplementary,
         "generated_at": datetime.now(timezone.utc).isoformat(),
