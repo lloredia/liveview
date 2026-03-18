@@ -368,8 +368,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const detailsFetcher = useCallback(() => fetchMatchDetails(matchId), [matchId]);
   const { data: detailsData, loading: detailsLoading } = usePolling<MatchCenterDetailsResponse>({
     fetcher: detailsFetcher,
-    interval: detailLive ? 30000 : 0,
-    intervalWhenHidden: detailLive ? 90000 : undefined,
+    interval: detailLive ? 15000 : 0,
+    intervalWhenHidden: detailLive ? 45000 : undefined,
     enabled:
       !!matchData &&
       (activeTab === "play_by_play" ||
