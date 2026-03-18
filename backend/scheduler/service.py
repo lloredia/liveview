@@ -245,6 +245,47 @@ class SchedulerService:
 
             return matches
 
+    async def _ensure_provider_mapping_consistency(
+        self,
+        session: Any,
+        entity_type: str,
+        canonical_id: uuid.UUID,
+        provider: str,
+        provider_id: str,
+    ) -> bool:
+        """Persist a provider mapping without remapping an existing provider id to a different canonical record."""
+        existing = (
+            await session.execute(
+                select(ProviderMappingORM.canonical_id).where(
+                    ProviderMappingORM.entity_type == entity_type,
+                    ProviderMappingORM.provider == provider,
+                    ProviderMappingORM.provider_id == provider_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            if existing != canonical_id:
+                logger.warning(
+                    "scheduler_provider_mapping_conflict",
+                    entity_type=entity_type,
+                    provider=provider,
+                    provider_id=provider_id,
+                    existing_canonical_id=str(existing),
+                    attempted_canonical_id=str(canonical_id),
+                )
+                return False
+            return True
+
+        session.add(ProviderMappingORM(
+            id=uuid.uuid4(),
+            entity_type=entity_type,
+            canonical_id=canonical_id,
+            provider=provider,
+            provider_id=provider_id,
+        ))
+        await session.flush()
+        return True
+
     # ── Task management ─────────────────────────────────────────────────
 
     async def _reconcile_tasks(self) -> None:
@@ -600,6 +641,47 @@ class ScheduleSyncService:
 
         return new_count, updated_count
 
+    async def _ensure_provider_mapping_consistency(
+        self,
+        session: Any,
+        entity_type: str,
+        canonical_id: uuid.UUID,
+        provider: str,
+        provider_id: str,
+    ) -> bool:
+        """Persist a provider mapping without remapping an existing provider id to a different canonical record."""
+        existing = (
+            await session.execute(
+                select(ProviderMappingORM.canonical_id).where(
+                    ProviderMappingORM.entity_type == entity_type,
+                    ProviderMappingORM.provider == provider,
+                    ProviderMappingORM.provider_id == provider_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            if existing != canonical_id:
+                logger.warning(
+                    "schedule_sync_provider_mapping_conflict",
+                    entity_type=entity_type,
+                    provider=provider,
+                    provider_id=provider_id,
+                    existing_canonical_id=str(existing),
+                    attempted_canonical_id=str(canonical_id),
+                )
+                return False
+            return True
+
+        session.add(ProviderMappingORM(
+            id=uuid.uuid4(),
+            entity_type=entity_type,
+            canonical_id=canonical_id,
+            provider=provider,
+            provider_id=provider_id,
+        ))
+        await session.flush()
+        return True
+
     async def _upsert_league(
         self, session: Any, sport_id: uuid.UUID, name: str, country: str,
         espn_league_id: str,
@@ -617,19 +699,15 @@ class ScheduleSyncService:
             ))
             await session.flush()
 
-        # Ensure provider mapping
-        mapping_stmt = select(ProviderMappingORM.id).where(
-            ProviderMappingORM.entity_type == "league",
-            ProviderMappingORM.provider == "espn",
-            ProviderMappingORM.provider_id == espn_league_id,
+        mapping_ok = await self._ensure_provider_mapping_consistency(
+            session,
+            entity_type="league",
+            canonical_id=league_id,
+            provider="espn",
+            provider_id=espn_league_id,
         )
-        if not (await session.execute(mapping_stmt)).scalar_one_or_none():
-            session.add(ProviderMappingORM(
-                id=uuid.uuid4(), entity_type="league",
-                canonical_id=league_id, provider="espn",
-                provider_id=espn_league_id,
-            ))
-            await session.flush()
+        if not mapping_ok:
+            raise ValueError(f"Conflicting league mapping for ESPN league {espn_league_id}")
         return league_id
 
     async def _upsert_team(
@@ -665,11 +743,15 @@ class ScheduleSyncService:
             short_name=short_name, logo_url=logo_url,
         ))
         await session.flush()
-        session.add(ProviderMappingORM(
-            id=uuid.uuid4(), entity_type="team",
-            canonical_id=team_id, provider="espn", provider_id=scoped_id,
-        ))
-        await session.flush()
+        mapping_ok = await self._ensure_provider_mapping_consistency(
+            session,
+            entity_type="team",
+            canonical_id=team_id,
+            provider="espn",
+            provider_id=scoped_id,
+        )
+        if not mapping_ok:
+            raise ValueError(f"Conflicting team mapping for ESPN team {scoped_id}")
         return team_id
 
     async def _upsert_match_from_event(
@@ -762,6 +844,47 @@ class ScheduleSyncService:
                 state_obj.extra_data = extra
             return False
 
+        existing_match = (await session.execute(
+            select(MatchORM).where(
+                MatchORM.league_id == league_id,
+                MatchORM.home_team_id == home_team_id,
+                MatchORM.away_team_id == away_team_id,
+                MatchORM.start_time.between(
+                    start_time - timedelta(minutes=90),
+                    start_time + timedelta(minutes=90),
+                ),
+            )
+        )).scalar_one_or_none()
+        if existing_match:
+            mapping_ok = await self._ensure_provider_mapping_consistency(
+                session,
+                entity_type="match",
+                canonical_id=existing_match.id,
+                provider="espn",
+                provider_id=espn_event_id,
+            )
+            if not mapping_ok:
+                raise ValueError(f"Conflicting match mapping for ESPN event {espn_event_id}")
+            existing_match.phase = phase.value
+            existing_state = (await session.execute(
+                select(MatchStateORM).where(MatchStateORM.match_id == existing_match.id)
+            )).scalar_one_or_none()
+            if existing_state:
+                existing_state.score_home = score_home
+                existing_state.score_away = score_away
+                existing_state.clock = clock
+                existing_state.phase = phase.value
+                existing_state.version += 1
+                extra = dict(existing_state.extra_data or {})
+                if aggregate_home is not None and aggregate_away is not None:
+                    extra["aggregate_home"] = aggregate_home
+                    extra["aggregate_away"] = aggregate_away
+                else:
+                    extra.pop("aggregate_home", None)
+                    extra.pop("aggregate_away", None)
+                existing_state.extra_data = extra
+            return False
+
         match_id = uuid.uuid4()
         extra_data: dict[str, Any] = {}
         if aggregate_home is not None and aggregate_away is not None:
@@ -778,11 +901,15 @@ class ScheduleSyncService:
             clock=clock, phase=phase.value, extra_data=extra_data,
         ))
         await session.flush()
-        session.add(ProviderMappingORM(
-            id=uuid.uuid4(), entity_type="match",
-            canonical_id=match_id, provider="espn", provider_id=espn_event_id,
-        ))
-        await session.flush()
+        mapping_ok = await self._ensure_provider_mapping_consistency(
+            session,
+            entity_type="match",
+            canonical_id=match_id,
+            provider="espn",
+            provider_id=espn_event_id,
+        )
+        if not mapping_ok:
+            raise ValueError(f"Conflicting match mapping for ESPN event {espn_event_id}")
         return True
 
     def request_shutdown(self) -> None:

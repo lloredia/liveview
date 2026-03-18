@@ -18,7 +18,7 @@ from scheduler.engine.polling import AdaptivePollingEngine, _phase_tempo_key, SP
 from ingest.providers.registry import HealthScorer
 from shared.models.domain import ProviderHealth
 from shared.models.enums import ProviderName
-from scheduler.service import SchedulerService
+from scheduler.service import SchedulerService, ScheduleSyncService
 
 
 # ── Phase tempo key ─────────────────────────────────────────────────────
@@ -346,3 +346,151 @@ async def test_discover_active_matches_uses_minimum_postgame_recheck_window_of_1
         value == fixed_now - timedelta(minutes=15)
         for value in compiled.params.values()
     ), compiled.params
+
+
+@pytest.mark.asyncio
+async def test_scheduler_mapping_consistency_rejects_conflicting_provider_id(
+    mock_redis: MagicMock,
+) -> None:
+    existing_id = uuid.uuid4()
+    attempted_id = uuid.uuid4()
+
+    class _FakeResult:
+        def __init__(self, scalar_value=None) -> None:
+            self._scalar_value = scalar_value
+
+        def scalar_one_or_none(self):
+            return self._scalar_value
+
+    class _FakeSession:
+        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+            return _FakeResult(scalar_value=existing_id)
+
+        async def flush(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("Conflict path must not flush a new mapping")
+
+        def add(self, _value):  # type: ignore[no-untyped-def]
+            raise AssertionError("Conflict path must not add a new mapping")
+
+    service = ScheduleSyncService(
+        MagicMock(),
+        redis=mock_redis,
+        settings=SimpleNamespace(
+            instance_id="test-instance",
+            postgame_recheck_minutes=180,
+        ),
+    )
+
+    persisted = await service._ensure_provider_mapping_consistency(
+        _FakeSession(),
+        entity_type="match",
+        canonical_id=attempted_id,
+        provider="espn",
+        provider_id="espn-event-1",
+    )
+
+    assert persisted is False
+
+
+@pytest.mark.asyncio
+async def test_upsert_match_from_event_reuses_existing_match_when_mapping_is_missing(
+    mock_redis: MagicMock,
+) -> None:
+    existing_match_id = uuid.uuid4()
+    existing_state = SimpleNamespace(
+        score_home=0,
+        score_away=0,
+        clock=None,
+        phase=MatchPhase.SCHEDULED.value,
+        version=1,
+        extra_data={},
+    )
+    existing_match = SimpleNamespace(id=existing_match_id, phase=MatchPhase.SCHEDULED.value)
+    added: list[object] = []
+
+    class _FakeResult:
+        def __init__(self, scalar_value=None) -> None:
+            self._scalar_value = scalar_value
+
+        def scalar_one_or_none(self):
+            return self._scalar_value
+
+    class _FakeSession:
+        def __init__(self) -> None:
+            self._match_mapping_lookup_count = 0
+
+        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+            sql = str(stmt)
+            if "provider_mappings.entity_type = :entity_type_1" in sql and "provider_id = :provider_id_1" in sql:
+                compiled = stmt.compile()
+                params = compiled.params
+                entity_type = next(v for k, v in params.items() if k.startswith("entity_type"))
+                provider_id = next(v for k, v in params.items() if k.startswith("provider_id"))
+                if entity_type == "team":
+                    if provider_id.endswith(":100"):
+                        return _FakeResult(scalar_value=uuid.uuid4())
+                    if provider_id.endswith(":200"):
+                        return _FakeResult(scalar_value=uuid.uuid4())
+                if entity_type == "match":
+                    self._match_mapping_lookup_count += 1
+                    if self._match_mapping_lookup_count == 1:
+                        return _FakeResult(scalar_value=None)
+                    return _FakeResult(scalar_value=None)
+            if "FROM matches" in sql and "home_team_id" in sql and "away_team_id" in sql:
+                return _FakeResult(scalar_value=existing_match)
+            if "FROM match_state" in sql:
+                return _FakeResult(scalar_value=existing_state)
+            raise AssertionError(f"Unexpected statement: {sql}")
+
+        async def flush(self):  # type: ignore[no-untyped-def]
+            return None
+
+        def add(self, value):  # type: ignore[no-untyped-def]
+            added.append(value)
+
+    service = ScheduleSyncService(
+        MagicMock(),
+        redis=mock_redis,
+        settings=SimpleNamespace(
+            instance_id="test-instance",
+            postgame_recheck_minutes=180,
+        ),
+    )
+
+    event = {
+        "id": "evt-1",
+        "date": "2026-03-18T12:00:00Z",
+        "competitions": [
+            {
+                "date": "2026-03-18T12:00:00Z",
+                "status": {
+                    "type": {"name": "STATUS_IN_PROGRESS"},
+                    "displayClock": "12:34",
+                },
+                "competitors": [
+                    {"homeAway": "home", "score": "2", "team": {"id": "100", "displayName": "Arsenal", "abbreviation": "ARS"}},
+                    {"homeAway": "away", "score": "1", "team": {"id": "200", "displayName": "Chelsea", "abbreviation": "CHE"}},
+                ],
+            }
+        ],
+    }
+
+    created = await service._upsert_match_from_event(
+        _FakeSession(),
+        league_id=uuid.uuid4(),
+        sport_id=uuid.uuid4(),
+        espn_league_id="eng.1",
+        event=event,
+    )
+
+    assert created is False
+    assert existing_match.phase == MatchPhase.LIVE_FIRST_HALF.value
+    assert existing_state.score_home == 2
+    assert existing_state.score_away == 1
+    assert existing_state.clock == "12:34"
+    assert existing_state.phase == MatchPhase.LIVE_FIRST_HALF.value
+    assert existing_state.version == 2
+    assert any(
+        getattr(obj, "entity_type", None) == "match" and getattr(obj, "canonical_id", None) == existing_match_id
+        for obj in added
+    )
