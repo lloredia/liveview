@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
@@ -41,6 +41,7 @@ from api.dependencies import get_db, get_redis
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/v1/matches", tags=["matches"])
+_ESPN_EVENT_MATCH_WINDOW = timedelta(hours=12)
 
 
 def _state_payload(row: Any, state: Any) -> dict[str, Any]:
@@ -188,12 +189,21 @@ async def _find_espn_event_id(
     away_team_name: str,
     sport: str,
     slug: str,
+    kickoff_time: datetime | None = None,
 ) -> str | None:
     prefix = f"soccer/{slug}" if sport == "soccer" else f"{sport}/{slug}"
-    response = await client.get(f"https://site.api.espn.com/apis/site/v2/sports/{prefix}/scoreboard")
+    params = {}
+    if kickoff_time:
+      params["dates"] = kickoff_time.astimezone(timezone.utc).strftime("%Y%m%d")
+    response = await client.get(
+        f"https://site.api.espn.com/apis/site/v2/sports/{prefix}/scoreboard",
+        params=params or None,
+    )
     if response.status_code != 200:
         return None
     data = response.json()
+    best_match_id: str | None = None
+    best_delta: timedelta | None = None
     for event in data.get("events", []):
         competition = (event.get("competitions") or [{}])[0]
         competitors = competition.get("competitors") or []
@@ -209,8 +219,22 @@ async def _find_espn_event_id(
             (_team_names_match_loose(home_team_name, home_display) or _team_names_match_loose(home_team_name, home_short))
             and (_team_names_match_loose(away_team_name, away_display) or _team_names_match_loose(away_team_name, away_short))
         ):
-            return event.get("id")
-    return None
+            if not kickoff_time:
+                return event.get("id")
+            event_date = event.get("date") or competition.get("date")
+            if not event_date:
+                continue
+            try:
+                event_dt = datetime.fromisoformat(str(event_date).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            delta = abs(event_dt.astimezone(timezone.utc) - kickoff_time.astimezone(timezone.utc))
+            if delta > _ESPN_EVENT_MATCH_WINDOW:
+                continue
+            if best_delta is None or delta < best_delta:
+                best_delta = delta
+                best_match_id = event.get("id")
+    return best_match_id
 
 
 def _extract_espn_player_stats(competitor: dict[str, Any]) -> dict[str, Any]:
@@ -267,12 +291,20 @@ async def _fetch_espn_supplementary_summary(
     home_team_name: str,
     away_team_name: str,
     league_name: str | None,
+    kickoff_time: datetime | None = None,
 ) -> dict[str, Any] | None:
     mapping = _get_espn_league_mapping(league_name)
     if not mapping:
         return None
     async with httpx.AsyncClient(timeout=10.0) as client:
-        event_id = await _find_espn_event_id(client, home_team_name, away_team_name, mapping["sport"], mapping["slug"])
+        event_id = await _find_espn_event_id(
+            client,
+            home_team_name,
+            away_team_name,
+            mapping["sport"],
+            mapping["slug"],
+            kickoff_time=kickoff_time,
+        )
         if not event_id:
             return None
         prefix = f"soccer/{mapping['slug']}" if mapping["sport"] == "soccer" else f"{mapping['sport']}/{mapping['slug']}"
@@ -669,6 +701,7 @@ async def get_match_details(
                 MatchORM.id,
                 MatchORM.phase,
                 MatchStateORM.phase.label("state_phase"),
+                MatchORM.start_time,
                 MatchORM.home_team_id,
                 MatchORM.away_team_id,
                 ht.c.short_name.label("ht_short"),
@@ -730,6 +763,7 @@ async def get_match_details(
             match_row.ht_name or "",
             match_row.at_name or "",
             match_row.league_name,
+            kickoff_time=match_row.start_time,
         )
     }
 
