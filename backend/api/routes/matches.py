@@ -454,6 +454,9 @@ async def get_match_center(
             not_modified.headers["ETag"] = etag
             _no_store(not_modified)
             return not_modified
+        response.headers["ETag"] = etag
+        _no_store(response)
+        return json.loads(cached)
 
     async with db.read_session() as session:
         ht = TeamORM.__table__.alias("ht")
@@ -690,6 +693,7 @@ async def get_match_details(
             _no_store(not_modified)
             return not_modified
         response.headers["ETag"] = etag
+        _no_store(response)
         return json.loads(cached)
 
     async with db.read_session() as session:

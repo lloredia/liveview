@@ -400,12 +400,37 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       playerStatsData?.source &&
       (playerStatsData.home?.players?.length || playerStatsData.away?.players?.length)
     );
+    const fallbackPlayerCount =
+      (playerStatsData?.home?.players?.length ?? 0) +
+      (playerStatsData?.away?.players?.length ?? 0);
     const espnPlayerStatsAvailable = !!(
       espnData &&
       (espnData.homePlayers.players.length > 0 || espnData.awayPlayers.players.length > 0)
     );
+    const espnPlayerCount =
+      (espnData?.homePlayers.players.length ?? 0) +
+      (espnData?.awayPlayers.players.length ?? 0);
+    const preferFallbackPlayerStats =
+      fallbackPlayerStatsAvailable &&
+      (!espnPlayerStatsAvailable || fallbackPlayerCount > espnPlayerCount);
     const playerStats: MatchCenterPlayerStatsSection | null =
-      espnPlayerStatsAvailable && espnData
+      preferFallbackPlayerStats && playerStatsData?.home && playerStatsData?.away
+        ? {
+            source: playerStatsData.source,
+            sport: "soccer",
+            home: {
+              teamName: playerStatsData.home.teamName,
+              players: playerStatsData.home.players as PlayerStatLine[],
+              statColumns: playerStatsData.home.statColumns,
+            },
+            away: {
+              teamName: playerStatsData.away.teamName,
+              players: playerStatsData.away.players as PlayerStatLine[],
+              statColumns: playerStatsData.away.statColumns,
+            },
+            injuries: { home: [], away: [] },
+          }
+        : espnPlayerStatsAvailable && espnData
         ? {
             source: "espn",
             sport: espnData.sport || "soccer",
@@ -439,14 +464,36 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     const awayStarters = espnData?.awayPlayers?.players?.filter((player) => player.starter) ?? [];
     const homeBench = espnData?.homePlayers?.players?.filter((player) => !player.starter) ?? [];
     const awayBench = espnData?.awayPlayers?.players?.filter((player) => !player.starter) ?? [];
+    const fallbackStarterCount =
+      (lineupData?.home?.lineup?.length ?? 0) +
+      (lineupData?.away?.lineup?.length ?? 0);
+    const espnStarterCount = homeStarters.length + awayStarters.length;
     const primaryLineupAvailable = !!(
       homeStarters.length ||
       awayStarters.length ||
       espnData?.homeFormation ||
       espnData?.awayFormation
     );
+    const preferFallbackLineup =
+      fallbackLineupAvailable &&
+      (!primaryLineupAvailable ||
+        fallbackStarterCount > espnStarterCount ||
+        (!!lineupData?.home?.formation && !espnData?.homeFormation) ||
+        (!!lineupData?.away?.formation && !espnData?.awayFormation));
     const lineup: MatchCenterLineupSection | null =
-      primaryLineupAvailable || fallbackLineupAvailable
+      preferFallbackLineup && lineupData
+        ? {
+            source: lineupData.source,
+            homeFormation: null,
+            awayFormation: null,
+            homeStarters: [],
+            awayStarters: [],
+            homeBench: [],
+            awayBench: [],
+            substitutions: [],
+            fallback: lineupData,
+          }
+        : primaryLineupAvailable || fallbackLineupAvailable
         ? {
             source: primaryLineupAvailable ? "espn" : lineupData?.source ?? null,
             homeFormation: espnData?.homeFormation ?? lineupData?.home?.formation ?? null,
@@ -471,8 +518,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       plays: playByPlayPlays,
       homeTeamName: matchData?.match.home_team?.short_name || espnData?.homeTeamName || "Home",
       awayTeamName: matchData?.match.away_team?.short_name || espnData?.awayTeamName || "Away",
-      homeTeamId: espnData?.homeTeamId || "",
-      awayTeamId: espnData?.awayTeamId || "",
+      homeTeamId: matchData?.match.home_team?.id || espnData?.homeTeamId || "",
+      awayTeamId: matchData?.match.away_team?.id || espnData?.awayTeamId || "",
       loading: detailsLoading && playByPlayPlays.length === 0,
     };
 
