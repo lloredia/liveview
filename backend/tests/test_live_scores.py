@@ -5,10 +5,18 @@ and the TheSportsDB fallback module.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import pytest
 from types import SimpleNamespace
+import uuid
 
-from api.app import _non_terminal_phase_values, _resolve_phase, phase_sync_loop
+from api.app import (
+    _ensure_provider_mapping_consistency,
+    _non_terminal_phase_values,
+    _resolve_match_from_provider_match,
+    _resolve_phase,
+    phase_sync_loop,
+)
 from api.live_fallback import TSDB_STATUS_TO_PHASE, TSDB_LEAGUE_MAP, _safe_int
 from shared.models.enums import MatchPhase
 
@@ -262,3 +270,76 @@ async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished
     assert "UPDATE matches m" in sync_sql
     assert "FROM match_state ms" in sync_sql
     assert sync_params is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_match_from_provider_match_returns_none_when_candidates_are_ambiguous() -> None:
+    league_id = uuid.uuid4()
+    match_a = uuid.uuid4()
+    match_b = uuid.uuid4()
+
+    class _FakeResult:
+        def __init__(self, row=None, rows=None) -> None:
+            self._row = row
+            self._rows = rows or []
+
+        def fetchone(self):
+            return self._row
+
+        def fetchall(self):
+            return self._rows
+
+    class _FakeSession:
+        async def execute(self, stmt, params=None):  # type: ignore[no-untyped-def]
+            sql = str(stmt)
+            if "SELECT canonical_id FROM provider_mappings" in sql:
+                return _FakeResult(row=(league_id,))
+            if "SELECT m.id, ht.name, ht.short_name, at.name, at.short_name" in sql:
+                return _FakeResult(rows=[
+                    (match_a, "Arsenal", "ARS", "Chelsea", "CHE"),
+                    (match_b, "Arsenal", "ARS", "Chelsea", "CHE"),
+                ])
+            raise AssertionError(f"Unexpected SQL: {sql}")
+
+    provider_match = SimpleNamespace(
+        provider_name="sportradar",
+        provider_id="sr:match:1",
+        scheduled_at=datetime.now(timezone.utc),
+        home_team=SimpleNamespace(name="Arsenal", short_name="ARS"),
+        away_team=SimpleNamespace(name="Chelsea", short_name="CHE"),
+    )
+
+    resolved = await _resolve_match_from_provider_match(_FakeSession(), "eng.1", provider_match)
+
+    assert resolved is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_provider_mapping_consistency_refuses_conflicting_remap() -> None:
+    existing_id = uuid.uuid4()
+    attempted_id = uuid.uuid4()
+    executed: list[str] = []
+
+    class _FakeResult:
+        def __init__(self, row=None) -> None:
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _FakeSession:
+        async def execute(self, stmt, params=None):  # type: ignore[no-untyped-def]
+            executed.append(str(stmt))
+            if "SELECT canonical_id FROM provider_mappings" in str(stmt):
+                return _FakeResult(row=(existing_id,))
+            raise AssertionError("Conflict path should not write to provider_mappings")
+
+    persisted = await _ensure_provider_mapping_consistency(
+        _FakeSession(),
+        provider="sportradar",
+        provider_id="sr:match:1",
+        canonical_id=attempted_id,
+    )
+
+    assert persisted is False
+    assert len(executed) == 1

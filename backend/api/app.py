@@ -495,12 +495,77 @@ async def _resolve_match_from_provider_match(
         )
     ).fetchall()
 
+    matched_candidates: list[uuid_mod.UUID] = []
     for row in candidates:
         if _team_names_match(row[1], row[2], provider_match.home_team.name, provider_match.home_team.short_name) and _team_names_match(
             row[3], row[4], provider_match.away_team.name, provider_match.away_team.short_name
         ):
-            return row[0], league_id
+            matched_candidates.append(row[0])
+
+    if len(matched_candidates) == 1:
+        return matched_candidates[0], league_id
+    if len(matched_candidates) > 1:
+        logger.warning(
+            "provider_match_resolution_ambiguous",
+            provider=getattr(provider_match, "provider_name", "unknown"),
+            provider_match_id=getattr(provider_match, "provider_id", ""),
+            league_slug=league_slug,
+            candidate_count=len(matched_candidates),
+        )
     return None
+
+
+async def _ensure_provider_mapping_consistency(
+    session: Any,
+    provider: str,
+    provider_id: str,
+    canonical_id: uuid_mod.UUID,
+) -> bool:
+    """Persist a provider mapping without allowing weak fallback resolution to remap an existing provider id."""
+    existing_row = (
+        await session.execute(
+            text(
+                "SELECT canonical_id FROM provider_mappings "
+                "WHERE entity_type = 'match' AND provider = :provider AND provider_id = :provider_id"
+            ),
+            {"provider": provider, "provider_id": provider_id},
+        )
+    ).fetchone()
+
+    if existing_row:
+        existing_canonical_id = existing_row[0]
+        if existing_canonical_id != canonical_id:
+            logger.warning(
+                "provider_mapping_conflict",
+                provider=provider,
+                provider_id=provider_id,
+                existing_canonical_id=str(existing_canonical_id),
+                attempted_canonical_id=str(canonical_id),
+            )
+            return False
+        await session.execute(
+            text(
+                "UPDATE provider_mappings SET updated_at = NOW() "
+                "WHERE entity_type = 'match' AND provider = :provider AND provider_id = :provider_id"
+            ),
+            {"provider": provider, "provider_id": provider_id},
+        )
+        return True
+
+    await session.execute(
+        text(
+            "INSERT INTO provider_mappings "
+            "(id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
+            "VALUES (:id, 'match', :canonical_id, :provider, :provider_id, '{}'::jsonb, NOW(), NOW())"
+        ),
+        {
+            "id": uuid_mod.uuid4(),
+            "canonical_id": canonical_id,
+            "provider": provider,
+            "provider_id": provider_id,
+        },
+    )
+    return True
 
 
 def _provider_status_to_phase(status_value: str) -> str:
@@ -553,20 +618,14 @@ async def _apply_provider_matches(
                     if resolved:
                         match_id, canonical_league_id = resolved
                         changed_league_ids.add(str(canonical_league_id))
-                        await session.execute(
-                            text(
-                                "INSERT INTO provider_mappings "
-                                "(id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
-                                "VALUES (:id, 'match', :canonical_id, 'sportradar', :provider_id, '{}'::jsonb, NOW(), NOW()) "
-                                "ON CONFLICT (entity_type, provider, provider_id) DO UPDATE SET "
-                                "canonical_id = EXCLUDED.canonical_id, updated_at = NOW()"
-                            ),
-                            {
-                                "id": uuid_mod.uuid4(),
-                                "canonical_id": match_id,
-                                "provider_id": pm.provider_id,
-                            },
+                        mapping_persisted = await _ensure_provider_mapping_consistency(
+                            session,
+                            provider="sportradar",
+                            provider_id=pm.provider_id,
+                            canonical_id=match_id,
                         )
+                        if not mapping_persisted:
+                            match_id = None
                 if not match_id:
                     continue
 
@@ -748,18 +807,14 @@ async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], 
                     )
                     match_source = "fallback" if match_id else None
                     if match_id:
-                        # So next time we hit the fast path — raw INSERT to avoid ORM flush/lazy-load
-                        await session.execute(
-                            text(
-                                "INSERT INTO provider_mappings (id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
-                                "VALUES (:id, 'match', :canonical_id, 'espn', :provider_id, '{}', NOW(), NOW())"
-                            ),
-                            {
-                                "id": uuid_mod.uuid4(),
-                                "canonical_id": match_id,
-                                "provider_id": espn_id,
-                            },
+                        persisted = await _ensure_provider_mapping_consistency(
+                            session,
+                            provider="espn",
+                            provider_id=espn_id,
+                            canonical_id=match_id,
                         )
+                        if not persisted:
+                            continue
                     else:
                         continue
 
