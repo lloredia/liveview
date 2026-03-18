@@ -146,6 +146,17 @@ async def _invalidate_match_detail_cache(
     keys = [f"snap:match:{match_id}:details" for match_id in match_ids]
     await redis.client.delete(*keys)
 
+
+async def _invalidate_match_stats_cache(
+    redis: RedisManager,
+    match_ids: set[str] | None = None,
+) -> None:
+    """Invalidate cached match stats payloads for changed matches."""
+    if not match_ids:
+        return
+    keys = [f"snap:match:{match_id}:stats" for match_id in match_ids]
+    await redis.client.delete(*keys)
+
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "eng.1": "soccer/eng.1",
     "eng.2": "soccer/eng.2",
@@ -288,6 +299,7 @@ async def _refresh_live_scores_via_router(
         await _invalidate_today_cache(redis)
         await _invalidate_scoreboard_cache(redis, changed_league_ids)
         await _invalidate_match_detail_cache(redis, changed_match_ids)
+        await _invalidate_match_stats_cache(redis, changed_match_ids)
     except Exception:
         logger.warning("today_cache_invalidation_failed", exc_info=True)
     return updated
