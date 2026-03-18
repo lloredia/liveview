@@ -21,6 +21,13 @@ from shared.utils.database import DatabaseManager
 from shared.utils.redis_manager import RedisManager
 
 
+def _infra_skip_message(service: str, env_var: str, default_url: str, error: Exception) -> str:
+    return (
+        f"{service} test infrastructure is unavailable: {error}. "
+        f"Set {env_var} to a reachable test instance or start the default service at {default_url}."
+    )
+
+
 # ──────────────────────────────────────────────────────────────
 # Settings
 # ──────────────────────────────────────────────────────────────
@@ -53,11 +60,20 @@ async def db(test_settings: Settings) -> AsyncGenerator[DatabaseManager, None]:
     Creates a new database session for each test and drops all tables after.
     """
     db_manager = DatabaseManager(test_settings)
-    await db_manager.connect()
-    
-    # Create all tables
-    async with db_manager.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        await db_manager.connect()
+        async with db_manager.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
+        await db_manager.disconnect()
+        pytest.skip(
+            _infra_skip_message(
+                "Postgres",
+                "LV_DATABASE_URL",
+                "postgresql+asyncpg://liveview:liveview@localhost:5432/liveview_test",
+                exc,
+            )
+        )
     
     yield db_manager
     
@@ -91,10 +107,19 @@ async def redis(
     Flushes all data before test (clean state) and after test (cleanup).
     """
     redis_manager = RedisManager(test_settings)
-    await redis_manager.connect()
-    
-    # Clean slate
-    await redis_manager.client.flushdb()
+    try:
+        await redis_manager.connect()
+        await redis_manager.client.flushdb()
+    except Exception as exc:
+        await redis_manager.disconnect()
+        pytest.skip(
+            _infra_skip_message(
+                "Redis",
+                "LV_REDIS_URL",
+                "redis://localhost:6379/0",
+                exc,
+            )
+        )
     
     yield redis_manager
     

@@ -6,6 +6,9 @@ Run: pytest backend/tests/test_scheduler_provider.py -v
 from __future__ import annotations
 
 import math
+import uuid
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +18,7 @@ from scheduler.engine.polling import AdaptivePollingEngine, _phase_tempo_key, SP
 from ingest.providers.registry import HealthScorer
 from shared.models.domain import ProviderHealth
 from shared.models.enums import ProviderName
+from scheduler.service import SchedulerService
 
 
 # ── Phase tempo key ─────────────────────────────────────────────────────
@@ -201,3 +205,144 @@ async def test_health_scorer_errors_lower_score(
     health = await scorer.compute_health(ProviderName.ESPN)
     assert health.sample_count == 2
     assert health.score < 0.7
+
+
+class _FakeAsyncContextManager:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    async def __aenter__(self) -> object:
+        return self._value
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_discover_active_matches_includes_recently_finished_with_postgame_recheck_window(
+    mock_redis: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 3, 18, 12, 0, tzinfo=timezone.utc)
+    match_id = uuid.uuid4()
+    league_id = uuid.uuid4()
+
+    first_stmt = None
+    execute_calls: list[object] = []
+
+    class _FakeSession:
+        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+            nonlocal first_stmt
+            execute_calls.append(stmt)
+            if first_stmt is None:
+                first_stmt = stmt
+                return SimpleNamespace(
+                    all=lambda: [
+                        SimpleNamespace(
+                            id=match_id,
+                            phase=MatchPhase.FINISHED.value,
+                            sport_type=Sport.SOCCER.value,
+                            league_id=league_id,
+                        )
+                    ]
+                )
+            call_idx = len(execute_calls)
+            if call_idx == 2:
+                return SimpleNamespace(
+                    all=lambda: [
+                        SimpleNamespace(provider="espn", provider_id="match-espn-1")
+                    ]
+                )
+            if call_idx == 3:
+                return SimpleNamespace(
+                    all=lambda: [
+                        SimpleNamespace(provider="espn", provider_id="eng.1")
+                    ]
+                )
+            raise AssertionError(f"Unexpected execute call #{call_idx}")
+
+    fake_db = MagicMock()
+    fake_db.read_session.return_value = _FakeAsyncContextManager(_FakeSession())
+    settings = SimpleNamespace(
+        instance_id="test-instance",
+        scheduler_leader_ttl_s=30,
+        provider_order=["espn", "sportradar"],
+        postgame_recheck_minutes=180,
+    )
+    service = SchedulerService(
+        mock_redis,
+        fake_db,
+        polling_engine=MagicMock(),
+        health_scorer=MagicMock(),
+        settings=settings,
+    )
+    monkeypatch.setattr(
+        "scheduler.service.datetime",
+        SimpleNamespace(now=lambda tz=None: fixed_now),
+    )
+
+    matches = await service._discover_active_matches()
+
+    assert matches == [
+        {
+            "canonical_match_id": match_id,
+            "phase": MatchPhase.FINISHED.value,
+            "sport": Sport.SOCCER.value,
+            "match_provider_ids": {"espn": "match-espn-1"},
+            "league_provider_ids": {"espn": "eng.1"},
+        }
+    ]
+    assert first_stmt is not None
+    compiled = first_stmt.compile()
+    assert MatchPhase.FINISHED.value in compiled.params.values()
+    assert any(
+        value == fixed_now - timedelta(minutes=180)
+        for value in compiled.params.values()
+    ), compiled.params
+
+
+@pytest.mark.asyncio
+async def test_discover_active_matches_uses_minimum_postgame_recheck_window_of_15_minutes(
+    mock_redis: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 3, 18, 12, 0, tzinfo=timezone.utc)
+    first_stmt = None
+
+    class _FakeSession:
+        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+            nonlocal first_stmt
+            if first_stmt is None:
+                first_stmt = stmt
+                return SimpleNamespace(all=lambda: [])
+            raise AssertionError("No provider mapping lookup should occur when no matches are returned")
+
+    fake_db = MagicMock()
+    fake_db.read_session.return_value = _FakeAsyncContextManager(_FakeSession())
+    settings = SimpleNamespace(
+        instance_id="test-instance",
+        scheduler_leader_ttl_s=30,
+        provider_order=["espn", "sportradar"],
+        postgame_recheck_minutes=5,
+    )
+    service = SchedulerService(
+        mock_redis,
+        fake_db,
+        polling_engine=MagicMock(),
+        health_scorer=MagicMock(),
+        settings=settings,
+    )
+    monkeypatch.setattr(
+        "scheduler.service.datetime",
+        SimpleNamespace(now=lambda tz=None: fixed_now),
+    )
+
+    matches = await service._discover_active_matches()
+
+    assert matches == []
+    assert first_stmt is not None
+    compiled = first_stmt.compile()
+    assert any(
+        value == fixed_now - timedelta(minutes=15)
+        for value in compiled.params.values()
+    ), compiled.params

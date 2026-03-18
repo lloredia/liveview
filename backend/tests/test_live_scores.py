@@ -4,9 +4,11 @@ and the TheSportsDB fallback module.
 """
 from __future__ import annotations
 
+import asyncio
 import pytest
+from types import SimpleNamespace
 
-from api.app import _resolve_phase
+from api.app import _non_terminal_phase_values, _resolve_phase, phase_sync_loop
 from api.live_fallback import TSDB_STATUS_TO_PHASE, TSDB_LEAGUE_MAP, _safe_int
 from shared.models.enums import MatchPhase
 
@@ -186,3 +188,77 @@ class TestESPNMaps:
         assert "hockey" in sports
         assert "baseball" in sports
         assert "football" in sports
+
+
+class _FakeAsyncContextManager:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    async def __aenter__(self) -> object:
+        return self._value
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed: list[tuple[str, dict | None]] = []
+
+    class _FakeResult:
+        def __init__(self, rows=None) -> None:
+            self._rows = rows or []
+
+        def fetchall(self):
+            return self._rows
+
+    class _FakeSession:
+        async def execute(self, stmt, params=None):  # type: ignore[no-untyped-def]
+            sql = str(stmt)
+            executed.append((sql, params))
+            if "RETURNING id, phase" in sql:
+                return _FakeResult([("match-1", MatchPhase.LIVE_FIRST_HALF.value)])
+            return _FakeResult()
+
+    fake_db = SimpleNamespace(
+        write_session=lambda: _FakeAsyncContextManager(_FakeSession())
+    )
+    monkeypatch.setattr(
+        "api.app.get_settings",
+        lambda: SimpleNamespace(phase_sync_fallback_hours=7),
+    )
+    sleep_calls = {"count": 0}
+
+    async def _fake_sleep(_seconds: float) -> None:
+        sleep_calls["count"] += 1
+        if sleep_calls["count"] > 1:
+            raise asyncio.CancelledError()
+
+    monkeypatch.setattr("api.app.asyncio.sleep", _fake_sleep)
+
+    await phase_sync_loop(fake_db)  # type: ignore[arg-type]
+
+    assert len(executed) == 3
+    state_sql, state_params = executed[0]
+    match_sql, match_params = executed[1]
+    sync_sql, sync_params = executed[2]
+
+    assert "UPDATE match_state ms" in state_sql
+    assert "SET phase = 'finished'" in state_sql
+    assert state_params == {
+        "phases": list(_non_terminal_phase_values()),
+        "hours": 7,
+    }
+
+    assert "UPDATE matches" in match_sql
+    assert "RETURNING id, phase" in match_sql
+    assert match_params == {
+        "phases": list(_non_terminal_phase_values()),
+        "hours": 7,
+    }
+
+    assert "UPDATE matches m" in sync_sql
+    assert "FROM match_state ms" in sync_sql
+    assert sync_params is None
