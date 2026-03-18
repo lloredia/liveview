@@ -188,6 +188,18 @@ async def _fetch_match_details(client: AsyncClient, match_id: str) -> dict:
     return response.json()
 
 
+async def _fetch_match_timeline(client: AsyncClient, match_id: str) -> dict:
+    response = await client.get(f"/v1/matches/{match_id}/timeline")
+    assert response.status_code == 200
+    return response.json()
+
+
+async def _fetch_match_stats(client: AsyncClient, match_id: str) -> dict:
+    response = await client.get(f"/v1/matches/{match_id}/stats")
+    assert response.status_code == 200
+    return response.json()
+
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.parametrize("match_kind", ["live", "finished"])
@@ -268,3 +280,45 @@ async def test_match_details_preserve_canonical_score_and_phase_when_supplementa
     assert details["supplementary"]["espn"]["team_display"]["home_name"] == "Arsenal"
     assert details["supplementary"]["espn"]["team_display"]["away_name"] == "Chelsea"
     assert details["supplementary"]["espn"]["warning"] == "conflicting supplementary payload"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_match_details_and_timeline_prefer_match_state_phase_when_match_row_is_stale(
+    client,
+    db,
+    seeded_matches,
+):
+    live_match = seeded_matches["matches"]["live"]
+    match_id = uuid.UUID(live_match["id"])
+
+    async with db.write_session() as session:
+        match = await session.get(MatchORM, match_id)
+        assert match is not None
+        match.phase = "finished"
+        await session.commit()
+
+    details = await _fetch_match_details(client, live_match["id"])
+    timeline_response = await client.get(f"/v1/matches/{live_match['id']}/timeline")
+    assert timeline_response.status_code == 200
+    timeline = timeline_response.json()
+
+    assert details["phase"] == live_match["phase"]
+    assert details["timeline"]["phase"] == live_match["phase"]
+    assert timeline["phase"] == live_match["phase"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_match_details_sections_match_dedicated_timeline_and_stats_endpoints(
+    client,
+    seeded_matches,
+):
+    live_match = seeded_matches["matches"]["live"]
+
+    details = await _fetch_match_details(client, live_match["id"])
+    timeline = await _fetch_match_timeline(client, live_match["id"])
+    stats = await _fetch_match_stats(client, live_match["id"])
+
+    assert details["timeline"] == timeline
+    assert details["stats"] == stats

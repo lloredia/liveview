@@ -71,6 +71,11 @@ def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
 
 
+def _canonical_phase(match_phase: str | None, state_phase: str | None) -> str | None:
+    """Prefer the current state phase when available over the schedule row phase."""
+    return state_phase if state_phase is not None else match_phase
+
+
 _LEAGUE_TO_ESPN_MAP: dict[str, dict[str, str]] = {
     "Premier League": {"sport": "soccer", "slug": "eng.1"},
     "La Liga": {"sport": "soccer", "slug": "esp.1"},
@@ -436,9 +441,7 @@ async def get_match_center(
             _event_orm_to_dict(e) for e in events_result.scalars().all()
         ]
 
-    # Prefer state.phase when present so finished games show FINAL even if match.phase was stale
-    phase = getattr(row, "state_phase", None) if state else None
-    phase = phase if phase is not None else row.phase
+    phase = _canonical_phase(row.phase, getattr(row, "state_phase", None) if state else None)
     payload = {
         "match": {
             "id": str(row.id),
@@ -486,7 +489,15 @@ async def get_match_timeline(
     """
     async with db.read_session() as session:
         # Verify match exists
-        match_stmt = select(MatchORM.id, MatchORM.phase).where(MatchORM.id == match_id)
+        match_stmt = (
+            select(
+                MatchORM.id,
+                MatchORM.phase,
+                MatchStateORM.phase.label("state_phase"),
+            )
+            .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
+            .where(MatchORM.id == match_id)
+        )
         match_result = await session.execute(match_stmt)
         match_row = match_result.one_or_none()
         if match_row is None:
@@ -516,9 +527,11 @@ async def get_match_timeline(
     # Determine next cursor
     next_seq = events[-1]["seq"] if events else None
 
+    phase = _canonical_phase(match_row.phase, getattr(match_row, "state_phase", None))
+
     payload = {
         "match_id": str(match_id),
-        "phase": match_row.phase,
+        "phase": phase,
         "events": events,
         "count": len(events),
         "next_seq": next_seq,
@@ -644,6 +657,7 @@ async def get_match_details(
             select(
                 MatchORM.id,
                 MatchORM.phase,
+                MatchStateORM.phase.label("state_phase"),
                 MatchORM.home_team_id,
                 MatchORM.away_team_id,
                 ht.c.short_name.label("ht_short"),
@@ -652,6 +666,7 @@ async def get_match_details(
                 at.c.name.label("at_name"),
                 LeagueORM.name.label("league_name"),
             )
+            .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
             .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
             .outerjoin(at, MatchORM.away_team_id == at.c.id)
             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
@@ -720,12 +735,14 @@ async def get_match_details(
         )
     }
 
+    phase = _canonical_phase(match_row.phase, getattr(match_row, "state_phase", None))
+
     payload = {
         "match_id": str(match_id),
-        "phase": match_row.phase,
+        "phase": phase,
         "timeline": {
             "match_id": str(match_id),
-            "phase": match_row.phase,
+            "phase": phase,
             "events": events,
             "count": len(events),
             "next_seq": events[-1]["seq"] if events else None,
@@ -742,8 +759,8 @@ async def get_match_details(
     }
     payload_json = json.dumps(payload, default=str)
     response.headers["ETag"] = _compute_etag(payload_json)
-    phase = str(match_row.phase or "").lower()
-    cache_ttl = 15 if phase.startswith("live") or phase == "break" else 60
+    phase_key = str(phase or "").lower()
+    cache_ttl = 15 if phase_key.startswith("live") or phase_key == "break" else 60
     await redis.client.set(cache_key, payload_json, ex=cache_ttl)
     return payload
 
