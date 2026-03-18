@@ -98,6 +98,10 @@ async def get_today(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    settings = get_settings()
+    live_fallback_hours = max(1, settings.phase_sync_fallback_hours)
+    live_cutoff = datetime.now(timezone.utc) - timedelta(hours=live_fallback_hours)
+
     is_today_utc = target_date == (datetime.now(timezone.utc) - timedelta(minutes=tz_offset)).date()
     yesterday_start = day_start - timedelta(days=1)
     yesterday_end = day_start
@@ -130,8 +134,8 @@ async def get_today(
         )
         # Always include ongoing (live) matches regardless of selected date
         live_condition = or_(
-            MatchORM.phase.like("live%"),
-            MatchORM.phase == "break",
+            and_(MatchORM.phase.like("live%"), MatchORM.start_time >= live_cutoff),
+            and_(MatchORM.phase == "break", MatchORM.start_time >= live_cutoff),
         )
         if is_today_utc:
             yesterday_finished = and_(

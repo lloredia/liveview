@@ -17,7 +17,7 @@ import json
 import signal
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
@@ -119,6 +119,19 @@ ESPN_STAT_NAME_MAP: dict[str, str] = {
     "freeThrowsMade": "free_throws_made", "freeThrowsAttempted": "free_throws_attempted",
     "turnovers": "turnovers", "steals": "steals", "blocks": "blocks",
 }
+
+
+async def _invalidate_today_cache(
+    redis: RedisManager,
+    dates: list[date] | None = None,
+) -> None:
+    """Invalidate cached /today payloads for the provided UTC dates across all tz offsets."""
+    target_dates = dates or [datetime.now(timezone.utc).date()]
+    for target_date in target_dates:
+        pattern = f"today:{target_date.isoformat()}:*"
+        keys = [key async for key in redis.client.scan_iter(match=pattern)]
+        if keys:
+            await redis.client.delete(*keys)
 
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "eng.1": "soccer/eng.1",
@@ -252,11 +265,10 @@ async def _refresh_live_scores_via_router(
 
     if updated > 0:
         logger.info("live_scores_refreshed", matches_updated=updated)
-    today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
     try:
-        await redis.client.delete(today_key)
+        await _invalidate_today_cache(redis)
     except Exception:
-        pass
+        logger.warning("today_cache_invalidation_failed", exc_info=True)
     return updated
 
 
@@ -934,6 +946,20 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                     matches_checked=matches_checked,
                 )
 
+                # Fallback only: stale non-terminal state older than N hours should be finished.
+                state_stmt = text("""
+                    UPDATE match_state ms
+                    SET phase = 'finished'
+                    FROM matches m
+                    WHERE ms.match_id = m.id
+                      AND ms.phase IN :phases
+                      AND m.start_time < NOW() - (INTERVAL '1 hour' * :hours)
+                """).bindparams(bindparam("phases", expanding=True))
+                await session.execute(
+                    state_stmt,
+                    {"phases": list(non_terminal), "hours": fallback_hours},
+                )
+
                 # Fallback only: matches still in non-terminal phase but started > N hours ago -> finished
                 stmt = text("""
                     UPDATE matches
@@ -954,7 +980,7 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                         match_id=match_id_val,
                         old_phase=old_phase,
                         new_phase="finished",
-                        reason="elapsed_5h_fallback",
+                        reason=f"elapsed_{fallback_hours}h_fallback",
                     )
                 matches_checked = len(rows)
 
@@ -1105,6 +1131,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("provider_router_started", primary="espn", fallback="espn")
     app.state.provider_router = provider_router
 
+    # Keep schedules populated even when API is the only deployed service.
+    from scheduler.service import ScheduleSyncService
+
+    schedule_sync_service = ScheduleSyncService(db, redis=redis, settings=settings)
+    schedule_sync_task = asyncio.create_task(schedule_sync_service.run())
+
     # Start background phase sync
     phase_sync_task = asyncio.create_task(phase_sync_loop(db))
 
@@ -1123,9 +1155,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    schedule_sync_task.cancel()
     phase_sync_task.cancel()
     live_refresh_task.cancel()
     news_fetch_task.cancel()
+    try:
+        await schedule_sync_task
+    except asyncio.CancelledError:
+        pass
     try:
         await phase_sync_task
     except asyncio.CancelledError:
@@ -1200,11 +1237,10 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
                     updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
                 except CircuitBreakerOpen:
                     return {"ok": False, "message": "ESPN circuit breaker open, try again later or use ?force=true"}
-        today_key = f"today:{datetime.now(timezone.utc).date().isoformat()}"
         try:
-            await redis.client.delete(today_key)
+            await _invalidate_today_cache(redis)
         except Exception:
-            pass
+            logger.warning("today_cache_invalidation_failed", exc_info=True)
         return {"ok": True, "message": "Refresh cycle run, today cache invalidated", "matches_updated": updated, "build": "live_scores_raw_sql"}
 
     @app.get("/ready", tags=["system"])
