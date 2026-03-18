@@ -375,6 +375,148 @@ test.describe("LiveView E2E Tests", () => {
       await expect(page.getByText("4-2-3-1")).toBeVisible();
     });
 
+    test("should prefer backend match-center sections over legacy detail buckets", async ({
+      page,
+    }) => {
+      await page.route("**/v1/matches/test-match", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match: {
+              id: "test-match",
+              phase: "live",
+              start_time: "2026-03-18T19:00:00Z",
+              venue: "Emirates Stadium",
+              home_team: {
+                id: "home-1",
+                name: "Arsenal",
+                short_name: "ARS",
+                logo_url: null,
+              },
+              away_team: {
+                id: "away-1",
+                name: "Chelsea",
+                short_name: "CHE",
+                logo_url: null,
+              },
+            },
+            state: {
+              score_home: 1,
+              score_away: 0,
+              clock: "63'",
+              period: "2",
+              period_scores: [],
+              version: 7,
+            },
+            recent_events: [],
+            league: {
+              id: "premier-league",
+              name: "Premier League",
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/details", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            sections: {
+              matchId: "test-match",
+              phase: "live",
+              playByPlay: {
+                source: "timeline",
+                plays: [
+                  {
+                    id: "play-1",
+                    text: "Backend section goal",
+                    homeScore: 1,
+                    awayScore: 0,
+                    period: { number: 2, displayValue: "2nd" },
+                    clock: { displayValue: "63'" },
+                    scoringPlay: true,
+                    scoreValue: 1,
+                    team: { id: "home-1" },
+                    participants: [{ athlete: { displayName: "Bukayo Saka" } }],
+                    type: { id: "goal", text: "goal" },
+                  },
+                ],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                homeTeamId: "home-1",
+                awayTeamId: "away-1",
+                loading: false,
+              },
+              teamStats: {
+                source: "db",
+                homeStats: [{ name: "shots_on_target", displayValue: "5", label: "Shots On Target" }],
+                awayStats: [{ name: "shots_on_target", displayValue: "2", label: "Shots On Target" }],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                loading: false,
+              },
+              playerStats: null,
+              lineup: null,
+            },
+            timeline: {
+              match_id: "test-match",
+              phase: "live",
+              events: [
+                {
+                  id: "evt-legacy",
+                  event_type: "goal",
+                  minute: 63,
+                  second: 0,
+                  period: "2",
+                  team_id: "home-1",
+                  player_name: "Bukayo Saka",
+                  detail: "Legacy timeline goal",
+                  score_home: 1,
+                  score_away: 0,
+                  synthetic: false,
+                  confidence: 1,
+                  seq: 1,
+                },
+              ],
+              count: 1,
+              next_seq: null,
+              has_more: false,
+            },
+            stats: {
+              match_id: "test-match",
+              teams: [
+                { team_id: "home-1", team_name: "ARS", side: "home", stats: { shots_on_target: 1 } },
+                { team_id: "away-1", team_name: "CHE", side: "away", stats: { shots_on_target: 1 } },
+              ],
+              generated_at: "2026-03-18T19:03:00Z",
+            },
+            soccer_details: null,
+            supplementary: {
+              espn: null,
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await goto(page, `/match/test-match?league=Premier%20League`);
+
+      await page.getByRole("button", { name: "Play-by-Play" }).click();
+      await expect(page.getByText("Backend section goal")).toBeVisible();
+      await expect(page.getByText("Legacy timeline goal")).not.toBeVisible();
+
+      await page.getByRole("button", { name: "Team Stats" }).click();
+      await expect(page.getByText("Shots On Target")).toBeVisible();
+      const shotsRow = page.locator("div").filter({ hasText: "Shots On Target" }).last();
+      await expect(shotsRow.getByText(/^5$/)).toBeVisible();
+      await expect(shotsRow.getByText(/^2$/)).toBeVisible();
+    });
+
     test("should render backend player stats fallback when espn detail is absent", async ({
       page,
     }) => {

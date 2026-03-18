@@ -325,6 +325,11 @@ async def test_match_details_sections_match_dedicated_timeline_and_stats_endpoin
     assert details["stats"]["teams"] == stats["teams"]
     assert details["stats"]["generated_at"]
     assert stats["generated_at"]
+    assert details["sections"]["playByPlay"]["source"] == "timeline"
+    assert details["sections"]["playByPlay"]["plays"][0]["text"] == details["timeline"]["events"][0]["detail"]
+    assert details["sections"]["teamStats"]["source"] == "db"
+    assert details["sections"]["teamStats"]["homeTeamName"] == "ARS"
+    assert details["sections"]["teamStats"]["awayTeamName"] == "CHE"
 
 
 @pytest.mark.asyncio
