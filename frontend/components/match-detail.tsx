@@ -18,7 +18,6 @@ import { CalendarButton } from "./calendar-button";
 import { AnimatedScore } from "./animated-score";
 import { MatchForm } from "./match-form";
 import { HeadToHead } from "./head-to-head";
-import { Lineup } from "./lineup";
 import { useTheme } from "@/lib/theme";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
@@ -768,7 +767,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
 
       <MatchForm homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} leagueName={leagueName} />
       <HeadToHead homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} homeTeamLogo={match.home_team?.logo_url || null} awayTeamLogo={match.away_team?.logo_url || null} leagueName={leagueName} />
-      <Lineup homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} homeTeamLogo={match.home_team?.logo_url || null} awayTeamLogo={match.away_team?.logo_url || null} leagueName={leagueName} />
       <Highlights homeTeamName={match.home_team?.name || ""} awayTeamName={match.away_team?.name || ""} leagueName={leagueName} matchPhase={match.phase} />
 
       {/* Tabs: show Lineup only for soccer */}
