@@ -238,9 +238,11 @@ async def _refresh_live_scores_via_router(
         live_phases.append(MatchPhase.PRE_MATCH.value)
         live_phases.append(MatchPhase.SCHEDULED.value)
         finished_cutoff = datetime.now(timezone.utc) - postgame_recheck_delta
+        canonical_phase = func.coalesce(MatchStateORM.phase, MatchORM.phase)
         stmt = (
             select(ProviderMappingORM.provider_id.label("espn_league_id"))
             .select_from(MatchORM)
+            .outerjoin(MatchStateORM, MatchStateORM.match_id == MatchORM.id)
             .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
             .join(
                 ProviderMappingORM,
@@ -250,8 +252,8 @@ async def _refresh_live_scores_via_router(
             )
             .where(
                 or_(
-                    MatchORM.phase.in_(live_phases),
-                    (MatchORM.phase == MatchPhase.FINISHED.value) & (MatchORM.start_time >= finished_cutoff),
+                    canonical_phase.in_(live_phases),
+                    (canonical_phase == MatchPhase.FINISHED.value) & (MatchORM.start_time >= finished_cutoff),
                 )
             )
             .distinct()
