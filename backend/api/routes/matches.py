@@ -116,6 +116,165 @@ def _build_timeline_payload(
     }
 
 
+def _period_label(period: str | None) -> str:
+    if period == "1":
+        return "1st"
+    if period == "2":
+        return "2nd"
+    return period or "1"
+
+
+def _backend_events_to_plays(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    plays: list[dict[str, Any]] = []
+    for event in events:
+        raw_period = event.get("period")
+        plays.append(
+            {
+                "id": event.get("id"),
+                "text": event.get("detail") or event.get("event_type") or "-",
+                "homeScore": event.get("score_home") or 0,
+                "awayScore": event.get("score_away") or 0,
+                "period": {
+                    "number": 1 if raw_period == "HT" else int(raw_period or 1) if str(raw_period).isdigit() else 1,
+                    "displayValue": _period_label(raw_period),
+                },
+                "clock": {
+                    "displayValue": (
+                        f"{event['minute']}'{str(event['second']).zfill(2)}"
+                        if event.get("minute") is not None and event.get("second") is not None
+                        else f"{event['minute']}'"
+                        if event.get("minute") is not None
+                        else "-"
+                    ),
+                },
+                "scoringPlay": bool(re.search(r"goal|score|gol", event.get("event_type") or "", re.IGNORECASE)),
+                "scoreValue": 0,
+                "team": {"id": event["team_id"]} if event.get("team_id") else None,
+                "participants": (
+                    [{"athlete": {"displayName": event["player_name"]}}]
+                    if event.get("player_name")
+                    else []
+                ),
+                "type": {"id": "", "text": event.get("event_type") or ""},
+            }
+        )
+    return plays
+
+
+def _format_backend_stat_label(name: str) -> str:
+    return re.sub(r"\b\w", lambda match: match.group(0).upper(), re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name.replace("_", " ")))
+
+
+def _stats_to_display(stats_payload: dict[str, Any], side: str) -> list[dict[str, str]]:
+    teams = stats_payload.get("teams") or []
+    team = next((entry for entry in teams if entry.get("side") == side), None)
+    if not team or not isinstance(team.get("stats"), dict):
+        return []
+    return [
+        {
+            "name": name,
+            "displayValue": str(value),
+            "label": _format_backend_stat_label(name),
+        }
+        for name, value in team["stats"].items()
+        if value is not None and not isinstance(value, (dict, list))
+    ]
+
+
+def _build_detail_sections(
+    match_row: Any,
+    match_id: uuid.UUID,
+    phase: str | None,
+    timeline_payload: dict[str, Any],
+    stats_payload: dict[str, Any],
+    soccer_details: dict[str, Any] | None,
+    supplementary_espn: dict[str, Any] | None,
+) -> dict[str, Any]:
+    home_team_name = match_row.ht_short or match_row.ht_name or "Home"
+    away_team_name = match_row.at_short or match_row.at_name or "Away"
+    home_team_id = str(match_row.home_team_id) if match_row.home_team_id else ""
+    away_team_id = str(match_row.away_team_id) if match_row.away_team_id else ""
+
+    timeline_events = timeline_payload.get("events") or []
+    supplementary_plays = (supplementary_espn or {}).get("plays") or []
+    play_source = "timeline" if timeline_events else "espn" if supplementary_plays else "timeline"
+    play_events = _backend_events_to_plays(timeline_events) if timeline_events else supplementary_plays
+
+    home_stats = _stats_to_display(stats_payload, "home")
+    away_stats = _stats_to_display(stats_payload, "away")
+    supplementary_team_stats = (supplementary_espn or {}).get("team_stats") or {}
+
+    player_stats = None
+    if soccer_details and soccer_details.get("player_stats"):
+        player_stats = {
+            "source": soccer_details["player_stats"].get("source"),
+            "sport": "soccer",
+            "home": soccer_details["player_stats"].get("home"),
+            "away": soccer_details["player_stats"].get("away"),
+            "injuries": {"home": [], "away": []},
+        }
+    elif supplementary_espn and supplementary_espn.get("player_stats"):
+        player_stats = {
+            "source": "espn",
+            "sport": supplementary_espn.get("sport"),
+            "home": supplementary_espn["player_stats"].get("home"),
+            "away": supplementary_espn["player_stats"].get("away"),
+            "injuries": supplementary_espn.get("injuries") or {"home": [], "away": []},
+        }
+
+    lineup = None
+    if soccer_details and soccer_details.get("lineup"):
+        lineup = {
+            "source": soccer_details["lineup"].get("source"),
+            "homeFormation": None,
+            "awayFormation": None,
+            "homeStarters": [],
+            "awayStarters": [],
+            "homeBench": [],
+            "awayBench": [],
+            "substitutions": [],
+            "fallback": soccer_details["lineup"],
+        }
+    elif supplementary_espn and supplementary_espn.get("player_stats"):
+        home_players = supplementary_espn["player_stats"]["home"].get("players") or []
+        away_players = supplementary_espn["player_stats"]["away"].get("players") or []
+        lineup = {
+            "source": "espn",
+            "homeFormation": (supplementary_espn.get("formations") or {}).get("home"),
+            "awayFormation": (supplementary_espn.get("formations") or {}).get("away"),
+            "homeStarters": [player for player in home_players if player.get("starter")],
+            "awayStarters": [player for player in away_players if player.get("starter")],
+            "homeBench": [player for player in home_players if not player.get("starter")],
+            "awayBench": [player for player in away_players if not player.get("starter")],
+            "substitutions": supplementary_espn.get("substitutions") or [],
+            "fallback": None,
+        }
+
+    return {
+        "playByPlay": {
+            "source": play_source,
+            "plays": play_events,
+            "homeTeamName": home_team_name,
+            "awayTeamName": away_team_name,
+            "homeTeamId": home_team_id,
+            "awayTeamId": away_team_id,
+            "loading": False,
+        },
+        "teamStats": {
+            "source": "db" if home_stats or away_stats else "espn" if supplementary_team_stats else None,
+            "homeStats": home_stats or supplementary_team_stats.get("home") or [],
+            "awayStats": away_stats or supplementary_team_stats.get("away") or [],
+            "homeTeamName": home_team_name,
+            "awayTeamName": away_team_name,
+            "loading": False,
+        },
+        "playerStats": player_stats,
+        "lineup": lineup,
+        "matchId": str(match_id),
+        "phase": phase,
+    }
+
+
 _LEAGUE_TO_ESPN_MAP: dict[str, dict[str, str]] = {
     "Premier League": {"sport": "soccer", "slug": "eng.1"},
     "La Liga": {"sport": "soccer", "slug": "esp.1"},
@@ -762,24 +921,36 @@ async def get_match_details(
                         "player_stats": _build_player_stats_from_fd_match(data),
                     }
 
+    supplementary_espn = await _fetch_espn_supplementary_summary(
+        match_row.ht_name or "",
+        match_row.at_name or "",
+        match_row.league_name,
+        kickoff_time=match_row.start_time,
+    )
     supplementary = {
-        "espn": await _fetch_espn_supplementary_summary(
-            match_row.ht_name or "",
-            match_row.at_name or "",
-            match_row.league_name,
-            kickoff_time=match_row.start_time,
-        )
+        "espn": supplementary_espn,
     }
 
     phase = _canonical_phase(match_row.phase, getattr(match_row, "state_phase", None))
+    timeline_payload = _build_timeline_payload(match_id, phase, events, 100)
+    stats_payload = _build_team_stats_payload(match_id, match_row, stats)
 
     payload = {
         "match_id": str(match_id),
         "phase": phase,
-        "timeline": _build_timeline_payload(match_id, phase, events, 100),
-        "stats": _build_team_stats_payload(match_id, match_row, stats),
+        "timeline": timeline_payload,
+        "stats": stats_payload,
         "soccer_details": soccer_details,
         "supplementary": supplementary,
+        "sections": _build_detail_sections(
+            match_row,
+            match_id,
+            phase,
+            timeline_payload,
+            stats_payload,
+            soccer_details,
+            supplementary_espn,
+        ),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     payload_json = json.dumps(payload, default=str)

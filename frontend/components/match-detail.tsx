@@ -57,7 +57,7 @@ interface ESPNPlay {
   clock: { displayValue: string };
   scoringPlay: boolean;
   scoreValue: number;
-  team?: { id: string; displayName?: string };
+  team?: { id: string; displayName?: string } | null;
   participants?: { athlete: { displayName: string } }[];
   type: { id: string; text: string };
 }
@@ -395,7 +395,32 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   }, [detailsData?.supplementary?.espn]);
 
   const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
-  const detailSections = useMemo(() => {
+  const backendSections = detailsData?.sections ?? null;
+  const detailSections: {
+    playByPlay: MatchCenterPlayByPlaySection;
+    playerStats: MatchCenterPlayerStatsSection | null;
+    lineup: MatchCenterLineupSection | null;
+    teamStats: MatchCenterTeamStatsSection;
+  } = useMemo(() => {
+    if (backendSections) {
+      let normalizedPlayerStats: MatchCenterPlayerStatsSection | null = null;
+      if (backendSections.playerStats?.home && backendSections.playerStats?.away) {
+        normalizedPlayerStats = {
+          source: backendSections.playerStats.source,
+          sport: backendSections.playerStats.sport || "soccer",
+          home: backendSections.playerStats.home,
+          away: backendSections.playerStats.away,
+          injuries: backendSections.playerStats.injuries,
+        };
+      }
+      return {
+        playByPlay: backendSections.playByPlay,
+        playerStats: normalizedPlayerStats,
+        lineup: backendSections.lineup,
+        teamStats: backendSections.teamStats,
+      };
+    }
+
     const fallbackPlayerStatsAvailable = !!(
       playerStatsData?.source &&
       (playerStatsData.home?.players?.length || playerStatsData.away?.players?.length)
@@ -520,7 +545,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       lineup,
       teamStats,
     };
-  }, [backendTeamStats, detailsLoading, espnData, lineupData, matchData, playerStatsData, timelineData?.events]);
+  }, [backendSections, backendTeamStats, detailsLoading, espnData, lineupData, matchData, playerStatsData, timelineData?.events]);
 
   if (matchLoading && !matchData) {
     return (

@@ -161,6 +161,60 @@ export async function fetchSoccerDetails(matchId: string): Promise<SoccerDetails
 export interface MatchCenterDetailsResponse {
   match_id: string;
   phase: string;
+  sections?: {
+    matchId: string;
+    phase: string;
+    playByPlay: {
+      source: string | null;
+      plays: Array<{
+        id: string;
+        text: string;
+        homeScore: number;
+        awayScore: number;
+        period: { number: number; displayValue: string };
+        clock: { displayValue: string };
+        scoringPlay: boolean;
+        scoreValue: number;
+        team?: { id: string; displayName?: string } | null;
+        participants?: { athlete: { displayName: string } }[];
+        type: { id: string; text: string };
+      }>;
+      homeTeamName: string;
+      awayTeamName: string;
+      homeTeamId: string;
+      awayTeamId: string;
+      loading: boolean;
+    };
+    teamStats: {
+      source: string | null;
+      homeStats: Array<{ name: string; displayValue: string; label: string }>;
+      awayStats: Array<{ name: string; displayValue: string; label: string }>;
+      homeTeamName: string;
+      awayTeamName: string;
+      loading: boolean;
+    };
+    playerStats: {
+      source: string | null;
+      sport: string | null;
+      home: { teamName: string; players: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>; statColumns: string[] } | null;
+      away: { teamName: string; players: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>; statColumns: string[] } | null;
+      injuries: {
+        home: Array<{ name: string; position: string; jersey: string; type: string; status: string }>;
+        away: Array<{ name: string; position: string; jersey: string; type: string; status: string }>;
+      };
+    } | null;
+    lineup: {
+      source: string | null;
+      homeFormation?: string | null;
+      awayFormation?: string | null;
+      homeStarters: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>;
+      awayStarters: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>;
+      homeBench: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>;
+      awayBench: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>;
+      substitutions: Array<{ minute: string; playerOff: string; playerOn: string; homeAway: "home" | "away" }>;
+      fallback: LineupResponse | null;
+    } | null;
+  };
   timeline: {
     match_id: string;
     phase: string;
