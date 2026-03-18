@@ -4,6 +4,7 @@ Match REST endpoints.
 GET /v1/matches/{id}          — Match center (scoreboard + metadata).
 GET /v1/matches/{id}/timeline — Ordered event timeline for a match.
 GET /v1/matches/{id}/stats    — Team and player statistics.
+GET /v1/matches/{id}/details  — Combined backend detail payload for match center tabs.
 GET /v1/matches/{id}/lineup   — Lineup from Football-Data.org (soccer only).
 GET /v1/matches/{id}/player-stats — Player stats from Football-Data.org when ESPN has none (soccer).
 GET /v1/matches/{id}/soccer-details — Combined soccer lineup + player stats from Football-Data.org.
@@ -329,6 +330,110 @@ async def get_match_stats(
     _no_store(response)
 
     return payload
+
+
+@router.get("/{match_id}/details")
+async def get_match_details(
+    match_id: uuid.UUID,
+    response: Response,
+    db: DatabaseManager = Depends(get_db),
+) -> dict[str, Any]:
+    """Get combined backend detail sections for the match center tabs."""
+    _no_store(response)
+
+    async with db.read_session() as session:
+        ht = TeamORM.__table__.alias("ht")
+        at = TeamORM.__table__.alias("at")
+
+        match_stmt = (
+            select(
+                MatchORM.id,
+                MatchORM.phase,
+                MatchORM.home_team_id,
+                MatchORM.away_team_id,
+                ht.c.short_name.label("ht_short"),
+                ht.c.name.label("ht_name"),
+                at.c.short_name.label("at_short"),
+                at.c.name.label("at_name"),
+            )
+            .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
+            .outerjoin(at, MatchORM.away_team_id == at.c.id)
+            .where(MatchORM.id == match_id)
+        )
+        match_result = await session.execute(match_stmt)
+        match_row = match_result.one_or_none()
+        if match_row is None:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        events_stmt = (
+            select(MatchEventORM)
+            .where(MatchEventORM.match_id == match_id)
+            .order_by(
+                MatchEventORM.minute.asc().nullsfirst(),
+                MatchEventORM.second.asc().nullsfirst(),
+                MatchEventORM.seq.asc(),
+            )
+            .limit(100)
+        )
+        events_result = await session.execute(events_stmt)
+        events = [_event_orm_to_dict(event) for event in events_result.scalars().all()]
+
+        stats_stmt = select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
+        stats_result = await session.execute(stats_stmt)
+        stats = stats_result.scalar_one_or_none()
+
+        teams_stats = []
+        if stats:
+            for side, team_id, team_name, stats_data in [
+                ("home", match_row.home_team_id, match_row.ht_short or match_row.ht_name, stats.home_stats),
+                ("away", match_row.away_team_id, match_row.at_short or match_row.at_name, stats.away_stats),
+            ]:
+                teams_stats.append({
+                    "team_id": str(team_id) if team_id else None,
+                    "team_name": team_name,
+                    "side": side,
+                    "stats": stats_data or {},
+                })
+
+    soccer_details = None
+    settings = get_settings()
+    if settings.football_data_api_key:
+        row = await _load_soccer_match_context(match_id, db)
+        if row.sport_type == "soccer":
+            fd_match_id = await _resolve_football_data_match_id(match_id, db, row)
+            if fd_match_id:
+                data = await _fetch_football_data_match_detail(fd_match_id)
+                if data:
+                    lineup = _build_lineup_payload(data)
+                    soccer_details = {
+                        "source": "football_data",
+                        "lineup": {
+                            "source": lineup["source"],
+                            "home": lineup["home"],
+                            "away": lineup["away"],
+                        },
+                        "player_stats": _build_player_stats_from_fd_match(data),
+                    }
+
+    return {
+        "match_id": str(match_id),
+        "phase": match_row.phase,
+        "timeline": {
+            "match_id": str(match_id),
+            "phase": match_row.phase,
+            "events": events,
+            "count": len(events),
+            "next_seq": events[-1]["seq"] if events else None,
+            "has_more": len(events) == 100,
+        },
+        "stats": {
+            "match_id": str(match_id),
+            "teams": teams_stats,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "soccer_details": soccer_details,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # Football-Data.org competition codes for lineup lookup (soccer)

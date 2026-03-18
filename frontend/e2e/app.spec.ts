@@ -187,6 +187,92 @@ test.describe("LiveView E2E Tests", () => {
         });
       });
 
+      await page.route("**/v1/matches/test-match/details", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            timeline: {
+              match_id: "test-match",
+              phase: "live",
+              events: [
+                {
+                  id: "evt-1",
+                  event_type: "goal",
+                  minute: 63,
+                  second: 0,
+                  period: "1",
+                  team_id: "home-1",
+                  player_name: "Bukayo Saka",
+                  detail: "Goal by Bukayo Saka",
+                  score_home: 1,
+                  score_away: 0,
+                  synthetic: false,
+                  confidence: 1,
+                  seq: 1,
+                },
+              ],
+              count: 1,
+              next_seq: null,
+              has_more: false,
+            },
+            stats: {
+              match_id: "test-match",
+              teams: [],
+              generated_at: "2026-03-18T19:03:00Z",
+            },
+            soccer_details: {
+              source: "football_data",
+              lineup: {
+                source: "football_data",
+                home: {
+                  formation: "4-3-3",
+                  lineup: [
+                    {
+                      id: 1,
+                      name: "David Raya",
+                      position: "GK",
+                      shirt_number: 22,
+                    },
+                  ],
+                  bench: [
+                    {
+                      id: 2,
+                      name: "Leandro Trossard",
+                      position: "FW",
+                      shirt_number: 19,
+                    },
+                  ],
+                },
+                away: {
+                  formation: "4-2-3-1",
+                  lineup: [
+                    {
+                      id: 3,
+                      name: "Robert Sanchez",
+                      position: "GK",
+                      shirt_number: 1,
+                    },
+                  ],
+                  bench: [
+                    {
+                      id: 4,
+                      name: "Mykhailo Mudryk",
+                      position: "FW",
+                      shirt_number: 10,
+                    },
+                  ],
+                },
+              },
+              player_stats: null,
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
       await page.route("**/v1/matches/test-match/timeline**", async (route) => {
         await route.fulfill({
           status: 200,
@@ -336,6 +422,64 @@ test.describe("LiveView E2E Tests", () => {
         });
       });
 
+      await page.route("**/v1/matches/test-match/details", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            timeline: {
+              match_id: "test-match",
+              phase: "live",
+              events: [],
+              count: 0,
+              next_seq: null,
+              has_more: false,
+            },
+            stats: {
+              match_id: "test-match",
+              teams: [],
+              generated_at: "2026-03-18T19:03:00Z",
+            },
+            soccer_details: {
+              source: "football_data",
+              lineup: null,
+              player_stats: {
+                source: "football_data",
+                home: {
+                  teamName: "Arsenal",
+                  statColumns: ["G", "A", "YC"],
+                  players: [
+                    {
+                      name: "Bukayo Saka",
+                      jersey: "7",
+                      position: "FW",
+                      stats: { G: 1, A: 0, YC: 0 },
+                      starter: true,
+                    },
+                  ],
+                },
+                away: {
+                  teamName: "Chelsea",
+                  statColumns: ["G", "A", "YC"],
+                  players: [
+                    {
+                      name: "Cole Palmer",
+                      jersey: "20",
+                      position: "FW",
+                      stats: { G: 0, A: 0, YC: 1 },
+                      starter: true,
+                    },
+                  ],
+                },
+              },
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
       await page.route("**/v1/matches/test-match/soccer-details", async (route) => {
         await route.fulfill({
           status: 200,
@@ -431,6 +575,51 @@ test.describe("LiveView E2E Tests", () => {
               id: "premier-league",
               name: "Premier League",
             },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/details", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            timeline: {
+              match_id: "test-match",
+              phase: "live",
+              events: [],
+              count: 0,
+              next_seq: null,
+              has_more: false,
+            },
+            stats: {
+              match_id: "test-match",
+              teams: [
+                {
+                  team_id: "home-1",
+                  team_name: "Arsenal",
+                  side: "home",
+                  stats: {
+                    possession: 61,
+                    shotsOnTarget: 5,
+                  },
+                },
+                {
+                  team_id: "away-1",
+                  team_name: "Chelsea",
+                  side: "away",
+                  stats: {
+                    possession: 39,
+                    shotsOnTarget: 2,
+                  },
+                },
+              ],
+              generated_at: "2026-03-18T19:03:00Z",
+            },
+            soccer_details: null,
             generated_at: "2026-03-18T19:03:00Z",
           }),
         });

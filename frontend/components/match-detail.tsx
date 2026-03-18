@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { ApiError, fetchMatch, fetchSoccerDetails, fetchStats, fetchTimeline, type LineupResponse, type PlayerStatsResponse, type SoccerDetailsResponse } from "@/lib/api";
+import { ApiError, fetchMatch, fetchMatchDetails, type LineupResponse, type MatchCenterDetailsResponse, type PlayerStatsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import {
   formatDate,
@@ -21,7 +21,7 @@ import { HeadToHead } from "./head-to-head";
 import { useTheme } from "@/lib/theme";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
-import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse } from "@/lib/types";
+import type { MatchDetailResponse, MatchEvent, MatchStatsResponse } from "@/lib/types";
 
 // ===========================================================================
 // Types
@@ -597,34 +597,22 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     if (activeTab === "lineup" && !tabs.includes("lineup")) setActiveTab("play_by_play");
   }, [activeTab, isSoccer]);
 
-  const timelineFetcher = useCallback(() => fetchTimeline(matchId), [matchId]);
-  const { data: timelineData, loading: timelineLoading } = usePolling<TimelineResponse>({
-    fetcher: timelineFetcher,
-    interval: 15000,
-    enabled: !!matchData,
-    key: `timeline-${matchId}`,
-  });
-
-  const statsFetcher = useCallback(() => fetchStats(matchId), [matchId]);
-  const { data: statsData, loading: statsLoading } = usePolling<MatchStatsResponse>({
-    fetcher: statsFetcher,
+  const detailsFetcher = useCallback(() => fetchMatchDetails(matchId), [matchId]);
+  const { data: detailsData, loading: detailsLoading } = usePolling<MatchCenterDetailsResponse>({
+    fetcher: detailsFetcher,
     interval: detailLive ? 30000 : 0,
     intervalWhenHidden: detailLive ? 90000 : undefined,
-    enabled: activeTab === "team_stats" && !!matchData,
-    key: `team-stats-${matchId}`,
+    enabled:
+      !!matchData &&
+      (activeTab === "play_by_play" ||
+        activeTab === "team_stats" ||
+        ((activeTab === "lineup" || activeTab === "player_stats") && isSoccer)),
+    key: `match-details-${matchId}`,
   });
-
-  // Football-Data.org lineup — fetch for soccer when lineup tab is active (so we can show FD data when ESPN has no lineup)
-  const soccerDetailsFetcher = useCallback(() => fetchSoccerDetails(matchId), [matchId]);
-  const { data: soccerDetailsData } = usePolling<SoccerDetailsResponse>({
-    fetcher: soccerDetailsFetcher,
-    interval: detailLive ? 30000 : 0,
-    intervalWhenHidden: detailLive ? 90000 : undefined,
-    enabled: (activeTab === "lineup" || activeTab === "player_stats") && isSoccer && !!matchId,
-    key: `soccer-details-${matchId}`,
-  });
-  const lineupData: LineupResponse | null = soccerDetailsData?.lineup ?? null;
-  const playerStatsData: PlayerStatsResponse | null = soccerDetailsData?.player_stats ?? null;
+  const timelineData = detailsData?.timeline ?? null;
+  const statsData: MatchStatsResponse | null = detailsData?.stats ?? null;
+  const lineupData: LineupResponse | null = detailsData?.soccer_details?.lineup ?? null;
+  const playerStatsData: PlayerStatsResponse | null = detailsData?.soccer_details?.player_stats ?? null;
 
   // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
   const playsForTab = useMemo(() => {
@@ -633,7 +621,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     return backendEventsToPlays(matchData?.recent_events || []);
   }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
 
-  const playByPlayLoading = (timelineLoading || espnLoading) && playsForTab.length === 0;
+  const playByPlayLoading = (detailsLoading || espnLoading) && playsForTab.length === 0;
   const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
 
   if (matchLoading && !matchData) {
@@ -860,7 +848,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
             awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
-            loading={(statsLoading || espnLoading) && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
+            loading={(detailsLoading || espnLoading) && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
             live={live}
           />
         )}

@@ -1,6 +1,7 @@
 import type {
   LeagueGroup,
   MatchDetailResponse,
+  MatchEvent,
   MatchStatsResponse,
   NewsArticle,
   NewsResponse,
@@ -155,6 +156,26 @@ export interface SoccerDetailsResponse {
 
 export async function fetchSoccerDetails(matchId: string): Promise<SoccerDetailsResponse> {
   return apiFetch<SoccerDetailsResponse>(`/v1/matches/${matchId}/soccer-details`);
+}
+
+export interface MatchCenterDetailsResponse {
+  match_id: string;
+  phase: string;
+  timeline: {
+    match_id: string;
+    phase: string;
+    events: MatchEvent[];
+    count: number;
+    next_seq: number | null;
+    has_more: boolean;
+  };
+  stats: MatchStatsResponse;
+  soccer_details: SoccerDetailsResponse | null;
+  generated_at: string;
+}
+
+export async function fetchMatchDetails(matchId: string): Promise<MatchCenterDetailsResponse> {
+  return apiFetch<MatchCenterDetailsResponse>(`/v1/matches/${matchId}/details`);
 }
 
 /**
