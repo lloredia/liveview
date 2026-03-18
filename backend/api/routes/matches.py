@@ -6,6 +6,7 @@ GET /v1/matches/{id}/timeline — Ordered event timeline for a match.
 GET /v1/matches/{id}/stats    — Team and player statistics.
 GET /v1/matches/{id}/lineup   — Lineup from Football-Data.org (soccer only).
 GET /v1/matches/{id}/player-stats — Player stats from Football-Data.org when ESPN has none (soccer).
+GET /v1/matches/{id}/soccer-details — Combined soccer lineup + player stats from Football-Data.org.
 """
 from __future__ import annotations
 
@@ -392,24 +393,10 @@ def _team_names_match(our_home: str, our_away: str, fd_home: str, fd_away: str) 
     return names_match(our_home, fd_home) and names_match(our_away, fd_away)
 
 
-@router.get("/{match_id}/lineup")
-async def get_match_lineup(
+async def _load_soccer_match_context(
     match_id: uuid.UUID,
-    response: Response,
-    db: DatabaseManager = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Get lineup (formation, starters, bench) from Football-Data.org for a soccer match.
-
-    Requires LV_FOOTBALL_DATA_API_KEY. Resolves our match to their match by
-    provider_mappings or by league + date + team names. Returns home/away
-    formation, lineup, and bench when available.
-    """
-    _no_store(response)
-    settings = get_settings()
-    if not settings.football_data_api_key:
-        return {"source": None, "home": None, "away": None, "message": "Football-Data.org API key not configured"}
-
+    db: DatabaseManager,
+) -> Any:
     async with db.read_session() as session:
         ht = TeamORM.__table__.alias("ht")
         at = TeamORM.__table__.alias("at")
@@ -432,10 +419,15 @@ async def get_match_lineup(
         row = result.one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Match not found")
-        if row.sport_type != "soccer":
-            return {"source": None, "home": None, "away": None, "message": "Lineup only available for soccer"}
+        return row
 
-        # Resolve football_data match id
+
+async def _resolve_football_data_match_id(
+    match_id: uuid.UUID,
+    db: DatabaseManager,
+    row: Any,
+) -> str | None:
+    async with db.read_session() as session:
         mapping_stmt = select(ProviderMappingORM.provider_id).where(
             ProviderMappingORM.entity_type == "match",
             ProviderMappingORM.canonical_id == match_id,
@@ -444,46 +436,55 @@ async def get_match_lineup(
         mapping_result = await session.execute(mapping_stmt)
         fd_match_id = mapping_result.scalar_one_or_none()
 
-        if not fd_match_id:
-            # Try to find by league + date + team names
-            fd_code = _LEAGUE_TO_FD_CODE.get((row.league_name or "").strip())
-            if not fd_code:
-                return {"source": None, "home": None, "away": None, "message": "League not mapped to Football-Data.org"}
-            date_str = (row.start_time.date().isoformat() if row.start_time else "") or datetime.now(timezone.utc).date().isoformat()
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                list_resp = await client.get(
-                    "https://api.football-data.org/v4/matches",
-                    params={"competitions": fd_code, "dateFrom": date_str, "dateTo": date_str},
-                    headers={"X-Auth-Token": settings.football_data_api_key},
-                )
-                if list_resp.status_code != 200:
-                    return {"source": None, "home": None, "away": None, "message": "Football-Data.org request failed"}
-                list_data = list_resp.json()
-            for m in list_data.get("matches", []):
-                h = (m.get("homeTeam") or {}).get("name", "")
-                a = (m.get("awayTeam") or {}).get("name", "")
-                if _team_names_match(row.ht_name or "", row.at_name or "", h, a):
-                    fd_match_id = str(m.get("id", ""))
-                    break
-            if not fd_match_id:
-                return {"source": None, "home": None, "away": None, "message": "Match not found on Football-Data.org"}
+    if fd_match_id:
+        return str(fd_match_id)
 
-            # Persist mapping for next time
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
-            async with db.session() as write_session:
-                await write_session.execute(
-                    pg_insert(ProviderMappingORM)
-                    .values(
-                        entity_type="match",
-                        canonical_id=match_id,
-                        provider="football_data",
-                        provider_id=fd_match_id,
-                        extra_data={},
-                    )
-                    .on_conflict_do_nothing(constraint="uq_provider_mapping")
-                )
+    fd_code = _LEAGUE_TO_FD_CODE.get((row.league_name or "").strip())
+    if not fd_code:
+        return None
 
-    # Fetch match detail with lineups
+    settings = get_settings()
+    date_str = (row.start_time.date().isoformat() if row.start_time else "") or datetime.now(timezone.utc).date().isoformat()
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        list_resp = await client.get(
+            "https://api.football-data.org/v4/matches",
+            params={"competitions": fd_code, "dateFrom": date_str, "dateTo": date_str},
+            headers={"X-Auth-Token": settings.football_data_api_key},
+        )
+        if list_resp.status_code != 200:
+            return None
+        list_data = list_resp.json()
+
+    for match in list_data.get("matches", []):
+        home = (match.get("homeTeam") or {}).get("name", "")
+        away = (match.get("awayTeam") or {}).get("name", "")
+        if _team_names_match(row.ht_name or "", row.at_name or "", home, away):
+            fd_match_id = str(match.get("id", ""))
+            break
+
+    if not fd_match_id:
+        return None
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    async with db.session() as write_session:
+        await write_session.execute(
+            pg_insert(ProviderMappingORM)
+            .values(
+                entity_type="match",
+                canonical_id=match_id,
+                provider="football_data",
+                provider_id=fd_match_id,
+                extra_data={},
+            )
+            .on_conflict_do_nothing(constraint="uq_provider_mapping")
+        )
+
+    return fd_match_id
+
+
+async def _fetch_football_data_match_detail(fd_match_id: str) -> dict[str, Any] | None:
+    settings = get_settings()
     async with httpx.AsyncClient(timeout=10.0) as client:
         detail_resp = await client.get(
             f"https://api.football-data.org/v4/matches/{fd_match_id}",
@@ -493,10 +494,11 @@ async def get_match_lineup(
             },
         )
         if detail_resp.status_code != 200:
-            return {"source": "football_data", "home": None, "away": None, "message": "Failed to load lineup"}
+            return None
+    return detail_resp.json()
 
-    data = detail_resp.json()
 
+def _build_lineup_payload(data: dict[str, Any]) -> dict[str, Any]:
     def _team_lineup(team_obj: dict) -> dict[str, Any]:
         if not team_obj:
             return {"formation": None, "lineup": [], "bench": []}
@@ -514,10 +516,43 @@ async def get_match_lineup(
 
     return {
         "source": "football_data",
-        "match_id": str(match_id),
         "home": _team_lineup(data.get("homeTeam") or {}),
         "away": _team_lineup(data.get("awayTeam") or {}),
     }
+
+
+@router.get("/{match_id}/lineup")
+async def get_match_lineup(
+    match_id: uuid.UUID,
+    response: Response,
+    db: DatabaseManager = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get lineup (formation, starters, bench) from Football-Data.org for a soccer match.
+
+    Requires LV_FOOTBALL_DATA_API_KEY. Resolves our match to their match by
+    provider_mappings or by league + date + team names. Returns home/away
+    formation, lineup, and bench when available.
+    """
+    _no_store(response)
+    settings = get_settings()
+    if not settings.football_data_api_key:
+        return {"source": None, "home": None, "away": None, "message": "Football-Data.org API key not configured"}
+    row = await _load_soccer_match_context(match_id, db)
+    if row.sport_type != "soccer":
+        return {"source": None, "home": None, "away": None, "message": "Lineup only available for soccer"}
+
+    fd_match_id = await _resolve_football_data_match_id(match_id, db, row)
+    if not fd_match_id:
+        return {"source": None, "home": None, "away": None, "message": "Match not found on Football-Data.org"}
+
+    data = await _fetch_football_data_match_detail(fd_match_id)
+    if not data:
+        return {"source": "football_data", "home": None, "away": None, "message": "Failed to load lineup"}
+
+    payload = _build_lineup_payload(data)
+    payload["match_id"] = str(match_id)
+    return payload
 
 
 def _build_player_stats_from_fd_match(data: dict) -> dict[str, Any]:
@@ -612,90 +647,77 @@ async def get_match_player_stats(
     settings = get_settings()
     if not settings.football_data_api_key:
         return {"source": None, "home": None, "away": None, "message": "Football-Data.org API key not configured"}
+    row = await _load_soccer_match_context(match_id, db)
+    if row.sport_type != "soccer":
+        return {"source": None, "home": None, "away": None, "message": "Player stats only available for soccer"}
 
-    async with db.read_session() as session:
-        ht = TeamORM.__table__.alias("ht")
-        at = TeamORM.__table__.alias("at")
-        stmt = (
-            select(
-                MatchORM.id,
-                MatchORM.start_time,
-                LeagueORM.name.label("league_name"),
-                SportORM.sport_type,
-                ht.c.name.label("ht_name"),
-                at.c.name.label("at_name"),
-            )
-            .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
-            .join(SportORM, LeagueORM.sport_id == SportORM.id)
-            .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
-            .outerjoin(at, MatchORM.away_team_id == at.c.id)
-            .where(MatchORM.id == match_id)
-        )
-        result = await session.execute(stmt)
-        row = result.one_or_none()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Match not found")
-        if row.sport_type != "soccer":
-            return {"source": None, "home": None, "away": None, "message": "Player stats only available for soccer"}
+    fd_match_id = await _resolve_football_data_match_id(match_id, db, row)
+    if not fd_match_id:
+        return {"source": None, "home": None, "away": None, "message": "Match not found on Football-Data.org"}
 
-        mapping_stmt = select(ProviderMappingORM.provider_id).where(
-            ProviderMappingORM.entity_type == "match",
-            ProviderMappingORM.canonical_id == match_id,
-            ProviderMappingORM.provider == "football_data",
-        )
-        mapping_result = await session.execute(mapping_stmt)
-        fd_match_id = mapping_result.scalar_one_or_none()
+    data = await _fetch_football_data_match_detail(fd_match_id)
+    if not data:
+        return {"source": "football_data", "home": None, "away": None, "message": "Failed to load player stats"}
 
-        if not fd_match_id:
-            fd_code = _LEAGUE_TO_FD_CODE.get((row.league_name or "").strip())
-            if not fd_code:
-                return {"source": None, "home": None, "away": None, "message": "League not mapped to Football-Data.org"}
-            date_str = (row.start_time.date().isoformat() if row.start_time else "") or datetime.now(timezone.utc).date().isoformat()
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                list_resp = await client.get(
-                    "https://api.football-data.org/v4/matches",
-                    params={"competitions": fd_code, "dateFrom": date_str, "dateTo": date_str},
-                    headers={"X-Auth-Token": settings.football_data_api_key},
-                )
-                if list_resp.status_code != 200:
-                    return {"source": None, "home": None, "away": None, "message": "Football-Data.org request failed"}
-                list_data = list_resp.json()
-            for m in list_data.get("matches", []):
-                h = (m.get("homeTeam") or {}).get("name", "")
-                a = (m.get("awayTeam") or {}).get("name", "")
-                if _team_names_match(row.ht_name or "", row.at_name or "", h, a):
-                    fd_match_id = str(m.get("id", ""))
-                    break
-            if not fd_match_id:
-                return {"source": None, "home": None, "away": None, "message": "Match not found on Football-Data.org"}
-
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
-            async with db.session() as write_session:
-                await write_session.execute(
-                    pg_insert(ProviderMappingORM)
-                    .values(
-                        entity_type="match",
-                        canonical_id=match_id,
-                        provider="football_data",
-                        provider_id=fd_match_id,
-                        extra_data={},
-                    )
-                    .on_conflict_do_nothing(constraint="uq_provider_mapping")
-                )
-
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        detail_resp = await client.get(
-            f"https://api.football-data.org/v4/matches/{fd_match_id}",
-            headers={
-                "X-Auth-Token": settings.football_data_api_key,
-                "X-Unfold-Lineups": "true",
-            },
-        )
-        if detail_resp.status_code != 200:
-            return {"source": "football_data", "home": None, "away": None, "message": "Failed to load player stats"}
-
-    data = detail_resp.json()
     return _build_player_stats_from_fd_match(data)
+
+
+@router.get("/{match_id}/soccer-details")
+async def get_match_soccer_details(
+    match_id: uuid.UUID,
+    response: Response,
+    db: DatabaseManager = Depends(get_db),
+) -> dict[str, Any]:
+    """Get combined soccer lineup and fallback player stats from Football-Data.org."""
+    _no_store(response)
+    settings = get_settings()
+    if not settings.football_data_api_key:
+        return {
+            "source": None,
+            "lineup": None,
+            "player_stats": None,
+            "message": "Football-Data.org API key not configured",
+        }
+
+    row = await _load_soccer_match_context(match_id, db)
+    if row.sport_type != "soccer":
+        return {
+            "source": None,
+            "lineup": None,
+            "player_stats": None,
+            "message": "Soccer details only available for soccer",
+        }
+
+    fd_match_id = await _resolve_football_data_match_id(match_id, db, row)
+    if not fd_match_id:
+        return {
+            "source": None,
+            "lineup": None,
+            "player_stats": None,
+            "message": "Match not found on Football-Data.org",
+        }
+
+    data = await _fetch_football_data_match_detail(fd_match_id)
+    if not data:
+        return {
+            "source": "football_data",
+            "lineup": None,
+            "player_stats": None,
+            "message": "Failed to load soccer details",
+        }
+
+    lineup = _build_lineup_payload(data)
+    player_stats = _build_player_stats_from_fd_match(data)
+    return {
+        "source": "football_data",
+        "match_id": str(match_id),
+        "lineup": {
+            "source": lineup["source"],
+            "home": lineup["home"],
+            "away": lineup["away"],
+        },
+        "player_stats": player_stats,
+    }
 
 
 def _event_orm_to_dict(event: MatchEventORM) -> dict[str, Any]:

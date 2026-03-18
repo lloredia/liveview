@@ -218,50 +218,54 @@ test.describe("LiveView E2E Tests", () => {
         });
       });
 
-      await page.route("**/v1/matches/test-match/lineup", async (route) => {
+      await page.route("**/v1/matches/test-match/soccer-details", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
             source: "football_data",
-            home: {
-              formation: "4-3-3",
-              lineup: [
-                {
-                  id: 1,
-                  name: "David Raya",
-                  position: "GK",
-                  shirt_number: 22,
-                },
-              ],
-              bench: [
-                {
-                  id: 2,
-                  name: "Leandro Trossard",
-                  position: "FW",
-                  shirt_number: 19,
-                },
-              ],
+            lineup: {
+              source: "football_data",
+              home: {
+                formation: "4-3-3",
+                lineup: [
+                  {
+                    id: 1,
+                    name: "David Raya",
+                    position: "GK",
+                    shirt_number: 22,
+                  },
+                ],
+                bench: [
+                  {
+                    id: 2,
+                    name: "Leandro Trossard",
+                    position: "FW",
+                    shirt_number: 19,
+                  },
+                ],
+              },
+              away: {
+                formation: "4-2-3-1",
+                lineup: [
+                  {
+                    id: 3,
+                    name: "Robert Sanchez",
+                    position: "GK",
+                    shirt_number: 1,
+                  },
+                ],
+                bench: [
+                  {
+                    id: 4,
+                    name: "Mykhailo Mudryk",
+                    position: "FW",
+                    shirt_number: 10,
+                  },
+                ],
+              },
             },
-            away: {
-              formation: "4-2-3-1",
-              lineup: [
-                {
-                  id: 3,
-                  name: "Robert Sanchez",
-                  position: "GK",
-                  shirt_number: 1,
-                },
-              ],
-              bench: [
-                {
-                  id: 4,
-                  name: "Mykhailo Mudryk",
-                  position: "FW",
-                  shirt_number: 10,
-                },
-              ],
-            },
+            player_stats: null,
           }),
         });
       });
@@ -332,37 +336,41 @@ test.describe("LiveView E2E Tests", () => {
         });
       });
 
-      await page.route("**/v1/matches/test-match/player-stats", async (route) => {
+      await page.route("**/v1/matches/test-match/soccer-details", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
             source: "football_data",
-            home: {
-              teamName: "Arsenal",
-              statColumns: ["G", "A", "YC"],
-              players: [
-                {
-                  name: "Bukayo Saka",
-                  jersey: "7",
-                  position: "FW",
-                  stats: { G: 1, A: 0, YC: 0 },
-                  starter: true,
-                },
-              ],
-            },
-            away: {
-              teamName: "Chelsea",
-              statColumns: ["G", "A", "YC"],
-              players: [
-                {
-                  name: "Cole Palmer",
-                  jersey: "20",
-                  position: "FW",
-                  stats: { G: 0, A: 0, YC: 1 },
-                  starter: true,
-                },
-              ],
+            lineup: null,
+            player_stats: {
+              source: "football_data",
+              home: {
+                teamName: "Arsenal",
+                statColumns: ["G", "A", "YC"],
+                players: [
+                  {
+                    name: "Bukayo Saka",
+                    jersey: "7",
+                    position: "FW",
+                    stats: { G: 1, A: 0, YC: 0 },
+                    starter: true,
+                  },
+                ],
+              },
+              away: {
+                teamName: "Chelsea",
+                statColumns: ["G", "A", "YC"],
+                players: [
+                  {
+                    name: "Cole Palmer",
+                    jersey: "20",
+                    position: "FW",
+                    stats: { G: 0, A: 0, YC: 1 },
+                    starter: true,
+                  },
+                ],
+              },
             },
           }),
         });

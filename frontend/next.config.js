@@ -11,7 +11,7 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   runtimeCaching: [
     {
       // Never service-worker cache live score/state endpoints.
-      urlPattern: /\/v1\/(today|leagues\/[^/]+\/scoreboard|matches\/[^/]+(?:\/timeline|\/stats|\/lineup|\/player-stats)?)(\?.*)?$/i,
+      urlPattern: /\/v1\/(today|leagues\/[^/]+\/scoreboard|matches\/[^/]+(?:\/timeline|\/stats|\/lineup|\/player-stats|\/soccer-details)?)(\?.*)?$/i,
       handler: "NetworkOnly",
     },
     {

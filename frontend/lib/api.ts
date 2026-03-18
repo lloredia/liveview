@@ -145,6 +145,18 @@ export async function fetchPlayerStats(matchId: string): Promise<PlayerStatsResp
   return apiFetch<PlayerStatsResponse>(`/v1/matches/${matchId}/player-stats`);
 }
 
+export interface SoccerDetailsResponse {
+  source: string | null;
+  match_id?: string;
+  lineup: LineupResponse | null;
+  player_stats: PlayerStatsResponse | null;
+  message?: string;
+}
+
+export async function fetchSoccerDetails(matchId: string): Promise<SoccerDetailsResponse> {
+  return apiFetch<SoccerDetailsResponse>(`/v1/matches/${matchId}/soccer-details`);
+}
+
 /**
  * Fetch live matches across ALL leagues for the live ticker.
  * Fetches all scoreboards in parallel and filters for live phases.

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { ApiError, fetchMatch, fetchStats, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
+import { ApiError, fetchMatch, fetchSoccerDetails, fetchStats, fetchTimeline, type LineupResponse, type PlayerStatsResponse, type SoccerDetailsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import {
   formatDate,
@@ -615,24 +615,16 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   });
 
   // Football-Data.org lineup — fetch for soccer when lineup tab is active (so we can show FD data when ESPN has no lineup)
-  const lineupFetcher = useCallback(() => fetchLineup(matchId), [matchId]);
-  const { data: lineupData } = usePolling<LineupResponse>({
-    fetcher: lineupFetcher,
-    interval: detailLive ? 60000 : 0,
-    intervalWhenHidden: detailLive ? 180000 : undefined,
-    enabled: activeTab === "lineup" && isSoccer && !!matchId,
-    key: `lineup-${matchId}`,
-  });
-
-  // Football-Data.org player stats — fetch for soccer when player stats tab is active
-  const playerStatsFetcher = useCallback(() => fetchPlayerStats(matchId), [matchId]);
-  const { data: playerStatsData } = usePolling<PlayerStatsResponse>({
-    fetcher: playerStatsFetcher,
+  const soccerDetailsFetcher = useCallback(() => fetchSoccerDetails(matchId), [matchId]);
+  const { data: soccerDetailsData } = usePolling<SoccerDetailsResponse>({
+    fetcher: soccerDetailsFetcher,
     interval: detailLive ? 30000 : 0,
     intervalWhenHidden: detailLive ? 90000 : undefined,
-    enabled: activeTab === "player_stats" && isSoccer && !!matchId,
-    key: `player-stats-${matchId}`,
+    enabled: (activeTab === "lineup" || activeTab === "player_stats") && isSoccer && !!matchId,
+    key: `soccer-details-${matchId}`,
   });
+  const lineupData: LineupResponse | null = soccerDetailsData?.lineup ?? null;
+  const playerStatsData: PlayerStatsResponse | null = soccerDetailsData?.player_stats ?? null;
 
   // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
   const playsForTab = useMemo(() => {
