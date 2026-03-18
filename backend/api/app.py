@@ -1005,7 +1005,7 @@ def _non_terminal_phase_values() -> tuple[str, ...]:
     return tuple(p.value for p in MatchPhase if not p.is_terminal)
 
 
-async def phase_sync_loop(db: DatabaseManager) -> None:
+async def phase_sync_loop(db: DatabaseManager, redis: RedisManager) -> None:
     """
     Background task: last-resort phase sync only.
     Does NOT transition scheduled->live or live->finished by time; ingest owns status.
@@ -1021,6 +1021,8 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
             await asyncio.sleep(60)
 
             matches_checked = 0
+            changed_match_ids: set[str] = set()
+            changed_league_ids: set[str] = set()
             async with db.write_session() as session:
                 logger.info(
                     "phase_sync.tick",
@@ -1056,6 +1058,7 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                 rows = finished_result.fetchall()
                 for row in rows:
                     match_id_val, old_phase = str(row[0]), (row[1] if len(row) > 1 else "live")
+                    changed_match_ids.add(match_id_val)
                     logger.info(
                         "phase_sync.fallback_transition",
                         match_id=match_id_val,
@@ -1072,13 +1075,37 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                 matches_checked = len(rows)
 
                 # Sync match_state.phase -> matches.phase (authoritative from ingest)
-                await session.execute(text("""
+                sync_result = await session.execute(text("""
                     UPDATE matches m
                     SET phase = ms.phase
                     FROM match_state ms
                     WHERE m.id = ms.match_id
                       AND m.phase IS DISTINCT FROM ms.phase
+                    RETURNING m.id, m.league_id
                 """))
+                sync_rows = sync_result.fetchall()
+                for row in sync_rows:
+                    changed_match_ids.add(str(row[0]))
+                    if row[1]:
+                        changed_league_ids.add(str(row[1]))
+
+                if changed_match_ids and not changed_league_ids:
+                    league_result = await session.execute(
+                        select(MatchORM.id, MatchORM.league_id).where(MatchORM.id.in_(list(changed_match_ids)))
+                    )
+                    for row in league_result:
+                        if row.league_id:
+                            changed_league_ids.add(str(row.league_id))
+
+            if changed_match_ids:
+                try:
+                    await _invalidate_today_cache(redis)
+                    await _invalidate_scoreboard_cache(redis, changed_league_ids)
+                    await _invalidate_match_scoreboard_cache(redis, changed_match_ids)
+                    await _invalidate_match_detail_cache(redis, changed_match_ids)
+                    await _invalidate_match_stats_cache(redis, changed_match_ids)
+                except Exception:
+                    logger.warning("phase_sync_cache_invalidation_failed", exc_info=True)
 
             logger.info(
                 "phase_sync.tick",
@@ -1225,7 +1252,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     schedule_sync_task = asyncio.create_task(schedule_sync_service.run())
 
     # Start background phase sync
-    phase_sync_task = asyncio.create_task(phase_sync_loop(db))
+    phase_sync_task = asyncio.create_task(phase_sync_loop(db, redis))
 
     # Start live score refresh (SportRadar primary, ESPN fallback)
     live_refresh_task = asyncio.create_task(live_score_refresh_loop(db, redis, app))

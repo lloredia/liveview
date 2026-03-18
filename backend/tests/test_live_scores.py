@@ -214,6 +214,7 @@ async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     executed: list[tuple[str, dict | None]] = []
+    invalidated: dict[str, object] = {}
 
     class _FakeResult:
         def __init__(self, rows=None) -> None:
@@ -228,15 +229,38 @@ async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished
             executed.append((sql, params))
             if "RETURNING id, phase" in sql:
                 return _FakeResult([("match-1", MatchPhase.LIVE_FIRST_HALF.value)])
+            if "RETURNING m.id, m.league_id" in sql:
+                return _FakeResult([("match-1", "league-1")])
             return _FakeResult()
 
     fake_db = SimpleNamespace(
         write_session=lambda: _FakeAsyncContextManager(_FakeSession())
     )
+    fake_redis = SimpleNamespace()
     monkeypatch.setattr(
         "api.app.get_settings",
         lambda: SimpleNamespace(phase_sync_fallback_hours=7),
     )
+    async def _record_today(_redis) -> None:  # type: ignore[no-untyped-def]
+        invalidated["today"] = True
+
+    async def _record_scoreboards(_redis, league_ids) -> None:  # type: ignore[no-untyped-def]
+        invalidated["scoreboards"] = set(league_ids)
+
+    async def _record_match_scoreboards(_redis, match_ids) -> None:  # type: ignore[no-untyped-def]
+        invalidated["match_scoreboards"] = set(match_ids)
+
+    async def _record_details(_redis, match_ids) -> None:  # type: ignore[no-untyped-def]
+        invalidated["details"] = set(match_ids)
+
+    async def _record_stats(_redis, match_ids) -> None:  # type: ignore[no-untyped-def]
+        invalidated["stats"] = set(match_ids)
+
+    monkeypatch.setattr("api.app._invalidate_today_cache", _record_today)
+    monkeypatch.setattr("api.app._invalidate_scoreboard_cache", _record_scoreboards)
+    monkeypatch.setattr("api.app._invalidate_match_scoreboard_cache", _record_match_scoreboards)
+    monkeypatch.setattr("api.app._invalidate_match_detail_cache", _record_details)
+    monkeypatch.setattr("api.app._invalidate_match_stats_cache", _record_stats)
     sleep_calls = {"count": 0}
 
     async def _fake_sleep(_seconds: float) -> None:
@@ -246,7 +270,7 @@ async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished
 
     monkeypatch.setattr("api.app.asyncio.sleep", _fake_sleep)
 
-    await phase_sync_loop(fake_db)  # type: ignore[arg-type]
+    await phase_sync_loop(fake_db, fake_redis)  # type: ignore[arg-type]
 
     assert len(executed) == 3
     state_sql, state_params = executed[0]
@@ -270,6 +294,11 @@ async def test_phase_sync_loop_marks_stale_non_terminal_match_and_state_finished
     assert "UPDATE matches m" in sync_sql
     assert "FROM match_state ms" in sync_sql
     assert sync_params is None
+    assert invalidated["today"] is True
+    assert invalidated["scoreboards"] == {"league-1"}
+    assert invalidated["match_scoreboards"] == {"match-1"}
+    assert invalidated["details"] == {"match-1"}
+    assert invalidated["stats"] == {"match-1"}
 
 
 @pytest.mark.asyncio
