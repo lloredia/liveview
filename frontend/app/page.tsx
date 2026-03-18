@@ -352,6 +352,7 @@ function HomeContent() {
               {selectedLeague ? (
                 <Scoreboard
                   leagueId={selectedLeague}
+                  todaySnapshot={todaySnapshot}
                   onMatchSelect={handleMatchSelect}
                   pinnedIds={pinnedIds}
                   onTogglePin={handleTogglePin}

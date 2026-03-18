@@ -5,6 +5,7 @@ import { fetchScoreboard } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import { isLive } from "@/lib/utils";
 import { getLeagueLogo } from "@/lib/league-logos";
+import type { ScoreboardResponse, TodayResponse } from "@/lib/types";
 import { MatchCard } from "./match-card";
 import { ScoreboardSkeleton } from "./skeleton";
 import { Standings } from "./standings";
@@ -14,6 +15,7 @@ import { LastUpdatedIndicator } from "./last-updated-indicator";
 
 interface ScoreboardProps {
   leagueId: string | null;
+  todaySnapshot?: TodayResponse | null;
   onMatchSelect: (matchId: string) => void;
   pinnedIds?: string[];
   onTogglePin?: (matchId: string) => void;
@@ -39,6 +41,7 @@ function LeagueIcon({ name }: { name: string }) {
 
 export function Scoreboard({
   leagueId,
+  todaySnapshot = null,
   onMatchSelect,
   pinnedIds = [],
   onTogglePin,
@@ -52,22 +55,43 @@ export function Scoreboard({
     return fetchScoreboard(leagueId);
   }, [leagueId]);
 
+  const todayLeagueData = useMemo(() => {
+    if (!leagueId || !todaySnapshot) return null;
+    return todaySnapshot.leagues.find((league) => league.league_id === leagueId) ?? null;
+  }, [leagueId, todaySnapshot]);
+
   const [hasLive, setHasLive] = useState(false);
   const { data, loading, error, lastSuccessAt } = usePolling({
     fetcher,
     interval: hasLive ? 5000 : 20000,
-    enabled: !!leagueId,
+    enabled: !!leagueId && !todayLeagueData,
     key: leagueId,
   });
 
-  const leagueName = data?.league_name || "";
+  const effectiveData: ScoreboardResponse | null = useMemo(() => {
+    if (todayLeagueData) {
+      return {
+        league_id: todayLeagueData.league_id,
+        league_name: todayLeagueData.league_name,
+        matches: todayLeagueData.matches,
+        generated_at: todaySnapshot?.generated_at || new Date().toISOString(),
+      };
+    }
+    return data ?? null;
+  }, [data, todayLeagueData, todaySnapshot?.generated_at]);
+
+  const effectiveLastSuccessAt = todayLeagueData
+    ? Date.parse(todaySnapshot?.generated_at || "")
+    : lastSuccessAt;
+
+  const leagueName = effectiveData?.league_name || "";
 
   useMemo(() => {
     setTab("matches");
   }, [leagueId]);
 
   const { liveMatches, scheduledMatches, finishedMatches } = useMemo(() => {
-    const matches = data?.matches || [];
+    const matches = effectiveData?.matches || [];
     return {
       liveMatches: matches.filter((m) => isLive(m.phase)),
       scheduledMatches: matches.filter(
@@ -80,7 +104,7 @@ export function Scoreboard({
           m.phase === "cancelled"
       ),
     };
-  }, [data]);
+  }, [effectiveData]);
 
   useEffect(() => {
     setHasLive(liveMatches.length > 0);
@@ -94,11 +118,11 @@ export function Scoreboard({
     );
   }
 
-  if (loading && !data) {
+  if (loading && !effectiveData) {
     return <ScoreboardSkeleton />;
   }
 
-  if (error && !data) {
+  if (error && !effectiveData) {
     return (
       <div className="px-3 py-4 text-center text-label-md text-accent-red">
         Failed to load scoreboard
@@ -122,7 +146,7 @@ export function Scoreboard({
         </h2>
         <GlassDivider className="ml-2 flex-1" />
         <GlassPill variant="info" size="sm">
-          {(data?.matches || []).length} matches
+          {(effectiveData?.matches || []).length} matches
         </GlassPill>
       </div>
 
@@ -156,7 +180,7 @@ export function Scoreboard({
                 <GlassPill variant="live" size="sm" pulse>
                   Live
                 </GlassPill>
-                <LastUpdatedIndicator lastSuccessAt={lastSuccessAt} show={liveMatches.length > 0} className="ml-auto" />
+                <LastUpdatedIndicator lastSuccessAt={Number.isFinite(effectiveLastSuccessAt) ? effectiveLastSuccessAt : null} show={liveMatches.length > 0} className="ml-auto" />
               </div>
               <div className="mx-2 overflow-hidden rounded-[14px] border border-glass-border bg-glass">
                 {liveMatches.map((m) => (
@@ -229,7 +253,7 @@ export function Scoreboard({
             </section>
           )}
 
-          {(data?.matches || []).length === 0 && (
+          {(effectiveData?.matches || []).length === 0 && (
             <div className="py-16 text-center text-body-md text-text-muted">
               No matches today
             </div>
