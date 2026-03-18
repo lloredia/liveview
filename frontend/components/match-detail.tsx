@@ -400,21 +400,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       playerStatsData?.source &&
       (playerStatsData.home?.players?.length || playerStatsData.away?.players?.length)
     );
-    const fallbackPlayerCount =
-      (playerStatsData?.home?.players?.length ?? 0) +
-      (playerStatsData?.away?.players?.length ?? 0);
     const espnPlayerStatsAvailable = !!(
       espnData &&
       (espnData.homePlayers.players.length > 0 || espnData.awayPlayers.players.length > 0)
     );
-    const espnPlayerCount =
-      (espnData?.homePlayers.players.length ?? 0) +
-      (espnData?.awayPlayers.players.length ?? 0);
-    const preferFallbackPlayerStats =
-      fallbackPlayerStatsAvailable &&
-      (!espnPlayerStatsAvailable || fallbackPlayerCount > espnPlayerCount);
     const playerStats: MatchCenterPlayerStatsSection | null =
-      preferFallbackPlayerStats && playerStatsData?.home && playerStatsData?.away
+      fallbackPlayerStatsAvailable && playerStatsData?.home && playerStatsData?.away
         ? {
             source: playerStatsData.source,
             sport: "soccer",
@@ -464,24 +455,14 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     const awayStarters = espnData?.awayPlayers?.players?.filter((player) => player.starter) ?? [];
     const homeBench = espnData?.homePlayers?.players?.filter((player) => !player.starter) ?? [];
     const awayBench = espnData?.awayPlayers?.players?.filter((player) => !player.starter) ?? [];
-    const fallbackStarterCount =
-      (lineupData?.home?.lineup?.length ?? 0) +
-      (lineupData?.away?.lineup?.length ?? 0);
-    const espnStarterCount = homeStarters.length + awayStarters.length;
     const primaryLineupAvailable = !!(
       homeStarters.length ||
       awayStarters.length ||
       espnData?.homeFormation ||
       espnData?.awayFormation
     );
-    const preferFallbackLineup =
-      fallbackLineupAvailable &&
-      (!primaryLineupAvailable ||
-        fallbackStarterCount > espnStarterCount ||
-        (!!lineupData?.home?.formation && !espnData?.homeFormation) ||
-        (!!lineupData?.away?.formation && !espnData?.awayFormation));
     const lineup: MatchCenterLineupSection | null =
-      preferFallbackLineup && lineupData
+      fallbackLineupAvailable && lineupData
         ? {
             source: lineupData.source,
             homeFormation: null,
