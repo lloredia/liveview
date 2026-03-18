@@ -672,6 +672,162 @@ test.describe("LiveView E2E Tests", () => {
       await expect(page.getByText("61")).toBeVisible();
       await expect(page.getByText("39")).toBeVisible();
     });
+
+    test("should render backend supplementary detail for a non-soccer match", async ({
+      page,
+    }) => {
+      await page.route("**/v1/matches/test-match", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match: {
+              id: "test-match",
+              phase: "live",
+              start_time: "2026-03-18T19:00:00Z",
+              venue: "TD Garden",
+              home_team: {
+                id: "home-1",
+                name: "Boston Celtics",
+                short_name: "BOS",
+                logo_url: null,
+              },
+              away_team: {
+                id: "away-1",
+                name: "New York Knicks",
+                short_name: "NYK",
+                logo_url: null,
+              },
+            },
+            state: {
+              score_home: 88,
+              score_away: 84,
+              clock: "03:21",
+              period: "4",
+              period_scores: [],
+              version: 7,
+            },
+            recent_events: [],
+            league: {
+              id: "nba",
+              name: "NBA",
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/details", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match_id: "test-match",
+            phase: "live",
+            timeline: {
+              match_id: "test-match",
+              phase: "live",
+              events: [],
+              count: 0,
+              next_seq: null,
+              has_more: false,
+            },
+            stats: {
+              match_id: "test-match",
+              teams: [],
+              generated_at: "2026-03-18T19:03:00Z",
+            },
+            soccer_details: null,
+            supplementary: {
+              espn: {
+                source: "espn",
+                fetched_at: "2026-03-18T19:03:00Z",
+                sport: "basketball",
+                plays: [
+                  {
+                    id: "play-1",
+                    text: "Jayson Tatum makes three point jumper",
+                    homeScore: 88,
+                    awayScore: 84,
+                    period: { number: 4, displayValue: "4th" },
+                    clock: { displayValue: "03:21" },
+                    scoringPlay: true,
+                    scoreValue: 3,
+                    team: { id: "home-1", displayName: "Boston Celtics" },
+                    participants: [{ athlete: { displayName: "Jayson Tatum" } }],
+                    type: { id: "437", text: "Made Shot" },
+                  },
+                ],
+                team_stats: {
+                  home: [{ name: "rebounds", displayValue: "44", label: "Rebounds" }],
+                  away: [{ name: "rebounds", displayValue: "38", label: "Rebounds" }],
+                },
+                player_stats: {
+                  home: {
+                    teamName: "Boston Celtics",
+                    statColumns: ["PTS", "REB", "AST"],
+                    players: [
+                      {
+                        name: "Jayson Tatum",
+                        jersey: "0",
+                        position: "SF",
+                        stats: { PTS: 31, REB: 9, AST: 6 },
+                        starter: true,
+                      },
+                    ],
+                  },
+                  away: {
+                    teamName: "New York Knicks",
+                    statColumns: ["PTS", "REB", "AST"],
+                    players: [
+                      {
+                        name: "Jalen Brunson",
+                        jersey: "11",
+                        position: "PG",
+                        stats: { PTS: 27, REB: 3, AST: 7 },
+                        starter: true,
+                      },
+                    ],
+                  },
+                },
+                formations: { home: null, away: null },
+                injuries: { home: [], away: [] },
+                team_display: {
+                  home_name: "Boston Celtics",
+                  away_name: "New York Knicks",
+                  home_team_id: "home-1",
+                  away_team_id: "away-1",
+                },
+                substitutions: null,
+              },
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/api/espn/site/**", async (route) => {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "should not be called" }),
+        });
+      });
+
+      await goto(page, `/match/test-match?league=NBA`);
+
+      await page.getByRole("button", { name: "Player Stats" }).click();
+      await expect(page.getByRole("button", { name: /Jayson Tatum/i }).first()).toBeVisible();
+
+      await page.getByRole("button", { name: "Team Stats" }).click();
+      await expect(page.getByText("Rebounds")).toBeVisible();
+      await expect(page.getByText("44")).toBeVisible();
+
+      await page.getByRole("button", { name: "Play-by-Play" }).click();
+      await expect(
+        page.getByText("Jayson Tatum makes three point jumper")
+      ).toBeVisible();
+    });
   });
 
   test.describe("Authentication", () => {

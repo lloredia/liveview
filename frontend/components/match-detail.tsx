@@ -576,21 +576,11 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     if (refreshTrigger != null && refreshTrigger > 0) refreshMatch();
   }, [refreshTrigger, refreshMatch]);
 
-  // ESPN summary (supplementary data only; score/phase come from canonical/backend) — use league from URL or from match API so play-by-play works without ?league=
   const leagueForESPN = leagueName || matchData?.league?.name || "";
-  const espnFetcher = useCallback(async (): Promise<ESPNSummaryData | null> => {
-    if (!matchData) return null;
-    const { match } = matchData;
-    return fetchESPNSummary(match.home_team?.name || "", match.away_team?.name || "", leagueForESPN);
-  }, [matchData, leagueForESPN]);
-
-  const { data: espnData, loading: espnLoading } = usePolling<ESPNSummaryData | null>({
-    fetcher: espnFetcher, interval: 60000, enabled: !!matchData, key: `espn-${matchId}`,
-  });
 
   // Soccer: show lineup/player_stats tabs when ESPN says soccer or when league is a known soccer league (so we can show Football-Data.org data even if ESPN has none)
   const isSoccerLeague = !!(leagueForESPN && getLeagueMapping(leagueForESPN)?.sport === "soccer");
-  const isSoccer = espnData?.sport === "soccer" || isSoccerLeague;
+  const isSoccer = isSoccerLeague;
   const detailLive = isLive(matchData?.match?.phase ?? "scheduled");
   const tabs: Tab[] = isSoccer ? ["play_by_play", "player_stats", "lineup", "team_stats"] : ["play_by_play", "player_stats", "team_stats"];
   useEffect(() => {
@@ -613,6 +603,29 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const statsData: MatchStatsResponse | null = detailsData?.stats ?? null;
   const lineupData: LineupResponse | null = detailsData?.soccer_details?.lineup ?? null;
   const playerStatsData: PlayerStatsResponse | null = detailsData?.soccer_details?.player_stats ?? null;
+  const espnData: ESPNSummaryData | null = useMemo(() => {
+    const supplementary = detailsData?.supplementary?.espn;
+    if (!supplementary) return null;
+    return {
+      plays: supplementary.plays.map((play) => ({
+        ...play,
+        team: play.team ?? undefined,
+      })),
+      homeTeamStats: supplementary.team_stats.home,
+      awayTeamStats: supplementary.team_stats.away,
+      homeTeamName: supplementary.team_display.home_name,
+      awayTeamName: supplementary.team_display.away_name,
+      homeTeamId: supplementary.team_display.home_team_id,
+      awayTeamId: supplementary.team_display.away_team_id,
+      homePlayers: supplementary.player_stats.home as TeamPlayerStats,
+      awayPlayers: supplementary.player_stats.away as TeamPlayerStats,
+      injuries: supplementary.injuries,
+      sport: supplementary.sport,
+      homeFormation: supplementary.formations.home ?? undefined,
+      awayFormation: supplementary.formations.away ?? undefined,
+      substitutions: supplementary.substitutions ?? undefined,
+    };
+  }, [detailsData?.supplementary?.espn]);
 
   // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
   const playsForTab = useMemo(() => {
@@ -621,7 +634,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     return backendEventsToPlays(matchData?.recent_events || []);
   }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
 
-  const playByPlayLoading = (detailsLoading || espnLoading) && playsForTab.length === 0;
+  const playByPlayLoading = detailsLoading && playsForTab.length === 0;
   const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
 
   if (matchLoading && !matchData) {
@@ -819,7 +832,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
           <PlayerStatsTab
             espnData={espnData}
             playerStatsFallback={playerStatsData ?? null}
-            loading={espnLoading && !espnData && !(playerStatsData?.home?.players?.length || playerStatsData?.away?.players?.length)}
+            loading={detailsLoading && !espnData && !(playerStatsData?.home?.players?.length || playerStatsData?.away?.players?.length)}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
@@ -832,7 +845,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
           <LineupTab
             espnData={espnData}
             fdLineup={lineupData ?? null}
-            loading={espnLoading && !espnData && !(lineupData?.home?.lineup?.length || lineupData?.away?.lineup?.length)}
+            loading={detailsLoading && !espnData && !(lineupData?.home?.lineup?.length || lineupData?.away?.lineup?.length)}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
@@ -848,7 +861,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
             awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
-            loading={(detailsLoading || espnLoading) && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
+            loading={detailsLoading && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
             live={live}
           />
         )}

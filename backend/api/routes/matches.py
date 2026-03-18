@@ -71,6 +71,287 @@ def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
 
 
+_LEAGUE_TO_ESPN_MAP: dict[str, dict[str, str]] = {
+    "Premier League": {"sport": "soccer", "slug": "eng.1"},
+    "La Liga": {"sport": "soccer", "slug": "esp.1"},
+    "Bundesliga": {"sport": "soccer", "slug": "ger.1"},
+    "Serie A": {"sport": "soccer", "slug": "ita.1"},
+    "Ligue 1": {"sport": "soccer", "slug": "fra.1"},
+    "MLS": {"sport": "soccer", "slug": "usa.1"},
+    "Champions League": {"sport": "soccer", "slug": "uefa.champions"},
+    "Europa League": {"sport": "soccer", "slug": "uefa.europa"},
+    "Conference League": {"sport": "soccer", "slug": "uefa.europa.conf"},
+    "Championship": {"sport": "soccer", "slug": "eng.2"},
+    "FA Cup": {"sport": "soccer", "slug": "eng.fa"},
+    "EFL Cup": {"sport": "soccer", "slug": "eng.league_cup"},
+    "Eredivisie": {"sport": "soccer", "slug": "ned.1"},
+    "Liga Portugal": {"sport": "soccer", "slug": "por.1"},
+    "Turkish Super Lig": {"sport": "soccer", "slug": "tur.1"},
+    "Scottish Premiership": {"sport": "soccer", "slug": "sco.1"},
+    "Saudi Pro League": {"sport": "soccer", "slug": "sau.1"},
+    "Major League Soccer": {"sport": "soccer", "slug": "usa.1"},
+    "UEFA Champions League": {"sport": "soccer", "slug": "uefa.champions"},
+    "UEFA Europa League": {"sport": "soccer", "slug": "uefa.europa"},
+    "UEFA Europa Conference League": {"sport": "soccer", "slug": "uefa.europa.conf"},
+    "English Premier League": {"sport": "soccer", "slug": "eng.1"},
+    "English Championship": {"sport": "soccer", "slug": "eng.2"},
+    "NBA": {"sport": "basketball", "slug": "nba"},
+    "WNBA": {"sport": "basketball", "slug": "wnba"},
+    "NCAAM": {"sport": "basketball", "slug": "mens-college-basketball"},
+    "NCAAW": {"sport": "basketball", "slug": "womens-college-basketball"},
+    "NHL": {"sport": "hockey", "slug": "nhl"},
+    "MLB": {"sport": "baseball", "slug": "mlb"},
+    "NFL": {"sport": "football", "slug": "nfl"},
+}
+
+
+def _get_espn_league_mapping(league_name: str | None) -> dict[str, str] | None:
+    if not league_name:
+        return None
+    if league_name in _LEAGUE_TO_ESPN_MAP:
+        return _LEAGUE_TO_ESPN_MAP[league_name]
+    normalized = re.sub(r"[^a-z0-9]", "", league_name.lower())
+    for key, value in _LEAGUE_TO_ESPN_MAP.items():
+        key_normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+        if normalized == key_normalized or normalized in key_normalized or key_normalized in normalized:
+            return value
+    return None
+
+
+def _team_names_match_loose(a: str, b: str) -> bool:
+    def norm(value: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", value.lower())
+
+    def strip_suffix(value: str) -> str:
+        out = norm(value)
+        for suffix in ("fc", "cf", "cfc", "sc", "united", "city"):
+            if out.endswith(suffix) and len(out) > len(suffix):
+                out = out[: -len(suffix)]
+        return out
+
+    an = norm(a)
+    bn = norm(b)
+    an_alt = strip_suffix(a)
+    bn_alt = strip_suffix(b)
+    if an == bn or an_alt == bn_alt:
+        return True
+    return an in bn or bn in an or an_alt in bn_alt or bn_alt in an_alt
+
+
+async def _find_espn_event_id(
+    client: httpx.AsyncClient,
+    home_team_name: str,
+    away_team_name: str,
+    sport: str,
+    slug: str,
+) -> str | None:
+    prefix = f"soccer/{slug}" if sport == "soccer" else f"{sport}/{slug}"
+    response = await client.get(f"https://site.api.espn.com/apis/site/v2/sports/{prefix}/scoreboard")
+    if response.status_code != 200:
+        return None
+    data = response.json()
+    for event in data.get("events", []):
+        competition = (event.get("competitions") or [{}])[0]
+        competitors = competition.get("competitors") or []
+        home_comp = next((c for c in competitors if c.get("homeAway") == "home"), None)
+        away_comp = next((c for c in competitors if c.get("homeAway") == "away"), None)
+        if not home_comp or not away_comp:
+            continue
+        home_display = (home_comp.get("team") or {}).get("displayName") or (home_comp.get("team") or {}).get("name") or ""
+        away_display = (away_comp.get("team") or {}).get("displayName") or (away_comp.get("team") or {}).get("name") or ""
+        home_short = (home_comp.get("team") or {}).get("shortDisplayName") or (home_comp.get("team") or {}).get("abbreviation") or ""
+        away_short = (away_comp.get("team") or {}).get("shortDisplayName") or (away_comp.get("team") or {}).get("abbreviation") or ""
+        if (
+            (_team_names_match_loose(home_team_name, home_display) or _team_names_match_loose(home_team_name, home_short))
+            and (_team_names_match_loose(away_team_name, away_display) or _team_names_match_loose(away_team_name, away_short))
+        ):
+            return event.get("id")
+    return None
+
+
+def _extract_espn_player_stats(competitor: dict[str, Any]) -> dict[str, Any]:
+    players: list[dict[str, Any]] = []
+    stat_columns: list[str] = []
+    stat_groups = competitor.get("statistics") or []
+    if not stat_groups:
+        return {"players": players, "statColumns": stat_columns}
+
+    primary = stat_groups[0]
+    labels = primary.get("labels") or []
+    athletes = primary.get("athletes") or []
+    for label in labels:
+        if label not in stat_columns:
+            stat_columns.append(label)
+    for athlete in athletes:
+        athlete_data = athlete.get("athlete") or {}
+        stats_values = athlete.get("stats") or []
+        stats_map = {label: (stats_values[i] if i < len(stats_values) else "-") for i, label in enumerate(labels)}
+        players.append({
+            "name": athlete_data.get("displayName") or athlete_data.get("shortName") or "Unknown",
+            "jersey": athlete_data.get("jersey") or "",
+            "position": ((athlete_data.get("position") or {}).get("abbreviation")) or "",
+            "stats": stats_map,
+            "starter": athlete.get("starter", False),
+        })
+
+    for group in stat_groups[1:]:
+        group_labels = group.get("labels") or []
+        group_athletes = group.get("athletes") or []
+        for label in group_labels:
+            if label not in stat_columns:
+                stat_columns.append(label)
+        for athlete in group_athletes:
+            athlete_data = athlete.get("athlete") or {}
+            name = athlete_data.get("displayName") or athlete_data.get("shortName") or "Unknown"
+            existing = next((player for player in players if player["name"] == name), None)
+            stats_values = athlete.get("stats") or []
+            if existing:
+                for index, label in enumerate(group_labels):
+                    existing["stats"][label] = stats_values[index] if index < len(stats_values) else "-"
+            else:
+                players.append({
+                    "name": name,
+                    "jersey": athlete_data.get("jersey") or "",
+                    "position": ((athlete_data.get("position") or {}).get("abbreviation")) or "",
+                    "stats": {label: (stats_values[index] if index < len(stats_values) else "-") for index, label in enumerate(group_labels)},
+                    "starter": athlete.get("starter", False),
+                })
+    return {"players": players, "statColumns": stat_columns}
+
+
+async def _fetch_espn_supplementary_summary(
+    home_team_name: str,
+    away_team_name: str,
+    league_name: str | None,
+) -> dict[str, Any] | None:
+    mapping = _get_espn_league_mapping(league_name)
+    if not mapping:
+        return None
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        event_id = await _find_espn_event_id(client, home_team_name, away_team_name, mapping["sport"], mapping["slug"])
+        if not event_id:
+            return None
+        prefix = f"soccer/{mapping['slug']}" if mapping["sport"] == "soccer" else f"{mapping['sport']}/{mapping['slug']}"
+        response = await client.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/{prefix}/summary",
+            params={"event": event_id},
+        )
+        if response.status_code != 200:
+            return None
+        data = response.json()
+
+    header_competition = ((data.get("header") or {}).get("competitions") or [{}])[0]
+    competitors = header_competition.get("competitors") or []
+    home_comp = next((c for c in competitors if c.get("homeAway") == "home"), None)
+    away_comp = next((c for c in competitors if c.get("homeAway") == "away"), None)
+
+    raw_plays = data.get("plays") or data.get("keyEvents") or header_competition.get("plays") or []
+    plays = [{
+        "id": play.get("id") or "",
+        "text": play.get("text") or play.get("shortDescription") or play.get("description") or "",
+        "homeScore": play.get("homeScore", 0),
+        "awayScore": play.get("awayScore", 0),
+        "period": play.get("period") or {"number": 0, "displayValue": ""},
+        "clock": play.get("clock") or {"displayValue": ""},
+        "scoringPlay": play.get("scoringPlay", False),
+        "scoreValue": play.get("scoreValue", 0),
+        "team": (
+            {
+                "id": ((play.get("team") or {}).get("id")) or "",
+                "displayName": ((play.get("team") or {}).get("displayName")) or ((play.get("team") or {}).get("shortDisplayName")) or "",
+            }
+            if play.get("team")
+            else None
+        ),
+        "participants": [
+            {"athlete": {"displayName": ((participant.get("athlete") or {}).get("displayName")) or ""}}
+            for participant in (play.get("participants") or [])
+        ],
+        "type": play.get("type") or {"id": "", "text": ""},
+    } for play in raw_plays]
+
+    box_teams = (data.get("boxscore") or {}).get("teams") or []
+    home_team = next((team for team in box_teams if team.get("homeAway") == "home"), box_teams[0] if box_teams else {})
+    away_team = next((team for team in box_teams if team.get("homeAway") == "away"), box_teams[1] if len(box_teams) > 1 else {})
+    home_team_stats = [
+        {"name": stat.get("name") or "", "displayValue": stat.get("displayValue") or "", "label": stat.get("label") or ""}
+        for stat in (home_team.get("statistics") or [])
+    ]
+    away_team_stats = [
+        {"name": stat.get("name") or "", "displayValue": stat.get("displayValue") or "", "label": stat.get("label") or ""}
+        for stat in (away_team.get("statistics") or [])
+    ]
+
+    player_groups = (data.get("boxscore") or {}).get("players") or []
+    home_player_group = next((group for group in player_groups if group.get("homeAway") == "home"), player_groups[0] if player_groups else {})
+    away_player_group = next((group for group in player_groups if group.get("homeAway") == "away"), player_groups[1] if len(player_groups) > 1 else {})
+    home_players = _extract_espn_player_stats(home_player_group)
+    away_players = _extract_espn_player_stats(away_player_group)
+
+    injuries = {"home": [], "away": []}
+    for team in data.get("injuries") or []:
+        side = "home" if team.get("homeAway") == "home" else "away"
+        for injury in team.get("injuries") or []:
+            athlete = injury.get("athlete") or {}
+            injuries[side].append({
+                "name": athlete.get("displayName") or athlete.get("shortName") or "Unknown",
+                "position": ((athlete.get("position") or {}).get("abbreviation")) or "",
+                "jersey": athlete.get("jersey") or "",
+                "type": ((injury.get("type") or {}).get("description")) or ((injury.get("type") or {}).get("name")) or "",
+                "status": injury.get("status") or injury.get("longComment") or "",
+            })
+
+    substitutions = None
+    if mapping["sport"] == "soccer" and plays:
+        home_id = (home_comp or {}).get("id") or ""
+        parsed_subs = []
+        for play in plays:
+            type_text = (((play.get("type") or {}).get("text")) or "").lower()
+            if "substitution" not in type_text:
+                continue
+            participants = play.get("participants") or []
+            if len(participants) >= 2:
+                parsed_subs.append({
+                    "minute": (((play.get("clock") or {}).get("displayValue")) or "").replace(" ", ""),
+                    "playerOff": (((participants[0].get("athlete") or {}).get("displayName")) or "—"),
+                    "playerOn": (((participants[1].get("athlete") or {}).get("displayName")) or "—"),
+                    "homeAway": "home" if ((play.get("team") or {}).get("id")) == home_id else "away",
+                })
+        substitutions = parsed_subs or None
+
+    return {
+        "source": "espn",
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "sport": mapping["sport"],
+        "plays": plays,
+        "team_stats": {"home": home_team_stats, "away": away_team_stats},
+        "player_stats": {
+            "home": {
+                "teamName": (home_player_group.get("team") or {}).get("displayName") or home_team_name,
+                "players": home_players["players"],
+                "statColumns": list(dict.fromkeys(home_players["statColumns"] + away_players["statColumns"])),
+            },
+            "away": {
+                "teamName": (away_player_group.get("team") or {}).get("displayName") or away_team_name,
+                "players": away_players["players"],
+                "statColumns": list(dict.fromkeys(home_players["statColumns"] + away_players["statColumns"])),
+            },
+        },
+        "formations": {
+            "home": (home_comp or {}).get("formation") or (home_comp or {}).get("formatted") or (box_teams[0].get("formation") if box_teams else None),
+            "away": (away_comp or {}).get("formation") or (away_comp or {}).get("formatted") or (box_teams[1].get("formation") if len(box_teams) > 1 else None),
+        },
+        "injuries": injuries,
+        "team_display": {
+            "home_name": ((home_comp or {}).get("team") or {}).get("displayName") or ((home_team.get("team") or {}).get("displayName")) or home_team_name,
+            "away_name": ((away_comp or {}).get("team") or {}).get("displayName") or ((away_team.get("team") or {}).get("displayName")) or away_team_name,
+            "home_team_id": (home_comp or {}).get("id") or ((home_team.get("team") or {}).get("id")) or "",
+            "away_team_id": (away_comp or {}).get("id") or ((away_team.get("team") or {}).get("id")) or "",
+        },
+        "substitutions": substitutions,
+    }
+
+
 @router.get("/{match_id}")
 async def get_match_center(
     match_id: uuid.UUID,
@@ -355,9 +636,11 @@ async def get_match_details(
                 ht.c.name.label("ht_name"),
                 at.c.short_name.label("at_short"),
                 at.c.name.label("at_name"),
+                LeagueORM.name.label("league_name"),
             )
             .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
             .outerjoin(at, MatchORM.away_team_id == at.c.id)
+            .join(LeagueORM, MatchORM.league_id == LeagueORM.id)
             .where(MatchORM.id == match_id)
         )
         match_result = await session.execute(match_stmt)
@@ -415,6 +698,14 @@ async def get_match_details(
                         "player_stats": _build_player_stats_from_fd_match(data),
                     }
 
+    supplementary = {
+        "espn": await _fetch_espn_supplementary_summary(
+            match_row.ht_name or "",
+            match_row.at_name or "",
+            match_row.league_name,
+        )
+    }
+
     return {
         "match_id": str(match_id),
         "phase": match_row.phase,
@@ -432,6 +723,7 @@ async def get_match_details(
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "soccer_details": soccer_details,
+        "supplementary": supplementary,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 

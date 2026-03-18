@@ -171,6 +171,46 @@ export interface MatchCenterDetailsResponse {
   };
   stats: MatchStatsResponse;
   soccer_details: SoccerDetailsResponse | null;
+  supplementary?: {
+    espn?: {
+      source: string;
+      fetched_at: string;
+      sport: string;
+      plays: Array<{
+        id: string;
+        text: string;
+        homeScore: number;
+        awayScore: number;
+        period: { number: number; displayValue: string };
+        clock: { displayValue: string };
+        scoringPlay: boolean;
+        scoreValue: number;
+        team?: { id: string; displayName?: string } | null;
+        participants?: { athlete: { displayName: string } }[];
+        type: { id: string; text: string };
+      }>;
+      team_stats: {
+        home: Array<{ name: string; displayValue: string; label: string }>;
+        away: Array<{ name: string; displayValue: string; label: string }>;
+      };
+      player_stats: {
+        home: { teamName: string; players: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>; statColumns: string[] };
+        away: { teamName: string; players: Array<{ name: string; jersey: string; position: string; stats: Record<string, string | number>; starter: boolean }>; statColumns: string[] };
+      };
+      formations: { home?: string | null; away?: string | null };
+      injuries: {
+        home: Array<{ name: string; position: string; jersey: string; type: string; status: string }>;
+        away: Array<{ name: string; position: string; jersey: string; type: string; status: string }>;
+      };
+      team_display: {
+        home_name: string;
+        away_name: string;
+        home_team_id: string;
+        away_team_id: string;
+      };
+      substitutions?: Array<{ minute: string; playerOff: string; playerOn: string; homeAway: "home" | "away" }> | null;
+    } | null;
+  };
   generated_at: string;
 }
 
