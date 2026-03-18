@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import signal
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
@@ -27,6 +26,7 @@ from sqlalchemy import bindparam, func, or_, select, text
 
 from shared.config import get_settings
 from shared.match_phase import resolve_espn_phase
+from shared.match_resolution import resolve_match_by_team_names, team_names_match
 from shared.models.enums import MatchPhase
 from shared.models.orm import (
     LeagueORM,
@@ -134,29 +134,6 @@ async def _invalidate_scoreboard_cache(
         return
     keys = [f"api:scoreboard:{league_id}" for league_id in league_ids]
     await redis.client.delete(*keys)
-
-
-def _normalize_team_name(value: str | None) -> str:
-    return re.sub(r"[^a-z0-9]", "", (value or "").strip().lower())
-
-
-def _team_names_match(
-    canonical_name: str | None,
-    canonical_short: str | None,
-    provider_name: str | None,
-    provider_short: str | None,
-) -> bool:
-    canonical_candidates = {
-        _normalize_team_name(canonical_name),
-        _normalize_team_name(canonical_short),
-    }
-    provider_candidates = {
-        _normalize_team_name(provider_name),
-        _normalize_team_name(provider_short),
-    }
-    canonical_candidates.discard("")
-    provider_candidates.discard("")
-    return bool(canonical_candidates & provider_candidates)
 
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "eng.1": "soccer/eng.1",
@@ -476,45 +453,21 @@ async def _resolve_match_from_provider_match(
         return None
 
     league_id = league_row[0]
-    window_start = provider_match.scheduled_at - timedelta(minutes=90)
-    window_end = provider_match.scheduled_at + timedelta(minutes=90)
-    candidates = (
-        await session.execute(
-            text(
-                "SELECT m.id, ht.name, ht.short_name, at.name, at.short_name "
-                "FROM matches m "
-                "JOIN teams ht ON m.home_team_id = ht.id "
-                "JOIN teams at ON m.away_team_id = at.id "
-                "WHERE m.league_id = :league_id "
-                "AND m.start_time >= :window_start "
-                "AND m.start_time <= :window_end"
-            ),
-            {
-                "league_id": league_id,
-                "window_start": window_start,
-                "window_end": window_end,
-            },
-        )
-    ).fetchall()
-
-    matched_candidates: list[uuid_mod.UUID] = []
-    for row in candidates:
-        if _team_names_match(row[1], row[2], provider_match.home_team.name, provider_match.home_team.short_name) and _team_names_match(
-            row[3], row[4], provider_match.away_team.name, provider_match.away_team.short_name
-        ):
-            matched_candidates.append(row[0])
-
-    if len(matched_candidates) == 1:
-        return matched_candidates[0], league_id
-    if len(matched_candidates) > 1:
-        logger.warning(
-            "provider_match_resolution_ambiguous",
-            provider=getattr(provider_match, "provider_name", "unknown"),
-            provider_match_id=getattr(provider_match, "provider_id", ""),
-            league_slug=league_slug,
-            candidate_count=len(matched_candidates),
-        )
-    return None
+    match_id = await resolve_match_by_team_names(
+        session,
+        provider=getattr(provider_match, "provider_name", "unknown"),
+        provider_match_id=getattr(provider_match, "provider_id", ""),
+        league_id=league_id,
+        scheduled_at=provider_match.scheduled_at,
+        home_name=provider_match.home_team.name,
+        home_short=provider_match.home_team.short_name,
+        away_name=provider_match.away_team.name,
+        away_short=provider_match.away_team.short_name,
+        window_minutes=90,
+    )
+    if not match_id:
+        return None
+    return match_id, league_id
 
 
 def _provider_status_to_phase(status_value: str) -> str:

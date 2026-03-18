@@ -356,11 +356,15 @@ async def test_scheduler_mapping_consistency_rejects_conflicting_provider_id(
     attempted_id = uuid.uuid4()
 
     class _FakeResult:
-        def __init__(self, scalar_value=None) -> None:
+        def __init__(self, scalar_value=None, rows=None) -> None:
             self._scalar_value = scalar_value
+            self._rows = rows or []
 
         def scalar_one_or_none(self):
             return self._scalar_value
+
+        def fetchall(self):
+            return self._rows
 
     class _FakeSession:
         async def execute(self, stmt):  # type: ignore[no-untyped-def]
@@ -409,17 +413,21 @@ async def test_upsert_match_from_event_reuses_existing_match_when_mapping_is_mis
     added: list[object] = []
 
     class _FakeResult:
-        def __init__(self, scalar_value=None) -> None:
+        def __init__(self, scalar_value=None, rows=None) -> None:
             self._scalar_value = scalar_value
+            self._rows = rows or []
 
         def scalar_one_or_none(self):
             return self._scalar_value
+
+        def fetchall(self):
+            return self._rows
 
     class _FakeSession:
         def __init__(self) -> None:
             self._match_mapping_lookup_count = 0
 
-        async def execute(self, stmt):  # type: ignore[no-untyped-def]
+        async def execute(self, stmt, params=None):  # type: ignore[no-untyped-def]
             sql = str(stmt)
             if "provider_mappings.entity_type = :entity_type_1" in sql and "provider_id = :provider_id_1" in sql:
                 compiled = stmt.compile()
@@ -436,7 +444,9 @@ async def test_upsert_match_from_event_reuses_existing_match_when_mapping_is_mis
                     if self._match_mapping_lookup_count == 1:
                         return _FakeResult(scalar_value=None)
                     return _FakeResult(scalar_value=None)
-            if "FROM matches" in sql and "home_team_id" in sql and "away_team_id" in sql:
+            if "SELECT id FROM matches" in sql:
+                return _FakeResult(rows=[(existing_match_id,)])
+            if "FROM matches" in sql and "WHERE matches.id = :id_1" in sql:
                 return _FakeResult(scalar_value=existing_match)
             if "FROM match_state" in sql:
                 return _FakeResult(scalar_value=existing_state)

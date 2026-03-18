@@ -21,6 +21,7 @@ import httpx
 from sqlalchemy import or_, select
 
 from shared.config import Settings, get_settings
+from shared.match_resolution import resolve_match_by_team_ids
 from shared.models.enums import MatchPhase, ProviderName, Sport, Tier
 from shared.models.orm import (
     LeagueORM,
@@ -847,17 +848,19 @@ class ScheduleSyncService:
                 state_obj.extra_data = extra
             return False
 
+        existing_match_id = await resolve_match_by_team_ids(
+            session,
+            provider="espn",
+            provider_match_id=espn_event_id,
+            league_id=league_id,
+            home_team_id=home_team_id,
+            away_team_id=away_team_id,
+            scheduled_at=start_time,
+            window_minutes=90,
+        )
         existing_match = (await session.execute(
-            select(MatchORM).where(
-                MatchORM.league_id == league_id,
-                MatchORM.home_team_id == home_team_id,
-                MatchORM.away_team_id == away_team_id,
-                MatchORM.start_time.between(
-                    start_time - timedelta(minutes=90),
-                    start_time + timedelta(minutes=90),
-                ),
-            )
-        )).scalar_one_or_none()
+            select(MatchORM).where(MatchORM.id == existing_match_id)
+        )).scalar_one_or_none() if existing_match_id else None
         if existing_match:
             mapping_ok = await ensure_provider_mapping_consistency(
                 session,
