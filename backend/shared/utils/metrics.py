@@ -128,6 +128,11 @@ PROVIDER_MAPPING_UNRESOLVED = Counter(
     "Provider matches that could not be resolved to a canonical entity",
     ["provider", "reason"],
 )
+SCORE_STATE_WRITES = Counter(
+    "lv_score_state_writes_total",
+    "Authoritative score/state writes applied to match state",
+    ["writer", "source"],
+)
 
 # ── Info ────────────────────────────────────────────────────────────────
 SERVICE_INFO = Info("lv_service", "Service build information")

@@ -28,7 +28,7 @@ from shared.models.orm import (
     ProviderMappingORM,
 )
 from shared.utils.logging import get_logger
-from shared.utils.metrics import FANOUT_PUBLISHES, INGEST_NORMALIZATIONS
+from shared.utils.metrics import FANOUT_PUBLISHES, INGEST_NORMALIZATIONS, SCORE_STATE_WRITES
 from shared.utils.redis_manager import (
     SNAP_EVENTS_KEY,
     SNAP_SCOREBOARD_KEY,
@@ -137,6 +137,14 @@ class NormalizationService:
             if not changed:
                 return False
 
+            previous_state = {
+                "score_home": existing.score_home,
+                "score_away": existing.score_away,
+                "phase": existing.phase,
+                "clock": existing.clock,
+                "version": existing.version,
+            }
+
             existing.score_home = scoreboard.score.home
             existing.score_away = scoreboard.score.away
             existing.score_breakdown = score_breakdown_json
@@ -146,6 +154,7 @@ class NormalizationService:
             existing.seq = new_seq
             existing.updated_at = datetime.now(timezone.utc)
         else:
+            previous_state = None
             state = MatchStateORM(
                 match_id=canonical_match_id,
                 score_home=scoreboard.score.home,
@@ -181,13 +190,17 @@ class NormalizationService:
         )
         FANOUT_PUBLISHES.labels(tier="scoreboard").inc()
         INGEST_NORMALIZATIONS.labels(provider=provider.value, sport=scoreboard.league.sport.value).inc()
+        SCORE_STATE_WRITES.labels(writer="ingest", source=provider.value).inc()
 
         logger.info(
             "scoreboard_normalized",
             match_id=str(canonical_match_id),
+            provider=provider.value,
+            previous=previous_state,
             score=f"{scoreboard.score.home}-{scoreboard.score.away}",
             phase=scoreboard.phase.value,
             version=new_version,
+            clock=scoreboard.clock,
         )
         return True
 

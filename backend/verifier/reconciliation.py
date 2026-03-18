@@ -16,6 +16,7 @@ from shared.models.domain import LeagueRef, MatchScoreboard, Score, TeamRef
 from shared.models.enums import MatchPhase, Tier
 from shared.models.orm import MatchORM, MatchStateORM
 from shared.utils.logging import get_logger
+from shared.utils.metrics import SCORE_STATE_WRITES
 from shared.utils.redis_manager import RedisManager
 
 from verifier.config import VerifierSettings, get_verifier_settings
@@ -66,6 +67,14 @@ async def apply_correction(
         logger.warning("reconciliation_no_state", match_id=str(match_id))
         return False
 
+    previous_state = {
+        "score_home": state.score_home,
+        "score_away": state.score_away,
+        "phase": state.phase,
+        "clock": state.clock,
+        "period": state.period,
+        "version": state.version,
+    }
     new_version = state.version + 1
     new_seq = state.seq + 1
     phase_val = _phase_value(corrected.phase)
@@ -106,13 +115,18 @@ async def apply_correction(
     snap_key = SNAP_SCOREBOARD_KEY.format(match_id=str(match_id))
     await redis.set_snapshot(snap_key, scoreboard.model_dump_json(), ttl_s=300)
     await redis.publish_delta(str(match_id), Tier.SCOREBOARD.value, scoreboard.model_dump_json())
+    SCORE_STATE_WRITES.labels(writer="verifier", source=corrected.source or "unknown").inc()
 
     logger.info(
         "verification_correction_applied",
         match_id=str(match_id),
+        source=corrected.source or "unknown",
+        previous=previous_state,
         score=f"{corrected.score_home}-{corrected.score_away}",
         phase=phase_val,
         version=new_version,
+        clock=corrected.clock,
+        period=corrected.period,
     )
     return True
 
