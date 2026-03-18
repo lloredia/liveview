@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, Query, WebSocket
 from sqlalchemy import bindparam, func, or_, select, text
 
 from shared.config import get_settings
+from shared.match_phase import resolve_espn_phase
 from shared.models.enums import MatchPhase
 from shared.models.orm import (
     LeagueORM,
@@ -81,19 +82,6 @@ ESPN_STATUS_TO_PHASE: dict[str, MatchPhase] = {
     "STATUS_CANCELED": MatchPhase.CANCELLED,
     "STATUS_DELAYED": MatchPhase.SUSPENDED,
     "STATUS_RAIN_DELAY": MatchPhase.SUSPENDED,
-}
-
-BASKETBALL_QUARTER_PHASE = {
-    1: MatchPhase.LIVE_Q1, 2: MatchPhase.LIVE_Q2,
-    3: MatchPhase.LIVE_Q3, 4: MatchPhase.LIVE_Q4,
-}
-BASKETBALL_HALF_PHASE = {
-    1: MatchPhase.LIVE_H1, 2: MatchPhase.LIVE_H2,
-}
-HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
-
-HOCKEY_PERIOD_PHASE = {
-    1: MatchPhase.LIVE_P1, 2: MatchPhase.LIVE_P2, 3: MatchPhase.LIVE_P3,
 }
 
 ESPN_LEAGUE_SPORT: dict[str, str] = {
@@ -241,12 +229,14 @@ async def _refresh_live_scores_via_router(
     db: DatabaseManager, redis: RedisManager, app: FastAPI
 ) -> int:
     """One cycle of live score refresh via provider router (SportRadar primary, ESPN fallback)."""
+    settings = get_settings()
+    postgame_recheck_delta = timedelta(minutes=max(15, settings.postgame_recheck_minutes))
     async with db.read_session() as session:
         live_phases = [p.value for p in MatchPhase if p.is_live]
         live_phases.append(MatchPhase.BREAK.value)
         live_phases.append(MatchPhase.PRE_MATCH.value)
         live_phases.append(MatchPhase.SCHEDULED.value)
-        finished_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+        finished_cutoff = datetime.now(timezone.utc) - postgame_recheck_delta
         stmt = (
             select(ProviderMappingORM.provider_id.label("espn_league_id"))
             .select_from(MatchORM)
@@ -338,49 +328,8 @@ async def _refresh_live_scores_via_router(
 
 
 def _resolve_phase(espn_status: str, period_num: int, sport: str, espn_league_id: str = "") -> MatchPhase:
-    """Map ESPN status + period + sport + league to the correct MatchPhase."""
-    if espn_status in ("STATUS_FINAL", "STATUS_FULL_TIME"):
-        return MatchPhase.FINISHED
-    if espn_status == "STATUS_SCHEDULED":
-        return MatchPhase.SCHEDULED
-    if espn_status in ("STATUS_POSTPONED",):
-        return MatchPhase.POSTPONED
-    if espn_status in ("STATUS_CANCELED",):
-        return MatchPhase.CANCELLED
-    if espn_status in ("STATUS_DELAYED", "STATUS_RAIN_DELAY"):
-        return MatchPhase.SUSPENDED
-    if espn_status == "STATUS_HALFTIME":
-        return MatchPhase.LIVE_HALFTIME
-    if espn_status == "STATUS_END_PERIOD":
-        return MatchPhase.BREAK
-
-    # STATUS_IN_PROGRESS — use sport + league + period for specificity
-    if sport == "basketball":
-        if espn_league_id in HALVES_BASKETBALL_LEAGUES:
-            if period_num > 2:
-                return MatchPhase.LIVE_OT
-            return BASKETBALL_HALF_PHASE.get(period_num, MatchPhase.LIVE_H1)
-        if period_num > 4:
-            return MatchPhase.LIVE_OT
-        return BASKETBALL_QUARTER_PHASE.get(period_num, MatchPhase.LIVE_Q1)
-    if sport == "hockey":
-        if period_num > 3:
-            return MatchPhase.LIVE_OT
-        return HOCKEY_PERIOD_PHASE.get(period_num, MatchPhase.LIVE_P1)
-    if sport == "football":
-        if period_num > 4:
-            return MatchPhase.LIVE_OT
-        return BASKETBALL_QUARTER_PHASE.get(period_num, MatchPhase.LIVE_Q1)
-    if sport == "baseball":
-        return MatchPhase.LIVE_INNING
-    # Soccer (default)
-    if period_num == 1:
-        return MatchPhase.LIVE_FIRST_HALF
-    if period_num == 2:
-        return MatchPhase.LIVE_SECOND_HALF
-    if period_num == 3:
-        return MatchPhase.LIVE_EXTRA_TIME
-    return MatchPhase.LIVE_FIRST_HALF
+    """Backward-compatible wrapper around the shared ESPN phase resolver."""
+    return resolve_espn_phase(espn_status, period_num, sport, espn_league_id)
 
 
 def _competitor_score(competitor: dict[str, Any], sport: str) -> int:
@@ -1089,6 +1038,12 @@ async def phase_sync_loop(db: DatabaseManager) -> None:
                         old_phase=old_phase,
                         new_phase="finished",
                         reason=f"elapsed_{fallback_hours}h_fallback",
+                    )
+                    logger.warning(
+                        "stale_live_match_finalized",
+                        match_id=match_id_val,
+                        old_phase=old_phase,
+                        fallback_hours=fallback_hours,
                     )
                 matches_checked = len(rows)
 

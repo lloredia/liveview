@@ -8,6 +8,7 @@ import time
 from typing import Any, Optional
 
 import httpx
+from shared.match_phase import resolve_espn_phase
 from shared.utils.logging import get_logger
 
 from verifier.sources.base import CanonicalMatchState, VerificationSource
@@ -15,62 +16,6 @@ from verifier.sources.base import CanonicalMatchState, VerificationSource
 logger = get_logger(__name__)
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
-
-# Map ESPN status to canonical phase string (aligned with MatchPhase)
-ESPN_STATUS_TO_PHASE: dict[str, str] = {
-    "STATUS_SCHEDULED": "scheduled",
-    "STATUS_IN_PROGRESS": "live_first_half",
-    "STATUS_HALFTIME": "live_halftime",
-    "STATUS_END_PERIOD": "break",
-    "STATUS_FINAL": "finished",
-    "STATUS_FULL_TIME": "finished",
-    "STATUS_POSTPONED": "postponed",
-    "STATUS_CANCELED": "cancelled",
-    "STATUS_DELAYED": "suspended",
-    "STATUS_RAIN_DELAY": "suspended",
-}
-
-
-HALVES_BASKETBALL_LEAGUES = {"mens-college-basketball"}
-
-
-def _resolve_phase(espn_status: str, period: int, sport: str, espn_league_id: str = "") -> str:
-    if espn_status in ("STATUS_FINAL", "STATUS_FULL_TIME"):
-        return "finished"
-    if espn_status == "STATUS_SCHEDULED":
-        return "scheduled"
-    if espn_status in ("STATUS_POSTPONED",):
-        return "postponed"
-    if espn_status in ("STATUS_CANCELED",):
-        return "cancelled"
-    if espn_status in ("STATUS_DELAYED", "STATUS_RAIN_DELAY"):
-        return "suspended"
-    if espn_status == "STATUS_HALFTIME":
-        return "live_halftime"
-    if espn_status == "STATUS_END_PERIOD":
-        return "break"
-    if espn_status == "STATUS_IN_PROGRESS":
-        if sport == "basketball":
-            if espn_league_id in HALVES_BASKETBALL_LEAGUES:
-                if period > 2:
-                    return "live_ot"
-                return {1: "live_h1", 2: "live_h2"}.get(period, "live_h1")
-            if period > 4:
-                return "live_ot"
-            return {1: "live_q1", 2: "live_q2", 3: "live_q3", 4: "live_q4"}.get(period, "live_q1")
-        if sport == "hockey":
-            if period > 3:
-                return "live_ot"
-            return {1: "live_p1", 2: "live_p2", 3: "live_p3"}.get(period, "live_p1")
-        if sport == "baseball":
-            return "live_inning"
-        if period == 1:
-            return "live_first_half"
-        if period == 2:
-            return "live_second_half"
-        return "live_first_half"
-    return "scheduled"
-
 
 def _event_to_canonical(event: dict[str, Any], sport: str, fetched_at: float) -> Optional[CanonicalMatchState]:
     comp = event.get("competitions", [{}])[0]
@@ -90,7 +35,7 @@ def _event_to_canonical(event: dict[str, Any], sport: str, fetched_at: float) ->
     status_obj = comp.get("status", event.get("status", {}))
     espn_status = status_obj.get("type", {}).get("name", "STATUS_SCHEDULED")
     period = int(status_obj.get("period", 0))
-    phase = _resolve_phase(espn_status, period, sport)
+    phase = resolve_espn_phase(espn_status, period, sport).value
     clock = status_obj.get("displayClock")
     return CanonicalMatchState(
         score_home=score_home,

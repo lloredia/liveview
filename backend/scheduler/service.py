@@ -93,10 +93,6 @@ SCHEDULE_SYNC_INTERVAL_S = 3600  # 1 hour — discover new matches more often (w
 
 # Phases that require active polling
 ACTIVE_PHASES = [p.value for p in MatchPhase if p.is_live or p == MatchPhase.PRE_MATCH]
-# Include recently finished matches for final score confirmation
-RECENTLY_FINISHED_WINDOW = timedelta(minutes=15)
-
-
 class MatchPollTask:
     """Represents an active polling task for a single match+tier combination."""
 
@@ -183,7 +179,9 @@ class SchedulerService:
         Returns match metadata needed to create poll tasks.
         """
         now = datetime.now(timezone.utc)
-        recently_finished_cutoff = now - RECENTLY_FINISHED_WINDOW
+        recently_finished_cutoff = now - timedelta(
+            minutes=max(15, self._settings.postgame_recheck_minutes)
+        )
 
         async with self._db.read_session() as session:
             # Get all matches that are live, pre-match, or recently finished

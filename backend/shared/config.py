@@ -150,6 +150,10 @@ class Settings(BaseSettings):
         default=5,
         description="Matches with phase live/scheduled and start_time older than this many hours are set to finished (fallback only).",
     )
+    postgame_recheck_minutes: int = Field(
+        default=180,
+        description="Minutes after a match finishes during which the backend continues rechecking final state and score.",
+    )
 
     # ── Cache TTL (today / scoreboard) ────────────────────────────────────
     cache_ttl_live_seconds: int = Field(
