@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { TeamLogo } from "./team-logo";
+import type { ESPNCompetitor, ESPNEvent, LeaderCategory } from "@/lib/espn-types";
 
 interface StatsDashboardProps {
   leagueName: string;

@@ -78,12 +78,15 @@ async function findTeamId(
     const match = teams.find((t) => {
       const team = t.team;
       const name = teamName.toLowerCase();
+      const displayName = team.displayName?.toLowerCase() || "";
+      const shortDisplayName = team.shortDisplayName?.toLowerCase() || "";
+      const canonicalName = team.name?.toLowerCase() || "";
       return (
-        team.displayName?.toLowerCase() === name ||
-        team.shortDisplayName?.toLowerCase() === name ||
-        team.name?.toLowerCase() === name ||
-        name.includes(team.name?.toLowerCase()) ||
-        team.displayName?.toLowerCase().includes(name)
+        displayName === name ||
+        shortDisplayName === name ||
+        canonicalName === name ||
+        (canonicalName !== "" && name.includes(canonicalName)) ||
+        displayName.includes(name)
       );
     });
 

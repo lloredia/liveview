@@ -95,19 +95,25 @@ async function fetchTeamFormByName(
 
     const match = teams.find((t) => {
       const team = t.team;
+      const query = teamName.toLowerCase();
+      const displayName = team.displayName?.toLowerCase() || "";
+      const shortDisplayName = team.shortDisplayName?.toLowerCase() || "";
+      const abbreviation = team.abbreviation?.toLowerCase() || "";
+      const canonicalName = team.name?.toLowerCase() || "";
       return (
-        team.displayName?.toLowerCase() === teamName.toLowerCase() ||
-        team.shortDisplayName?.toLowerCase() === teamName.toLowerCase() ||
-        team.abbreviation?.toLowerCase() === teamName.toLowerCase() ||
-        team.name?.toLowerCase() === teamName.toLowerCase() ||
-        teamName.toLowerCase().includes(team.name?.toLowerCase()) ||
-        team.displayName?.toLowerCase().includes(teamName.toLowerCase())
+        displayName === query ||
+        shortDisplayName === query ||
+        abbreviation === query ||
+        canonicalName === query ||
+        (canonicalName !== "" && query.includes(canonicalName)) ||
+        displayName.includes(query)
       );
     });
 
     if (!match) return { teamName, results: [] };
 
     const teamId = match.team.id;
+    if (!teamId) return { teamName, results: [] };
     return fetchTeamForm(teamId, teamName, sport, leagueSlug);
   } catch {
     return { teamName, results: [] };

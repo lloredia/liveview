@@ -9,12 +9,15 @@
  */
 
 import { getApiBase } from "./api";
-import type { CapacitorInstance } from "@capacitor/core";
 
 const DEVICE_ID_KEY = "lv_device_id";
 
+interface CapacitorBridge {
+  getPlatform?: () => string;
+}
+
 interface WindowWithCapacitor extends Window {
-  Capacitor?: CapacitorInstance;
+  Capacitor?: CapacitorBridge;
   __lv_device_id?: string;
 }
 

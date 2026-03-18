@@ -71,7 +71,8 @@ export function NotificationInbox({ className = "" }: NotificationInboxProps) {
       setUnreadCount((c) => Math.max(0, c - 1));
     }
     setOpen(false);
-    const url = item.data?.url || `/match/${item.game_id}`;
+    const url =
+      typeof item.data?.url === "string" ? item.data.url : `/match/${item.game_id}`;
     router.push(url);
   };
 

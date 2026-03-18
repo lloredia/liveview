@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type {
+  ESPNArticle,
+  ESPNCompetitor,
+  ESPNEvent,
+  ESPNVideo,
+} from "@/lib/espn-types";
 
 interface HighlightsProps {
   homeTeamName: string;
@@ -189,14 +195,15 @@ export function Highlights({
           const isRecap =
             ar.type === "Recap" ||
             (ar.headline || "").toLowerCase().includes("recap");
-          if (isRecap && ar.links?.web?.href) {
-            if (!found.some((f) => f.url === ar.links.web.href)) {
+          const recapHref = ar.links?.web?.href;
+          if (isRecap && recapHref) {
+            if (!found.some((f) => f.url === recapHref)) {
               found.push({
                 id: "recap-" + (ar.id || "0"),
                 title: ar.headline || "Game Recap",
                 thumbnail: ar.images?.[0]?.url || "",
                 duration: "",
-                url: ar.links.web.href,
+                url: recapHref,
               });
             }
           }

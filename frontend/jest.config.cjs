@@ -1,13 +1,19 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "jsdom",
-  
+
   roots: ["<rootDir>"],
   testMatch: [
     "**/__tests__/**/*.test.[jt]s?(x)",
     "**/?(*.)+(spec|test).[jt]s?(x)"
   ],
-  
+
+  testPathIgnorePatterns: [
+    "<rootDir>/e2e/",
+    "<rootDir>/.next/",
+    "<rootDir>/node_modules/",
+  ],
+
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
     "^@/components/(.*)$": "<rootDir>/components/$1",
@@ -15,11 +21,11 @@ module.exports = {
     "^@/hooks/(.*)$": "<rootDir>/hooks/$1",
     "^@/types/(.*)$": "<rootDir>/types/$1",
   },
-  
+
   setupFilesAfterEnv: [
     "<rootDir>/jest.setup.js"
   ],
-  
+
   transform: {
     "^.+\\.tsx?$": [
       "ts-jest",
@@ -28,11 +34,12 @@ module.exports = {
           jsx: "react-jsx",
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
+          isolatedModules: true,
         },
       },
     ],
   },
-  
+
   collectCoverageFrom: [
     "app/**/*.{ts,tsx}",
     "components/**/*.{ts,tsx}",
@@ -43,8 +50,8 @@ module.exports = {
     "!**/node_modules/**",
     "!**/.next/**",
   ],
-  
-  coverageThresholds: {
+
+  coverageThreshold: {
     global: {
       branches: 50,
       functions: 50,
@@ -52,12 +59,6 @@ module.exports = {
       statements: 50,
     },
   },
-  
+
   testTimeout: 10000,
-  
-  globals: {
-    "ts-jest": {
-      isolatedModules: true,
-    },
-  },
 };

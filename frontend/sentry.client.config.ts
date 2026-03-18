@@ -23,14 +23,6 @@ if (enabled) {
     tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0, // 10% in prod, 100% in dev
     debug: process.env.NODE_ENV !== "production",
 
-    // Track user interactions
-    integrations: [
-      new Sentry.Replay({
-        maskAllText: true,
-        blockAllMedia: true,
-      }),
-    ],
-
     // Capture replay for errors only in production
     replaysOnErrorSampleRate:
       process.env.NODE_ENV === "production" ? 0.5 : 1.0,

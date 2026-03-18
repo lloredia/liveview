@@ -32,6 +32,7 @@ interface RawESPNCompetitor {
   team?: {
     abbreviation?: string;
     displayName?: string;
+    shortDisplayName?: string;
     id?: string;
   };
 }
@@ -43,6 +44,7 @@ interface RawESPNCompetition {
   };
 }
 interface RawESPNEvent {
+  id?: string | number;
   competitions?: RawESPNCompetition[];
   date?: string;
 }
@@ -245,8 +247,8 @@ export async function fetchESPNScoreboard(
         awayTeam: away.team?.displayName || "",
         homeShort: home.team?.shortDisplayName || home.team?.abbreviation || "",
         awayShort: away.team?.shortDisplayName || away.team?.abbreviation || "",
-        homeScore: parseInt(home.score || "0", 10),
-        awayScore: parseInt(away.score || "0", 10),
+        homeScore: parseInt(String(home.score ?? "0"), 10),
+        awayScore: parseInt(String(away.score ?? "0"), 10),
         phase,
         clock: displayClock,
         period: mapPeriodLabel(statusDetail, info.sport, info.slug),

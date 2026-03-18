@@ -337,7 +337,7 @@ async function findEspnEventId(
       const awayShort = awayComp.team?.shortDisplayName || awayComp.team?.abbreviation || "";
       const homeMatch = teamNamesMatch(homeTeamName, homeDisplay) || teamNamesMatch(homeTeamName, homeShort);
       const awayMatch = teamNamesMatch(awayTeamName, awayDisplay) || teamNamesMatch(awayTeamName, awayShort);
-      if (homeMatch && awayMatch) return evt.id;
+      if (homeMatch && awayMatch) return evt.id ?? null;
     }
     return null;
   } catch { return null; }

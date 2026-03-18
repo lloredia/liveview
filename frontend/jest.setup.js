@@ -54,11 +54,18 @@ const originalWarn = console.warn;
 
 beforeAll(() => {
   console.error = (...args) => {
+    const firstArg =
+      typeof args[0] === 'string'
+        ? args[0]
+        : args[0] instanceof Error
+          ? args[0].message
+          : '';
     if (
-      typeof args[0] === 'string' &&
-      (args[0].includes('Warning: ReactDOM.render') ||
-        args[0].includes('Warning: useLayoutEffect') ||
-        args[0].includes('Not implemented: HTMLFormElement.prototype.submit'))
+      firstArg &&
+      (firstArg.includes('Warning: ReactDOM.render') ||
+        firstArg.includes('Warning: useLayoutEffect') ||
+        firstArg.includes('Not implemented: HTMLFormElement.prototype.submit') ||
+        firstArg.includes('Not implemented: HTMLFormElement.prototype.requestSubmit'))
     ) {
       return;
     }
@@ -97,6 +104,14 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: jest.fn(),
     dispatchEvent: jest.fn(),
   })),
+});
+
+Object.defineProperty(HTMLFormElement.prototype, 'requestSubmit', {
+  configurable: true,
+  writable: true,
+  value: function requestSubmit() {
+    this.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  },
 });
 
 // Mock IntersectionObserver

@@ -6,6 +6,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
+import userEvent from "@testing-library/user-event";
 
 // Mock next/navigation
 jest.mock("next/navigation", () => ({
@@ -67,7 +68,7 @@ describe("Form Validation", () => {
     });
 
     it("should validate minimum password length", async () => {
-      const { getByText, getByRole } = render(
+      const { getByPlaceholderText } = render(
         <input
           type="password"
           minLength={8}
@@ -80,7 +81,7 @@ describe("Form Validation", () => {
         />
       );
 
-      const input = getByRole("textbox");
+      const input = getByPlaceholderText("password");
       await userEvent.type(input, "short");
       fireEvent.blur(input);
 
@@ -124,11 +125,12 @@ describe("Form Validation", () => {
         );
       };
 
-      const { getByText, getByRole } = render(<MockRegisterForm />);
-      const inputs = getByRole("textbox", { hidden: true });
+      const { getByText, getByPlaceholderText } = render(<MockRegisterForm />);
+      const passwordInput = getByPlaceholderText("password");
+      const confirmInput = getByPlaceholderText("confirm password");
 
-      await userEvent.type(inputs, "password123");
-      await userEvent.type(inputs, "different");
+      await userEvent.type(passwordInput, "password123");
+      await userEvent.type(confirmInput, "different");
 
       await waitFor(() => {
         expect(getByText("Passwords do not match")).toBeInTheDocument();
@@ -339,11 +341,11 @@ describe("Loading States", () => {
         );
       };
 
-      const { getByTestId, getAllByRole } = render(<MockList />);
+      const { getAllByTestId, getAllByRole } = render(<MockList />);
 
       // Initially showing skeletons
-      const skeletons = getByTestId("skeleton");
-      expect(skeletons).toBeInTheDocument();
+      const skeletons = getAllByTestId("skeleton");
+      expect(skeletons).toHaveLength(2);
 
       // After loading
       await waitFor(() => {
