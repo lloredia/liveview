@@ -159,8 +159,10 @@ function FavoriteStar({
         hapticSelection();
         onToggle(teamId);
       }}
+      data-testid="favorite-btn"
       className="shrink-0 rounded p-0.5 text-text-muted hover:text-accent-amber focus:outline-none focus:ring-2 focus:ring-accent-amber/50"
       aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+      aria-pressed={isFavorite}
     >
       {isFavorite ? (
         <span className="text-[14px]" aria-hidden>★</span>
@@ -204,6 +206,7 @@ export const MatchCard = memo(function MatchCard({
   return (
     <Link
       href={href}
+      data-testid="match-item"
       className={`
         group relative flex h-12 items-center
         border-b border-glass-border-light

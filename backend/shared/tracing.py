@@ -17,6 +17,7 @@ from typing import Optional
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
 try:
@@ -44,6 +45,7 @@ OTEL_ENV = os.getenv("ENVIRONMENT", "development")
 OTEL_SAMPLE_RATE = float(
     os.getenv("OTEL_TRACES_SAMPLE_RATE", "1.0" if OTEL_ENV != "production" else "0.1")
 )
+OTEL_SAMPLE_RATE = max(0.0, min(1.0, OTEL_SAMPLE_RATE))
 
 # Global tracer
 _tracer_provider: Optional[TracerProvider] = None
@@ -65,7 +67,10 @@ def init_tracing() -> None:
             "environment": OTEL_ENV,
         })
 
-        _tracer_provider = TracerProvider(resource=resource)
+        _tracer_provider = TracerProvider(
+            resource=resource,
+            sampler=ParentBased(TraceIdRatioBased(OTEL_SAMPLE_RATE)),
+        )
 
         if _JAEGER_AVAILABLE:
             jaeger_exporter = JaegerExporter(

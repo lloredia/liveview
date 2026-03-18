@@ -9,19 +9,18 @@ import { test, expect } from "@playwright/test";
 test.describe("LiveView E2E Tests", () => {
   // Set base URL from env or use default
   const baseURL = process.env.BASE_URL || "http://localhost:3000";
-
-  test.beforeEach(async ({ page }) => {
-    // Go to home page before each test
-    await page.goto(baseURL);
-  });
+  const goto = (page: any, path = "") =>
+    page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded" });
 
   test.describe("Navigation", () => {
     test("should load home page", async ({ page }) => {
+      await goto(page, `/`);
       await expect(page).toHaveTitle(/LiveView|Sports/);
       await expect(page.locator("nav, [role=navigation]")).toBeVisible();
     });
 
     test("should navigate between pages", async ({ page }) => {
+      await goto(page, `/`);
       // Check for navigation links
       const navLinks = page.locator("a[href]");
       const count = await navLinks.count();
@@ -29,6 +28,7 @@ test.describe("LiveView E2E Tests", () => {
     });
 
     test("should have working breadcrumbs if present", async ({ page }) => {
+      await goto(page, `/`);
       const breadcrumbs = page.locator("[aria-label*=breadcrumb], .breadcrumb");
       if (await breadcrumbs.count() > 0) {
         await expect(breadcrumbs).toBeVisible();
@@ -38,20 +38,18 @@ test.describe("LiveView E2E Tests", () => {
 
   test.describe("Match List", () => {
     test("should display matches on today view", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
-      // Wait for matches to load
-      const matches = page.locator("[data-testid=match-item], .match-card");
-      
-      // Should have at least loading indicator or matches
-      const loadingOrMatches = page.locator(
-        "[data-testid=loading], .spinner, [data-testid=match-item], .match-card"
-      );
-      await expect(loadingOrMatches.first()).toBeVisible({ timeout: 10000 });
+      await expect(
+        page.getByRole("main", { name: "Match results" })
+      ).toBeVisible();
+      await expect(
+        page.locator('a[href^="/match/"]').first()
+      ).toBeVisible({ timeout: 10000 });
     });
 
     test("should load more matches on scroll", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Get initial match count
       const initialMatches = await page.locator(
@@ -73,7 +71,7 @@ test.describe("LiveView E2E Tests", () => {
     });
 
     test("should filter matches by league", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Find league filter
       const leagueFilter = page.locator("select[name=league], [data-testid=league-filter]");
@@ -87,10 +85,10 @@ test.describe("LiveView E2E Tests", () => {
 
   test.describe("Match Detail View", () => {
     test("should show match details when clicked", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Find first match and click it
-      const firstMatch = page.locator("[data-testid=match-item], .match-card").first();
+      const firstMatch = page.locator("[data-testid=match-item]").first();
       
       if (await firstMatch.count() > 0) {
         await firstMatch.click();
@@ -102,8 +100,7 @@ test.describe("LiveView E2E Tests", () => {
 
     test("should display match score", async ({ page }) => {
       // Navigate to a match detail page
-      const matchUrl = `${baseURL}/match/test-match`;
-      const response = await page.goto(matchUrl).catch(() => null);
+      const response = await goto(page, `/match/test-match`).catch(() => null);
 
       if (response && response.ok()) {
         // Look for score display
@@ -118,8 +115,7 @@ test.describe("LiveView E2E Tests", () => {
     });
 
     test("should display match teams", async ({ page }) => {
-      const matchUrl = `${baseURL}/match/test-match`;
-      const response = await page.goto(matchUrl).catch(() => null);
+      const response = await goto(page, `/match/test-match`).catch(() => null);
 
       if (response && response.ok()) {
         const homeTeam = page.locator("[data-testid=home-team], .home-team");
@@ -136,8 +132,7 @@ test.describe("LiveView E2E Tests", () => {
     });
 
     test("should display match timeline/events", async ({ page }) => {
-      const matchUrl = `${baseURL}/match/test-match`;
-      const response = await page.goto(matchUrl).catch(() => null);
+      const response = await goto(page, `/match/test-match`).catch(() => null);
 
       if (response && response.ok()) {
         const timeline = page.locator("[data-testid=timeline], .timeline, .events");
@@ -151,14 +146,14 @@ test.describe("LiveView E2E Tests", () => {
 
   test.describe("Authentication", () => {
     test("should show login page", async ({ page }) => {
-      await page.goto(`${baseURL}/login`);
+      await goto(page, `/login`);
 
       const loginForm = page.locator("[data-testid=login-form], form");
       await expect(loginForm.first()).toBeVisible({ timeout: 5000 });
     });
 
     test("should require email on login", async ({ page }) => {
-      await page.goto(`${baseURL}/login`);
+      await goto(page, `/login`);
 
       const passwordInput = page.locator(
         "input[type=password], input[name=password]"
@@ -184,7 +179,7 @@ test.describe("LiveView E2E Tests", () => {
     });
 
     test("should reject invalid email", async ({ page }) => {
-      await page.goto(`${baseURL}/login`);
+      await goto(page, `/login`);
 
       const emailInput = page.locator("input[type=email], input[name=email]");
       const passwordInput = page.locator(
@@ -214,50 +209,53 @@ test.describe("LiveView E2E Tests", () => {
 
   test.describe("User Interactions", () => {
     test("should add match to favorites", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
-      const favoriteButton = page.locator(
-        "[data-testid=favorite-btn], button[aria-label*=favorite], .favorite-btn"
-      ).first();
+      const favoriteButton = page.locator("[data-testid=favorite-btn]").first();
 
       if (await favoriteButton.count() > 0) {
-        // Check initial state
-        let isFavorited = await favoriteButton.evaluate(
-          (el) => el.getAttribute("aria-pressed") === "true" || el.classList.contains("favorited")
-        );
-
-        // Click to toggle
         await favoriteButton.click();
-
-        // Wait for state change
-        await page.waitForTimeout(500);
-
-        // Check new state
-        const newState = await favoriteButton.evaluate(
-          (el) => el.getAttribute("aria-pressed") === "true" || el.classList.contains("favorited")
-        );
-
-        expect(newState).toBe(!isFavorited);
+        const authDialog = page.getByRole("dialog", {
+          name: /Create a free account to track games/i,
+        });
+        if (await authDialog.count() > 0) {
+          await expect(authDialog).toBeVisible();
+        } else {
+          await expect(favoriteButton).toHaveAttribute(
+            "aria-pressed",
+            /true|false/
+          );
+          await expect(favoriteButton).toHaveAttribute("aria-pressed", "true");
+        }
       }
     });
 
+    test("should open auth gate when guest favorites a match", async ({ page }) => {
+      await goto(page, `/`);
+
+      const signInLink = page.getByRole("link", { name: /Sign in/i });
+      if (await signInLink.count() > 0) {
+        const favoriteButton = page.locator("[data-testid=favorite-btn]").first();
+        await favoriteButton.click();
+        await expect(
+          page.getByRole("dialog", {
+            name: /Create a free account to track games/i,
+          })
+        ).toBeVisible();
+      }
+    });
+  });
+
+  test.describe("User Interactions", () => {
     test("should toggle dark mode if available", async ({ page }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       const darkModeToggle = page.locator(
         "[data-testid=dark-mode-toggle], button[aria-label*=dark], .theme-toggle"
       );
 
       if (await darkModeToggle.count() > 0) {
-        const initialColorScheme = await page.evaluate(() => {
-          return window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-        });
-
         await darkModeToggle.click();
-
-        // Verify UI changed (optional, depends on implementation)
         await page.waitForTimeout(300);
       }
     });
@@ -265,35 +263,24 @@ test.describe("LiveView E2E Tests", () => {
 
   test.describe("Error Handling", () => {
     test("should handle network errors gracefully", async ({ page }) => {
-      // Go offline
+      await goto(page, `/`);
+      await expect(
+        page.getByRole("main", { name: "Match results" })
+      ).toBeVisible();
+
       await page.context().setOffline(true);
-
-      await page.goto(`${baseURL}/`);
-
-      // Wait for error state or fallback UI
-      const errorOrFallback = page.locator(
-        "[data-testid=error], [role=alert], .error-message, .offline-notice"
-      );
-
-      // Should either show error or gracefully handle offline
-      await page.waitForTimeout(1000);
-
-      // Go back online
+      await expect(
+        page.locator("[data-testid=offline-notice]")
+      ).toBeVisible({ timeout: 5000 });
       await page.context().setOffline(false);
     });
 
     test("should show 404 page for invalid route", async ({ page }) => {
-      await page.goto(`${baseURL}/nonexistent-page-12345`);
+      await goto(page, `/nonexistent-page-12345`);
 
-      const notFoundMessage = page.locator(
-        "text=/404|Not Found|not found/i, [data-testid=not-found]"
-      );
-
-      // May redirect or show 404
-      const isNotFound = await notFoundMessage.count() > 0 || page.url().includes("404");
-      
-      // Just verify page loads (doesn't crash)
-      await expect(page.locator("body")).toBeVisible();
+      const body = page.locator("body");
+      await expect(body).toBeVisible();
+      await expect(body).toContainText(/404|Not Found|not found/i);
     });
   });
 
@@ -301,7 +288,7 @@ test.describe("LiveView E2E Tests", () => {
     test("should load home page within reasonable time", async ({ page }) => {
       const startTime = Date.now();
 
-      await page.goto(`${baseURL}/`, { waitUntil: "domcontentloaded" });
+      await goto(page, `/`);
 
       const loadTime = Date.now() - startTime;
 
@@ -312,7 +299,7 @@ test.describe("LiveView E2E Tests", () => {
     test("should have good lighthouse score for accessibility", async ({
       page,
     }) => {
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Check for basic accessibility
       const imagesWithoutAlt = await page.locator("img:not([alt])").count();
@@ -325,7 +312,7 @@ test.describe("LiveView E2E Tests", () => {
   test.describe("Mobile Responsiveness", () => {
     test("should be responsive on mobile viewport", async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 }); // iPhone size
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Should render without horizontal scroll
       const bodyWidth = await page.evaluate(
@@ -337,7 +324,7 @@ test.describe("LiveView E2E Tests", () => {
 
     test("should be responsive on tablet viewport", async ({ page }) => {
       await page.setViewportSize({ width: 768, height: 1024 }); // iPad size
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Should render without horizontal scroll
       const bodyWidth = await page.evaluate(
@@ -349,7 +336,7 @@ test.describe("LiveView E2E Tests", () => {
 
     test("should show mobile menu on small screens", async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto(`${baseURL}/`);
+      await goto(page, `/`);
 
       // Look for hamburger menu
       const hamburger = page.locator(

@@ -37,7 +37,14 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
   const [gateState, setGateState] = useState<GateState>(defaultState);
 
   const openGate = useCallback((returnPath?: string) => {
-    setGateState({ open: true, returnPath: returnPath ?? typeof window !== "undefined" ? window.location.pathname + window.location.search : "/" });
+    setGateState({
+      open: true,
+      returnPath:
+        returnPath ??
+        (typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : "/"),
+    });
   }, []);
 
   const closeGate = useCallback(() => {
