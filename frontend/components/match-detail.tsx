@@ -561,6 +561,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   // Soccer: show lineup/player_stats tabs when ESPN says soccer or when league is a known soccer league (so we can show Football-Data.org data even if ESPN has none)
   const isSoccerLeague = !!(leagueForESPN && getLeagueMapping(leagueForESPN)?.sport === "soccer");
   const isSoccer = espnData?.sport === "soccer" || isSoccerLeague;
+  const detailLive = isLive(matchData?.match?.phase ?? "scheduled");
   const tabs: Tab[] = isSoccer ? ["play_by_play", "player_stats", "lineup", "team_stats"] : ["play_by_play", "player_stats", "team_stats"];
   useEffect(() => {
     if (activeTab === "lineup" && !tabs.includes("lineup")) setActiveTab("play_by_play");
@@ -578,7 +579,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const lineupFetcher = useCallback(() => fetchLineup(matchId), [matchId]);
   const { data: lineupData } = usePolling<LineupResponse>({
     fetcher: lineupFetcher,
-    interval: 0, // fetch once when enabled
+    interval: detailLive ? 60000 : 0,
+    intervalWhenHidden: detailLive ? 180000 : undefined,
     enabled: activeTab === "lineup" && isSoccer && !!matchId,
     key: `lineup-${matchId}`,
   });
@@ -587,7 +589,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const playerStatsFetcher = useCallback(() => fetchPlayerStats(matchId), [matchId]);
   const { data: playerStatsData } = usePolling<PlayerStatsResponse>({
     fetcher: playerStatsFetcher,
-    interval: 0,
+    interval: detailLive ? 30000 : 0,
+    intervalWhenHidden: detailLive ? 90000 : undefined,
     enabled: activeTab === "player_stats" && isSoccer && !!matchId,
     key: `player-stats-${matchId}`,
   });

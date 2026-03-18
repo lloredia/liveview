@@ -18,9 +18,9 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
-  const from = searchParams.get("from") ?? undefined;
-  const oauthError = searchParams.get("error");
+  const callbackUrl = searchParams?.get("callbackUrl") ?? "/";
+  const from = searchParams?.get("from") ?? undefined;
+  const oauthError = searchParams?.get("error");
 
   // Build Google redirect URI hint for Configuration error (must match Google Cloud Console exactly)
   const origin =

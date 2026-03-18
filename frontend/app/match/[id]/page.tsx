@@ -28,8 +28,8 @@ export default function MatchPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const matchId = params.id as string;
-  const leagueName = searchParams.get("league") || "";
+  const matchId = (params?.id as string) || "";
+  const leagueName = searchParams?.get("league") || "";
 
   const [leagues, setLeagues] = useState<LeagueGroup[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);

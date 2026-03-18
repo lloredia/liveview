@@ -287,6 +287,102 @@ test.describe("LiveView E2E Tests", () => {
       await expect(page.getByText("Bench")).toBeVisible();
       await expect(page.getByText("Leandro Trossard")).toBeVisible();
     });
+
+    test("should render backend player stats fallback when espn detail is absent", async ({
+      page,
+    }) => {
+      await page.route("**/v1/matches/test-match", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            match: {
+              id: "test-match",
+              phase: "live",
+              start_time: "2026-03-18T19:00:00Z",
+              venue: "Emirates Stadium",
+              home_team: {
+                id: "home-1",
+                name: "Arsenal",
+                short_name: "ARS",
+                logo_url: null,
+              },
+              away_team: {
+                id: "away-1",
+                name: "Chelsea",
+                short_name: "CHE",
+                logo_url: null,
+              },
+            },
+            state: {
+              score_home: 1,
+              score_away: 0,
+              clock: "63'",
+              period: "2",
+              period_scores: [],
+              version: 7,
+            },
+            recent_events: [],
+            league: {
+              id: "premier-league",
+              name: "Premier League",
+            },
+            generated_at: "2026-03-18T19:03:00Z",
+          }),
+        });
+      });
+
+      await page.route("**/v1/matches/test-match/player-stats", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            source: "football_data",
+            home: {
+              teamName: "Arsenal",
+              statColumns: ["G", "A", "YC"],
+              players: [
+                {
+                  name: "Bukayo Saka",
+                  jersey: "7",
+                  position: "FW",
+                  stats: { G: 1, A: 0, YC: 0 },
+                  starter: true,
+                },
+              ],
+            },
+            away: {
+              teamName: "Chelsea",
+              statColumns: ["G", "A", "YC"],
+              players: [
+                {
+                  name: "Cole Palmer",
+                  jersey: "20",
+                  position: "FW",
+                  stats: { G: 0, A: 0, YC: 1 },
+                  starter: true,
+                },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route("**/api/espn/site/**", async (route) => {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "not found" }),
+        });
+      });
+
+      await goto(page, `/match/test-match?league=Premier%20League`);
+
+      await page.getByRole("button", { name: "Player Stats" }).click();
+      await expect(page.getByText("Data by Football-Data.org")).toBeVisible();
+      await expect(page.getByRole("button", { name: /Bukayo Saka/i })).toBeVisible();
+      await expect(page.getByRole("table").getByText("Bukayo Saka")).toBeVisible();
+    });
   });
 
   test.describe("Authentication", () => {

@@ -22,7 +22,7 @@ function SignupContent() {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const callbackUrl = searchParams?.get("callbackUrl") ?? "/";
 
   const handleOAuth = (provider: "apple" | "google") => {
     setError("");

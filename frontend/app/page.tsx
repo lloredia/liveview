@@ -79,7 +79,7 @@ function HomeContent() {
   }, []);
 
   useEffect(() => {
-    const leagueParam = searchParams.get("league");
+    const leagueParam = searchParams?.get("league");
     setSelectedLeague(leagueParam || null);
   }, [searchParams]);
 
