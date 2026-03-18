@@ -480,8 +480,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
 
     const playByPlay: MatchCenterPlayByPlaySection = {
       plays: playByPlayPlays,
-      homeTeamName: espnData?.homeTeamName || matchData?.match.home_team?.short_name || "Home",
-      awayTeamName: espnData?.awayTeamName || matchData?.match.away_team?.short_name || "Away",
+      homeTeamName: matchData?.match.home_team?.short_name || espnData?.homeTeamName || "Home",
+      awayTeamName: matchData?.match.away_team?.short_name || espnData?.awayTeamName || "Away",
       homeTeamId: espnData?.homeTeamId || "",
       awayTeamId: espnData?.awayTeamId || "",
       loading: detailsLoading && playByPlayPlays.length === 0,
@@ -492,8 +492,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     const teamStats: MatchCenterTeamStatsSection = {
       homeStats: teamStatsHome,
       awayStats: teamStatsAway,
-      homeTeamName: espnData?.homeTeamName || matchData?.match.home_team?.short_name || "Home",
-      awayTeamName: espnData?.awayTeamName || matchData?.match.away_team?.short_name || "Away",
+      homeTeamName: matchData?.match.home_team?.short_name || espnData?.homeTeamName || "Home",
+      awayTeamName: matchData?.match.away_team?.short_name || espnData?.awayTeamName || "Away",
       loading: detailsLoading && !(teamStatsHome.length || teamStatsAway.length),
     };
 

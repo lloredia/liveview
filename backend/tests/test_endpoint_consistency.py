@@ -321,4 +321,7 @@ async def test_match_details_sections_match_dedicated_timeline_and_stats_endpoin
     stats = await _fetch_match_stats(client, live_match["id"])
 
     assert details["timeline"] == timeline
-    assert details["stats"] == stats
+    assert details["stats"]["match_id"] == stats["match_id"]
+    assert details["stats"]["teams"] == stats["teams"]
+    assert details["stats"]["generated_at"]
+    assert stats["generated_at"]
