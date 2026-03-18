@@ -135,6 +135,17 @@ async def _invalidate_scoreboard_cache(
     keys = [f"api:scoreboard:{league_id}" for league_id in league_ids]
     await redis.client.delete(*keys)
 
+
+async def _invalidate_match_detail_cache(
+    redis: RedisManager,
+    match_ids: set[str] | None = None,
+) -> None:
+    """Invalidate cached match-center detail payloads for changed matches."""
+    if not match_ids:
+        return
+    keys = [f"snap:match:{match_id}:details" for match_id in match_ids]
+    await redis.client.delete(*keys)
+
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "eng.1": "soccer/eng.1",
     "eng.2": "soccer/eng.2",
@@ -250,6 +261,7 @@ async def _refresh_live_scores_via_router(
     fetch_date = datetime.now(timezone.utc).date()
     updated = 0
     changed_league_ids: set[str] = set()
+    changed_match_ids: set[str] = set()
     for league_slug in league_ids:
         sport = ESPN_LEAGUE_SPORT.get(league_slug, "soccer")
         try:
@@ -260,9 +272,10 @@ async def _refresh_live_scores_via_router(
                     "serving_from_espn_fallback",
                     extra={"league_slug": league_slug, "date": str(fetch_date)},
                 )
-            league_updated, league_ids_changed = await _apply_provider_matches(db, matches, league_slug, sport)
+            league_updated, league_ids_changed, match_ids_changed = await _apply_provider_matches(db, matches, league_slug, sport)
             updated += league_updated
             changed_league_ids.update(league_ids_changed)
+            changed_match_ids.update(match_ids_changed)
             if league_updated and matches:
                 LIVE_REFRESH_UPDATES.labels(provider=matches[0].provider_name).inc(league_updated)
         except Exception as exc:
@@ -274,6 +287,7 @@ async def _refresh_live_scores_via_router(
     try:
         await _invalidate_today_cache(redis)
         await _invalidate_scoreboard_cache(redis, changed_league_ids)
+        await _invalidate_match_detail_cache(redis, changed_match_ids)
     except Exception:
         logger.warning("today_cache_invalidation_failed", exc_info=True)
     return updated
@@ -491,15 +505,16 @@ async def _apply_provider_matches(
     matches: list[Any],
     league_slug: str,
     sport: str,
-) -> tuple[int, set[str]]:
-    """Apply ProviderMatch list to DB and return (updated_count, canonical_league_ids_changed)."""
+) -> tuple[int, set[str], set[str]]:
+    """Apply ProviderMatch list to DB and return changed counts and IDs."""
     from infra.providers.base import ProviderMatch
 
     if not matches:
-        return 0, set()
+        return 0, set(), set()
     _notif_queue: list[tuple[str, Any]] = []
     count = 0
     changed_league_ids: set[str] = set()
+    changed_match_ids: set[str] = set()
     async with db.write_session() as session:
         for pm in matches:
             if not isinstance(pm, ProviderMatch):
@@ -600,6 +615,7 @@ async def _apply_provider_matches(
                             },
                         )
                         count += 1
+                        changed_match_ids.add(str(match_id))
                         name_row = (
                             await session.execute(
                                 text(
@@ -647,6 +663,7 @@ async def _apply_provider_matches(
                         },
                     )
                     count += 1
+                    changed_match_ids.add(str(match_id))
             except Exception as evt_exc:
                 await session.rollback()
                 logger.warning(
@@ -679,7 +696,7 @@ async def _apply_provider_matches(
         except Exception as notif_exc:
             logger.warning("notification_processing_error", error=str(notif_exc))
 
-    return count, changed_league_ids
+    return count, changed_league_ids, changed_match_ids
 
 
 async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:
