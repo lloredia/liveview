@@ -9,11 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from shared.config import Settings, get_settings
 from shared.models.enums import MatchPhase
@@ -120,6 +120,15 @@ async def league_scoreboard(
         home_team = TeamORM.__table__.alias("ht")
         away_team = TeamORM.__table__.alias("at")
 
+        settings = get_settings()
+        live_fallback_hours = max(1, settings.phase_sync_fallback_hours)
+        live_cutoff = datetime.now(timezone.utc) - timedelta(hours=live_fallback_hours)
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_start = today_start + timedelta(days=1)
+        yesterday_start = today_start - timedelta(days=1)
+        day_after_tomorrow_start = tomorrow_start + timedelta(days=1)
+
         stmt = (
             select(
                 MatchORM.id,
@@ -147,11 +156,28 @@ async def league_scoreboard(
             .outerjoin(away_team, MatchORM.away_team_id == away_team.c.id)
             .where(MatchORM.league_id == league_id)
             .where(
-                MatchORM.phase.in_([
-                    p.value for p in MatchPhase
-                    if p.is_live or p == MatchPhase.PRE_MATCH
-                    or p == MatchPhase.FINISHED or p == MatchPhase.SCHEDULED
-                ])
+                or_(
+                    and_(MatchORM.start_time >= today_start, MatchORM.start_time < tomorrow_start),
+                    and_(MatchORM.phase.like("live%"), MatchORM.start_time >= live_cutoff),
+                    and_(MatchORM.phase == MatchPhase.BREAK.value, MatchORM.start_time >= live_cutoff),
+                    and_(
+                        MatchORM.start_time >= yesterday_start,
+                        MatchORM.start_time < today_start,
+                        MatchORM.phase.in_([
+                            MatchPhase.FINISHED.value,
+                            MatchPhase.POSTPONED.value,
+                            MatchPhase.CANCELLED.value,
+                        ]),
+                    ),
+                    and_(
+                        MatchORM.start_time >= tomorrow_start,
+                        MatchORM.start_time < day_after_tomorrow_start,
+                        MatchORM.phase.in_([
+                            MatchPhase.SCHEDULED.value,
+                            MatchPhase.PRE_MATCH.value,
+                        ]),
+                    ),
+                )
             )
             .order_by(MatchORM.start_time)
         )

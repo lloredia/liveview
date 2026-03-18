@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { fetchLeagues, fetchScoreboard } from "@/lib/api";
-import type { LeagueGroup } from "@/lib/types";
-import { isLive } from "@/lib/utils";
+import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
+import type { LeagueGroup, TodayResponse } from "@/lib/types";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { MatchDetail } from "@/components/match-detail";
@@ -40,6 +39,7 @@ export default function MatchPage() {
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+  const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { isAuthed, requireAuth } = useRequireAuth();
   const { token, refresh: refreshToken } = useAuthToken();
@@ -66,29 +66,22 @@ export default function MatchPage() {
   }, []);
 
   useEffect(() => {
-    if (leagues.length === 0) return;
-
     const pollLiveCounts = async () => {
-      const allIds = leagues.flatMap((g) => g.leagues.map((l) => l.id));
+      const data = await fetchLiveCounts();
+      setTodaySnapshot(data);
+
       const counts: Record<string, number> = {};
       let total = 0;
-
-      for (let i = 0; i < allIds.length; i += 5) {
-        const batch = allIds.slice(i, i + 5);
-        const results = await Promise.allSettled(
-          batch.map((id) => fetchScoreboard(id)),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            const liveCount = r.value.matches.filter((m) => isLive(m.phase)).length;
-            if (liveCount > 0) {
-              counts[r.value.league_id] = liveCount;
-              total += liveCount;
-            }
-          }
+      for (const league of data.leagues ?? []) {
+        const liveCount = (league.matches ?? []).filter((match) => {
+          const phase = (match.phase || "").toLowerCase();
+          return phase.startsWith("live") || phase === "break";
+        }).length;
+        if (liveCount > 0) {
+          counts[league.league_id] = liveCount;
+          total += liveCount;
         }
       }
-
       setLiveCounts(counts);
       setTotalLive(total);
     };
@@ -96,7 +89,7 @@ export default function MatchPage() {
     pollLiveCounts();
     const timer = setInterval(pollLiveCounts, 45000);
     return () => clearInterval(timer);
-  }, [leagues]);
+  }, []);
 
   const handleLeagueSelect = useCallback(
     (id: string) => {
@@ -177,7 +170,7 @@ export default function MatchPage() {
             onMatchSelect={handleMatchSelect}
           />
 
-      <LiveTicker leagues={leagues} onMatchSelect={handleMatchSelect} />
+      <LiveTicker todayData={todaySnapshot} onMatchSelect={handleMatchSelect} />
 
       <div className="flex flex-1">
         {sidebarOpen && (

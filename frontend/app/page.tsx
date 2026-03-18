@@ -303,7 +303,7 @@ function HomeContent() {
         onMatchSelect={handleMatchSelect}
       />
 
-      <LiveTicker leagues={leagues} onMatchSelect={handleMatchSelect} />
+      <LiveTicker todayData={todaySnapshot} onMatchSelect={handleMatchSelect} />
 
       <div className="flex flex-1">
         <Sidebar

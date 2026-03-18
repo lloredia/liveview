@@ -149,27 +149,20 @@ export async function fetchPlayerStats(matchId: string): Promise<PlayerStatsResp
  * Fetch live matches across ALL leagues for the live ticker.
  * Fetches all scoreboards in parallel and filters for live phases.
  */
-export async function fetchLiveMatches(leagueGroups: LeagueGroup[]): Promise<LiveTickerResponse> {
-  const allIds = leagueGroups.flatMap((g) => g.leagues.map((l) => l.id));
-
-  const results: ScoreboardResponse[] = [];
-  for (let i = 0; i < allIds.length; i += 5) {
-    const batch = allIds.slice(i, i + 5);
-    const batchResults = await Promise.allSettled(
-      batch.map((id) => fetchScoreboard(id)),
-    );
-    for (const r of batchResults) {
-      if (r.status === "fulfilled") results.push(r.value);
-    }
-  }
-
-  const liveMatches = results.flatMap((sb) =>
-    sb.matches
-      .filter((m) => m.phase.startsWith("live_") || m.phase === "break")
-      .map((m) => ({ ...m, league_name: sb.league_name })),
+export function liveTickerFromToday(today: TodayResponse): LiveTickerResponse {
+  const matches = (today.leagues ?? []).flatMap((league) =>
+    (league.matches ?? [])
+      .filter((match) => match.phase.startsWith("live_") || match.phase === "break")
+      .map((match) => ({
+        ...match,
+        league_name: league.league_name,
+      })),
   );
 
-  return { matches: liveMatches, fetched_at: new Date().toISOString() };
+  return {
+    matches,
+    fetched_at: today.generated_at,
+  };
 }
 
 export async function fetchNews(params?: {

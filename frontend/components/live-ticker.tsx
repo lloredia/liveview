@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchLiveMatches } from "@/lib/api";
-import { usePolling } from "@/hooks/use-polling";
+import { useEffect, useRef, useState } from "react";
+import { liveTickerFromToday } from "@/lib/api";
 import { phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
-import type { LeagueGroup, LiveTickerResponse, MatchSummaryWithLeague } from "@/lib/types";
+import type { LiveTickerResponse, MatchSummaryWithLeague, TodayResponse } from "@/lib/types";
 
 interface LiveTickerProps {
-  leagues: LeagueGroup[];
+  todayData: TodayResponse | null;
   onMatchSelect: (matchId: string) => void;
 }
 
@@ -70,21 +69,13 @@ function TickerItem({ match }: { match: MatchSummaryWithLeague }) {
   );
 }
 
-export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
-  const fetcher = useCallback(() => fetchLiveMatches(leagues), [leagues]);
-
-  const { data } = usePolling<LiveTickerResponse>({
-    fetcher,
-    interval: 15000,
-    enabled: leagues.length > 0,
-    key: "live-ticker",
-  });
-
+export function LiveTicker({ todayData, onMatchSelect }: LiveTickerProps) {
   const emptyStreakRef = useRef(0);
   const [stableMatches, setStableMatches] = useState<MatchSummaryWithLeague[]>([]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!todayData) return;
+    const data: LiveTickerResponse = liveTickerFromToday(todayData);
     const fresh = data.matches || [];
     if (fresh.length > 0) {
       emptyStreakRef.current = 0;
@@ -95,7 +86,7 @@ export function LiveTicker({ leagues, onMatchSelect }: LiveTickerProps) {
         setStableMatches([]);
       }
     }
-  }, [data]);
+  }, [todayData]);
 
   if (stableMatches.length === 0) return null;
 
