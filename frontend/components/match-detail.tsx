@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { ApiError, fetchMatch, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
+import { ApiError, fetchMatch, fetchStats, fetchTimeline, fetchLineup, fetchPlayerStats, type LineupResponse, type PlayerStatsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import {
   formatDate,
@@ -21,7 +21,7 @@ import { HeadToHead } from "./head-to-head";
 import { useTheme } from "@/lib/theme";
 import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
-import type { MatchDetailResponse, MatchEvent, TimelineResponse } from "@/lib/types";
+import type { MatchDetailResponse, MatchEvent, MatchStatsResponse, TimelineResponse } from "@/lib/types";
 
 // ===========================================================================
 // Types
@@ -159,6 +159,36 @@ function backendEventsToPlays(events: MatchEvent[]): ESPNPlay[] {
     participants: e.player_name ? [{ athlete: { displayName: e.player_name } }] : [],
     type: { id: "", text: e.event_type || "" },
   }));
+}
+
+function formatBackendStatLabel(name: string): string {
+  return name
+    .replace(/_/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function backendStatsToDisplay(
+  statsData: MatchStatsResponse | null,
+): { homeStats: ESPNTeamStat[]; awayStats: ESPNTeamStat[] } | null {
+  if (!statsData?.teams?.length) return null;
+
+  const convert = (side: "home" | "away") => {
+    const team = statsData.teams.find((entry) => entry.side === side);
+    if (!team?.stats) return [];
+    return Object.entries(team.stats)
+      .filter(([, value]) => value != null && typeof value !== "object")
+      .map(([name, value]) => ({
+        name,
+        displayValue: String(value),
+        label: formatBackendStatLabel(name),
+      }));
+  };
+
+  return {
+    homeStats: convert("home"),
+    awayStats: convert("away"),
+  };
 }
 
 // ===========================================================================
@@ -575,6 +605,15 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     key: `timeline-${matchId}`,
   });
 
+  const statsFetcher = useCallback(() => fetchStats(matchId), [matchId]);
+  const { data: statsData, loading: statsLoading } = usePolling<MatchStatsResponse>({
+    fetcher: statsFetcher,
+    interval: detailLive ? 30000 : 0,
+    intervalWhenHidden: detailLive ? 90000 : undefined,
+    enabled: activeTab === "team_stats" && !!matchData,
+    key: `team-stats-${matchId}`,
+  });
+
   // Football-Data.org lineup — fetch for soccer when lineup tab is active (so we can show FD data when ESPN has no lineup)
   const lineupFetcher = useCallback(() => fetchLineup(matchId), [matchId]);
   const { data: lineupData } = usePolling<LineupResponse>({
@@ -603,6 +642,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
 
   const playByPlayLoading = (timelineLoading || espnLoading) && playsForTab.length === 0;
+  const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
 
   if (matchLoading && !matchData) {
     return (
@@ -822,13 +862,13 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         )}
         {activeTab === "team_stats" && (
           <TeamStatsTab
-            homeStats={espnData?.homeTeamStats || []}
-            awayStats={espnData?.awayTeamStats || []}
+            homeStats={backendTeamStats?.homeStats || espnData?.homeTeamStats || []}
+            awayStats={backendTeamStats?.awayStats || espnData?.awayTeamStats || []}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
             awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
-            loading={espnLoading && !espnData}
+            loading={(statsLoading || espnLoading) && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
             live={live}
           />
         )}
