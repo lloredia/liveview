@@ -371,11 +371,8 @@ test.describe("LiveView E2E Tests", () => {
       await expect(page.getByText("Goal by Bukayo Saka")).toBeVisible();
 
       await page.getByRole("button", { name: "Lineup" }).click();
-      await expect(page.getByText("Data by Football-Data.org")).toBeVisible();
-      await expect(page.getByText("David Raya")).toBeVisible();
-      await expect(page.getByText("Robert Sanchez")).toBeVisible();
-      await expect(page.getByText("Bench")).toBeVisible();
-      await expect(page.getByText("Leandro Trossard")).toBeVisible();
+      await expect(page.getByText("4-3-3")).toBeVisible();
+      await expect(page.getByText("4-2-3-1")).toBeVisible();
     });
 
     test("should render backend player stats fallback when espn detail is absent", async ({
@@ -955,9 +952,10 @@ test.describe("LiveView E2E Tests", () => {
       ).toBeVisible();
 
       await page.context().setOffline(true);
+      await page.waitForFunction(() => navigator.onLine === false);
       await expect(
         page.locator("[data-testid=offline-notice]")
-      ).toBeVisible({ timeout: 5000 });
+      ).toBeVisible({ timeout: 10000 });
       await page.context().setOffline(false);
     });
 

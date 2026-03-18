@@ -138,6 +138,43 @@ export interface SupplementaryMatchData {
   awayTeamId?: string;
 }
 
+interface MatchCenterPlayByPlaySection {
+  plays: ESPNPlay[];
+  homeTeamName: string;
+  awayTeamName: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  loading: boolean;
+}
+
+interface MatchCenterPlayerStatsSection {
+  source: string | null;
+  sport: string;
+  home: TeamPlayerStats;
+  away: TeamPlayerStats;
+  injuries: { home: InjuryEntry[]; away: InjuryEntry[] };
+}
+
+interface MatchCenterLineupSection {
+  source: string | null;
+  homeFormation?: string | null;
+  awayFormation?: string | null;
+  homeStarters: PlayerStatLine[];
+  awayStarters: PlayerStatLine[];
+  homeBench: PlayerStatLine[];
+  awayBench: PlayerStatLine[];
+  substitutions: SubstitutionEntry[];
+  fallback: LineupResponse | null;
+}
+
+interface MatchCenterTeamStatsSection {
+  homeStats: ESPNTeamStat[];
+  awayStats: ESPNTeamStat[];
+  homeTeamName: string;
+  awayTeamName: string;
+  loading: boolean;
+}
+
 /** Convert backend timeline events to ESPN-style plays for the Play-by-Play tab. */
 function backendEventsToPlays(events: MatchEvent[]): ESPNPlay[] {
   const periodLabel = (p: string | null) => (p === "HT" || p === "1" ? "1st" : p === "2" ? "2nd" : p || "1");
@@ -368,15 +405,105 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     };
   }, [detailsData?.supplementary?.espn]);
 
-  // Play-by-play: from supplementary (ESPN) or backend timeline — never used for score/phase
-  const playsForTab = useMemo(() => {
-    if (timelineData?.events?.length) return backendEventsToPlays(timelineData.events);
-    if (espnData?.plays?.length) return espnData.plays;
-    return backendEventsToPlays(matchData?.recent_events || []);
-  }, [espnData?.plays, timelineData?.events, matchData?.recent_events]);
-
-  const playByPlayLoading = detailsLoading && playsForTab.length === 0;
   const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
+  const detailSections = useMemo(() => {
+    const fallbackPlayerStatsAvailable = !!(
+      playerStatsData?.source &&
+      (playerStatsData.home?.players?.length || playerStatsData.away?.players?.length)
+    );
+    const espnPlayerStatsAvailable = !!(
+      espnData &&
+      (espnData.homePlayers.players.length > 0 || espnData.awayPlayers.players.length > 0)
+    );
+    const playerStats: MatchCenterPlayerStatsSection | null =
+      espnPlayerStatsAvailable && espnData
+        ? {
+            source: "espn",
+            sport: espnData.sport || "soccer",
+            home: espnData.homePlayers,
+            away: espnData.awayPlayers,
+            injuries: espnData.injuries,
+          }
+        : fallbackPlayerStatsAvailable && playerStatsData?.home && playerStatsData?.away
+          ? {
+              source: playerStatsData.source,
+              sport: "soccer",
+              home: {
+                teamName: playerStatsData.home.teamName,
+                players: playerStatsData.home.players as PlayerStatLine[],
+                statColumns: playerStatsData.home.statColumns,
+              },
+              away: {
+                teamName: playerStatsData.away.teamName,
+                players: playerStatsData.away.players as PlayerStatLine[],
+                statColumns: playerStatsData.away.statColumns,
+              },
+              injuries: { home: [], away: [] },
+            }
+          : null;
+
+    const fallbackLineupAvailable = !!(
+      lineupData?.source &&
+      (lineupData.home?.lineup?.length || lineupData.away?.lineup?.length)
+    );
+    const homeStarters = espnData?.homePlayers?.players?.filter((player) => player.starter) ?? [];
+    const awayStarters = espnData?.awayPlayers?.players?.filter((player) => player.starter) ?? [];
+    const homeBench = espnData?.homePlayers?.players?.filter((player) => !player.starter) ?? [];
+    const awayBench = espnData?.awayPlayers?.players?.filter((player) => !player.starter) ?? [];
+    const primaryLineupAvailable = !!(
+      homeStarters.length ||
+      awayStarters.length ||
+      espnData?.homeFormation ||
+      espnData?.awayFormation
+    );
+    const lineup: MatchCenterLineupSection | null =
+      primaryLineupAvailable || fallbackLineupAvailable
+        ? {
+            source: primaryLineupAvailable ? "espn" : lineupData?.source ?? null,
+            homeFormation: espnData?.homeFormation ?? lineupData?.home?.formation ?? null,
+            awayFormation: espnData?.awayFormation ?? lineupData?.away?.formation ?? null,
+            homeStarters,
+            awayStarters,
+            homeBench,
+            awayBench,
+            substitutions: espnData?.substitutions ?? [],
+            fallback: fallbackLineupAvailable ? lineupData : null,
+          }
+        : null;
+
+    const playByPlayPlays =
+      timelineData?.events?.length
+        ? backendEventsToPlays(timelineData.events)
+        : espnData?.plays?.length
+          ? espnData.plays
+          : backendEventsToPlays(matchData?.recent_events || []);
+
+    const playByPlay: MatchCenterPlayByPlaySection = {
+      plays: playByPlayPlays,
+      homeTeamName: espnData?.homeTeamName || matchData?.match.home_team?.short_name || "Home",
+      awayTeamName: espnData?.awayTeamName || matchData?.match.away_team?.short_name || "Away",
+      homeTeamId: espnData?.homeTeamId || "",
+      awayTeamId: espnData?.awayTeamId || "",
+      loading: detailsLoading && playByPlayPlays.length === 0,
+    };
+
+    const teamStatsHome = backendTeamStats?.homeStats ?? espnData?.homeTeamStats ?? [];
+    const teamStatsAway = backendTeamStats?.awayStats ?? espnData?.awayTeamStats ?? [];
+    const teamStats: MatchCenterTeamStatsSection = {
+      homeStats: teamStatsHome,
+      awayStats: teamStatsAway,
+      homeTeamName: espnData?.homeTeamName || matchData?.match.home_team?.short_name || "Home",
+      awayTeamName: espnData?.awayTeamName || matchData?.match.away_team?.short_name || "Away",
+      loading: detailsLoading && !(teamStatsHome.length || teamStatsAway.length),
+    };
+
+    return {
+      playByPlay,
+      playerStats,
+      lineup,
+      teamStats,
+    };
+  }, [backendTeamStats, detailsLoading, espnData, lineupData, matchData, playerStatsData, timelineData?.events]);
 
   if (matchLoading && !matchData) {
     return (
@@ -559,34 +686,32 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       <div className="mt-4 animate-fade-in">
         {activeTab === "play_by_play" && (
           <PlayByPlayTab
-            plays={playsForTab}
-            homeTeamName={supplementary.homeTeamName || match.home_team?.short_name || "Home"}
-            awayTeamName={supplementary.awayTeamName || match.away_team?.short_name || "Away"}
-            homeTeamId={supplementary.homeTeamId || ""}
-            awayTeamId={supplementary.awayTeamId || ""}
-            loading={playByPlayLoading}
+            plays={detailSections.playByPlay.plays}
+            homeTeamName={detailSections.playByPlay.homeTeamName}
+            awayTeamName={detailSections.playByPlay.awayTeamName}
+            homeTeamId={detailSections.playByPlay.homeTeamId}
+            awayTeamId={detailSections.playByPlay.awayTeamId}
+            loading={detailSections.playByPlay.loading}
             live={live}
             phase={canonical.phase}
           />
         )}
         {activeTab === "player_stats" && (
           <PlayerStatsTab
-            espnData={espnData}
-            playerStatsFallback={playerStatsData ?? null}
-            loading={detailsLoading && !espnData && !(playerStatsData?.home?.players?.length || playerStatsData?.away?.players?.length)}
+            section={detailSections.playerStats}
+            loading={detailsLoading && !detailSections.playerStats}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
             leagueName={leagueForESPN}
-            onPlayerClick={espnData?.sport === "soccer" ? (player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side }) : undefined}
+            onPlayerClick={detailSections.playerStats?.sport === "soccer" ? (player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side }) : undefined}
           />
         )}
         {activeTab === "lineup" && isSoccer && (
           <LineupTab
-            espnData={espnData}
-            fdLineup={lineupData ?? null}
-            loading={detailsLoading && !espnData && !(lineupData?.home?.lineup?.length || lineupData?.away?.lineup?.length)}
+            section={detailSections.lineup}
+            loading={detailsLoading && !detailSections.lineup}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
@@ -596,13 +721,13 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         )}
         {activeTab === "team_stats" && (
           <TeamStatsTab
-            homeStats={backendTeamStats?.homeStats || espnData?.homeTeamStats || []}
-            awayStats={backendTeamStats?.awayStats || espnData?.awayTeamStats || []}
+            homeStats={detailSections.teamStats.homeStats}
+            awayStats={detailSections.teamStats.awayStats}
             homeTeamLogo={match.home_team?.logo_url || null}
             awayTeamLogo={match.away_team?.logo_url || null}
-            homeTeamName={espnData?.homeTeamName || match.home_team?.short_name || "Home"}
-            awayTeamName={espnData?.awayTeamName || match.away_team?.short_name || "Away"}
-            loading={detailsLoading && !(backendTeamStats?.homeStats.length || backendTeamStats?.awayStats.length || espnData)}
+            homeTeamName={detailSections.teamStats.homeTeamName}
+            awayTeamName={detailSections.teamStats.awayTeamName}
+            loading={detailSections.teamStats.loading}
             live={live}
           />
         )}
@@ -770,8 +895,7 @@ function PlayByPlayTab({ plays, homeTeamName, awayTeamName, homeTeamId, awayTeam
 // ===========================================================================
 
 interface PlayerStatsTabProps {
-  espnData: ESPNSummaryData | null;
-  playerStatsFallback: PlayerStatsResponse | null;
+  section: MatchCenterPlayerStatsSection | null;
   loading: boolean;
   homeTeamLogo: string | null;
   awayTeamLogo: string | null;
@@ -781,7 +905,7 @@ interface PlayerStatsTabProps {
   onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function PlayerStatsTab({ espnData, playerStatsFallback, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, onPlayerClick }: PlayerStatsTabProps) {
+function PlayerStatsTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, onPlayerClick }: PlayerStatsTabProps) {
   const mapping = getLeagueMapping(leagueName);
   const [activeSide, setActiveSide] = useState<"home" | "away">("home");
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -816,10 +940,7 @@ function PlayerStatsTab({ espnData, playerStatsFallback, loading, homeTeamLogo, 
     );
   }
 
-  const hasEspnPlayers = espnData && (espnData.homePlayers.players.length > 0 || espnData.awayPlayers.players.length > 0);
-  const hasFallbackPlayers = playerStatsFallback?.source && (playerStatsFallback.home?.players?.length || playerStatsFallback.away?.players?.length);
-
-  if (!hasEspnPlayers && !hasFallbackPlayers) {
+  if (!section || (!section.home.players.length && !section.away.players.length)) {
     return (
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
         <div className="mb-3 text-3xl opacity-60">👤</div>
@@ -829,14 +950,13 @@ function PlayerStatsTab({ espnData, playerStatsFallback, loading, homeTeamLogo, 
     );
   }
 
-  const useFallback = !hasEspnPlayers && hasFallbackPlayers && playerStatsFallback;
-  const homeSource = useFallback && playerStatsFallback?.home ? { teamName: playerStatsFallback.home.teamName, players: playerStatsFallback.home.players as PlayerStatLine[], statColumns: playerStatsFallback.home.statColumns } : espnData!.homePlayers;
-  const awaySource = useFallback && playerStatsFallback?.away ? { teamName: playerStatsFallback.away.teamName, players: playerStatsFallback.away.players as PlayerStatLine[], statColumns: playerStatsFallback.away.statColumns } : espnData!.awayPlayers;
+  const usingFallback = section.source !== "espn";
+  const homeSource = section.home;
+  const awaySource = section.away;
 
   const teamData = activeSide === "home" ? homeSource : awaySource;
-  const sport = useFallback ? "soccer" : (espnData?.sport || "soccer");
-  const highlights = HIGHLIGHT_STATS[sport] || [];
-  const displayMap = STAT_DISPLAY[sport] || {};
+  const highlights = HIGHLIGHT_STATS[section.sport] || [];
+  const displayMap = STAT_DISPLAY[section.sport] || {};
   const visibleColumns = teamData.statColumns.filter((col) => Object.keys(displayMap).length === 0 || displayMap[col]);
 
   const handleSort = (col: string) => {
@@ -858,13 +978,13 @@ function PlayerStatsTab({ espnData, playerStatsFallback, loading, homeTeamLogo, 
 
   const starters = sortedPlayers.filter((p) => p.starter);
   const bench = sortedPlayers.filter((p) => !p.starter);
-  const injuries = useFallback ? [] : (activeSide === "home" ? espnData!.injuries.home : espnData!.injuries.away);
+  const injuries = activeSide === "home" ? section.injuries.home : section.injuries.away;
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      {useFallback && (
+      {usingFallback && (
         <div className="border-b border-surface-border px-3 py-2 text-[11px] text-text-muted">
-          Data by {playerStatsFallback?.source === "football_data" ? "Football-Data.org" : playerStatsFallback?.source}
+          Data by {section.source === "football_data" ? "Football-Data.org" : section.source}
         </div>
       )}
       {/* Team toggle */}
@@ -1098,8 +1218,7 @@ function hasScored(p: PlayerStatLine): boolean {
 }
 
 interface LineupTabProps {
-  espnData: ESPNSummaryData | null;
-  fdLineup: LineupResponse | null;
+  section: MatchCenterLineupSection | null;
   loading: boolean;
   homeTeamLogo: string | null;
   awayTeamLogo: string | null;
@@ -1108,7 +1227,7 @@ interface LineupTabProps {
   onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, onPlayerClick }: LineupTabProps) {
+function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, onPlayerClick }: LineupTabProps) {
   if (loading) {
     return (
       <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
@@ -1129,10 +1248,20 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
     );
   }
 
-  const hasFdLineup = fdLineup?.source && (fdLineup.home?.lineup?.length || fdLineup.away?.lineup?.length);
+  const fdLineup = section?.fallback ?? null;
+  const hasFdLineup = !!(fdLineup?.source && (fdLineup.home?.lineup?.length || fdLineup.away?.lineup?.length));
+  const homeStarters = section?.homeStarters ?? [];
+  const awayStarters = section?.awayStarters ?? [];
+  const homeBench = section?.homeBench ?? [];
+  const awayBench = section?.awayBench ?? [];
+  const hasPrimaryLineup = !!(
+    homeStarters.length ||
+    awayStarters.length ||
+    section?.homeFormation ||
+    section?.awayFormation
+  );
 
-  // When ESPN has no data, show Football-Data.org lineup if available (livescores-style data)
-  if (!espnData) {
+  if (!hasPrimaryLineup) {
     if (hasFdLineup && fdLineup) {
       const home = fdLineup.home ?? { formation: null, lineup: [], bench: [] };
       const away = fdLineup.away ?? { formation: null, lineup: [], bench: [] };
@@ -1201,122 +1330,34 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
     }
     return (
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
-        <div className="mb-3 text-3xl opacity-60">⚽</div>
+        <div className="mb-3 text-3xl opacity-60">XI</div>
         <div className="mb-1 text-[14px] font-semibold text-text-secondary">Lineup Unavailable</div>
         <div className="text-[12px] text-text-muted">Match data is not available</div>
       </div>
     );
   }
 
-  const homeStarters = (espnData.homePlayers?.players ?? []).filter((p) => p.starter);
-  const awayStarters = (espnData.awayPlayers?.players ?? []).filter((p) => p.starter);
-  const homeBench = (espnData.homePlayers?.players ?? []).filter((p) => !p.starter);
-  const awayBench = (espnData.awayPlayers?.players ?? []).filter((p) => !p.starter);
-  const hasAny = homeStarters.length > 0 || awayStarters.length > 0 || espnData.homeFormation || espnData.awayFormation;
-
-  if (!hasAny && !hasFdLineup) {
-    return (
-      <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
-        <div className="mb-3 text-3xl opacity-60">⚽</div>
-        <div className="mb-1 text-[14px] font-semibold text-text-secondary">No Lineup Data</div>
-        <div className="text-[12px] text-text-muted">Formation and starters are not yet available for this match</div>
-      </div>
-    );
-  }
-
-  // Use Football-Data.org lineup when ESPN has none
-  if (!hasAny && hasFdLineup && fdLineup) {
-    const home = fdLineup.home ?? { formation: null, lineup: [], bench: [] };
-    const away = fdLineup.away ?? { formation: null, lineup: [], bench: [] };
-    return (
-      <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-        <div className="border-b border-surface-border px-3 py-2 text-[11px] text-text-muted">
-          Data by {fdLineup.source === "football_data" ? "Football-Data.org" : fdLineup.source}
-        </div>
-        <div className="relative bg-[#0d3d1a] text-white" style={{ minHeight: 280 }}>
-          <div className="absolute inset-0 border-[3px] border-white/60 rounded-none" />
-          <div className="absolute left-0 right-0 top-1/2 h-0 border-t-2 border-dashed border-white/50" />
-          <div className="absolute left-0 right-0 top-2 z-10 flex items-center justify-center gap-2">
-            {homeTeamLogo && <img src={homeTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
-            <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{homeTeamName}</span>
-            {home.formation && <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{home.formation}</span>}
-          </div>
-          <div className="absolute left-0 right-0 top-10 bottom-1/2 flex flex-col justify-center gap-1 px-3">
-            {home.lineup.map((p, i) => (
-              <div key={p.id ?? i} className="flex items-center gap-2 text-[12px]">
-                {p.shirt_number != null && <span className="w-6 shrink-0 rounded bg-white/20 px-1 text-center font-mono text-[10px]">{p.shirt_number}</span>}
-                <span className="truncate">{p.name}</span>
-                {p.position && <span className="shrink-0 text-[10px] opacity-80">{p.position}</span>}
-              </div>
-            ))}
-          </div>
-          <div className="absolute left-0 right-0 top-1/2 bottom-10 flex flex-col justify-center gap-1 px-3">
-            {away.lineup.map((p, i) => (
-              <div key={p.id ?? i} className="flex items-center gap-2 text-[12px]">
-                {p.shirt_number != null && <span className="w-6 shrink-0 rounded bg-white/20 px-1 text-center font-mono text-[10px]">{p.shirt_number}</span>}
-                <span className="truncate">{p.name}</span>
-                {p.position && <span className="shrink-0 text-[10px] opacity-80">{p.position}</span>}
-              </div>
-            ))}
-          </div>
-          <div className="absolute bottom-2 left-0 right-0 z-10 flex items-center justify-center gap-2">
-            {awayTeamLogo && <img src={awayTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
-            <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{awayTeamName}</span>
-            {away.formation && <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{away.formation}</span>}
-          </div>
-        </div>
-        {(home.bench?.length > 0 || away.bench?.length > 0) && (
-          <div className="border-t border-surface-border bg-surface-card px-4 py-3">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Bench</div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
-              <div>
-                {home.bench?.slice(0, 7).map((p, i) => (
-                  <div key={p.id ?? i} className="flex items-center gap-2">
-                    {p.shirt_number != null && <span className="w-5 font-mono text-[10px] text-text-muted">{p.shirt_number}</span>}
-                    <span className="truncate">{p.name}</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                {away.bench?.slice(0, 7).map((p, i) => (
-                  <div key={p.id ?? i} className="flex items-center gap-2">
-                    {p.shirt_number != null && <span className="w-5 font-mono text-[10px] text-text-muted">{p.shirt_number}</span>}
-                    <span className="truncate">{p.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const homeRows = startersByFormationRows(homeStarters, espnData.homeFormation);
-  const awayRows = startersByFormationRows(awayStarters, espnData.awayFormation);
-  const subs = espnData.substitutions ?? [];
+  const homeRows = startersByFormationRows(homeStarters, section?.homeFormation ?? undefined);
+  const awayRows = startersByFormationRows(awayStarters, section?.awayFormation ?? undefined);
+  const subs = section?.substitutions ?? [];
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      {/* Pitch: dark green field, vertical layout — home top, away bottom */}
       <div className="relative bg-[#0d3d1a] text-white" style={{ minHeight: 320 }}>
-        {/* White field lines (simplified) */}
         <div className="absolute inset-0 border-[3px] border-white/60 rounded-none" />
         <div className="absolute left-0 right-0 top-1/2 h-0 border-t-2 border-dashed border-white/50" />
         <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/50" />
         <div className="absolute left-1/2 top-0 h-12 w-24 -translate-x-1/2 rounded-b-[2rem] border-2 border-b-0 border-white/50" />
         <div className="absolute bottom-0 left-1/2 h-12 w-24 -translate-x-1/2 rounded-t-[2rem] border-2 border-t-0 border-white/50" />
 
-        {/* Home team name + formation (top) */}
         <div className="absolute left-0 right-0 top-2 z-10 flex items-center justify-center gap-2">
           {homeTeamLogo && <img src={homeTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
           <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{homeTeamName}</span>
-          {espnData.homeFormation && (
-            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{espnData.homeFormation}</span>
+          {section?.homeFormation && (
+            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{section.homeFormation}</span>
           )}
         </div>
 
-        {/* Home team players (top half of pitch) */}
         <div className="absolute left-0 right-0 top-10 bottom-1/2 flex flex-col justify-around px-2">
           {homeRows.map((row, rowIdx) => (
             <div key={rowIdx} className="flex justify-around gap-1">
@@ -1331,7 +1372,6 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
           ))}
         </div>
 
-        {/* Away team players (bottom half) */}
         <div className="absolute left-0 right-0 top-1/2 bottom-10 flex flex-col justify-around px-2">
           {awayRows.map((row, rowIdx) => (
             <div key={rowIdx} className="flex justify-around gap-1">
@@ -1346,17 +1386,15 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
           ))}
         </div>
 
-        {/* Away team name + formation (bottom) */}
         <div className="absolute bottom-2 left-0 right-0 z-10 flex items-center justify-center gap-2">
           {awayTeamLogo && <img src={awayTeamLogo} alt="" className="h-5 w-5 rounded-full object-cover" />}
           <span className="text-[11px] font-bold uppercase tracking-wider opacity-95">{awayTeamName}</span>
-          {espnData.awayFormation && (
-            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{espnData.awayFormation}</span>
+          {section?.awayFormation && (
+            <span className="rounded bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold">{section.awayFormation}</span>
           )}
         </div>
       </div>
 
-      {/* Substitutions */}
       {subs.length > 0 && (
         <div className="border-t border-surface-border bg-surface-card px-4 py-3">
           <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Substitutions</div>
@@ -1366,11 +1404,11 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
                 <span className="shrink-0 font-mono text-text-dim">{s.minute}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-[8px] text-white">↑</span>
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-[8px] text-white">-</span>
                     <span className="truncate text-text-primary">{s.playerOff}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/90 text-[8px] text-white">↓</span>
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/90 text-[8px] text-white">+</span>
                     <span className="truncate text-text-secondary">{s.playerOn}</span>
                   </div>
                 </div>
@@ -1380,7 +1418,6 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
         </div>
       )}
 
-      {/* Substitute players (bench) — two columns */}
       {(homeBench.length > 0 || awayBench.length > 0) && (
         <div className="border-t border-surface-border bg-surface-card px-4 py-3">
           <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary">Substitute Players</div>
@@ -1389,9 +1426,9 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
               {homeBench.map((p, i) => (
                 <div key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover font-mono text-[10px] font-bold text-text-secondary">
-                    {p.jersey || "—"}
+                    {p.jersey || "--"}
                   </span>
-                  <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                  <span className="truncate text-text-primary">{p.name ?? "--"}</span>
                 </div>
               ))}
             </div>
@@ -1399,9 +1436,9 @@ function LineupTab({ espnData, fdLineup, loading, homeTeamLogo, awayTeamLogo, ho
               {awayBench.map((p, i) => (
                 <div key={p.name ?? i} className="flex items-center gap-2 text-[12px]">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover font-mono text-[10px] font-bold text-text-secondary">
-                    {p.jersey || "—"}
+                    {p.jersey || "--"}
                   </span>
-                  <span className="truncate text-text-primary">{p.name ?? "—"}</span>
+                  <span className="truncate text-text-primary">{p.name ?? "--"}</span>
                 </div>
               ))}
             </div>
