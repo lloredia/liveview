@@ -97,6 +97,24 @@ def _build_team_stats_payload(match_id: uuid.UUID, match_row: Any, stats: Any) -
     }
 
 
+def _build_timeline_payload(
+    match_id: uuid.UUID,
+    phase: str | None,
+    events: list[dict[str, Any]],
+    limit: int,
+) -> dict[str, Any]:
+    """Build the canonical timeline payload shared by /timeline and /details."""
+    next_seq = events[-1]["seq"] if events else None
+    return {
+        "match_id": str(match_id),
+        "phase": phase,
+        "events": events,
+        "count": len(events),
+        "next_seq": next_seq,
+        "has_more": len(events) == limit,
+    }
+
+
 _LEAGUE_TO_ESPN_MAP: dict[str, dict[str, str]] = {
     "Premier League": {"sport": "soccer", "slug": "eng.1"},
     "La Liga": {"sport": "soccer", "slug": "esp.1"},
@@ -545,19 +563,8 @@ async def get_match_timeline(
         result = await session.execute(stmt)
         events = [_event_orm_to_dict(e) for e in result.scalars().all()]
 
-    # Determine next cursor
-    next_seq = events[-1]["seq"] if events else None
-
     phase = _canonical_phase(match_row.phase, getattr(match_row, "state_phase", None))
-
-    payload = {
-        "match_id": str(match_id),
-        "phase": phase,
-        "events": events,
-        "count": len(events),
-        "next_seq": next_seq,
-        "has_more": len(events) == limit,
-    }
+    payload = _build_timeline_payload(match_id, phase, events, limit)
 
     # Short cache — timeline changes frequently during live matches
     _no_store(response)
@@ -731,14 +738,7 @@ async def get_match_details(
     payload = {
         "match_id": str(match_id),
         "phase": phase,
-        "timeline": {
-            "match_id": str(match_id),
-            "phase": phase,
-            "events": events,
-            "count": len(events),
-            "next_seq": events[-1]["seq"] if events else None,
-            "has_more": len(events) == 100,
-        },
+        "timeline": _build_timeline_payload(match_id, phase, events, 100),
         "stats": _build_team_stats_payload(match_id, match_row, stats),
         "soccer_details": soccer_details,
         "supplementary": supplementary,
