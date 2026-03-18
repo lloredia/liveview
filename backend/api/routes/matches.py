@@ -725,14 +725,14 @@ async def get_match_details(
             select(MatchEventORM)
             .where(MatchEventORM.match_id == match_id)
             .order_by(
-                MatchEventORM.minute.asc().nullsfirst(),
-                MatchEventORM.second.asc().nullsfirst(),
-                MatchEventORM.seq.asc(),
+                MatchEventORM.seq.desc(),
             )
             .limit(100)
         )
         events_result = await session.execute(events_stmt)
-        events = [_event_orm_to_dict(event) for event in events_result.scalars().all()]
+        latest_events = list(events_result.scalars().all())
+        latest_events.reverse()
+        events = [_event_orm_to_dict(event) for event in latest_events]
 
         stats_stmt = select(MatchStatsORM).where(MatchStatsORM.match_id == match_id)
         stats_result = await session.execute(stats_stmt)

@@ -18,7 +18,7 @@ from httpx import ASGITransport, AsyncClient
 
 from api.app import create_app
 from api.dependencies import init_dependencies
-from shared.models.orm import LeagueORM, MatchORM, MatchStateORM, SportORM, TeamORM
+from shared.models.orm import LeagueORM, MatchEventORM, MatchORM, MatchStateORM, SportORM, TeamORM
 
 
 @pytest.fixture
@@ -325,3 +325,41 @@ async def test_match_details_sections_match_dedicated_timeline_and_stats_endpoin
     assert details["stats"]["teams"] == stats["teams"]
     assert details["stats"]["generated_at"]
     assert stats["generated_at"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_match_details_timeline_returns_latest_100_events_in_order(
+    client,
+    db,
+    seeded_matches,
+):
+    live_match = seeded_matches["matches"]["live"]
+    match_id = uuid.UUID(live_match["id"])
+
+    async with db.write_session() as session:
+        session.add_all(
+            [
+                MatchEventORM(
+                    id=uuid.uuid4(),
+                    match_id=match_id,
+                    seq=seq,
+                    minute=seq,
+                    second=0,
+                    period="2",
+                    event_type="note",
+                    detail=f"event-{seq}",
+                    synthetic=False,
+                    confidence=1.0,
+                )
+                for seq in range(1, 106)
+            ]
+        )
+        await session.commit()
+
+    details = await _fetch_match_details(client, live_match["id"])
+
+    assert details["timeline"]["count"] == 100
+    assert details["timeline"]["events"][0]["seq"] == 6
+    assert details["timeline"]["events"][-1]["seq"] == 105
+    assert details["timeline"]["next_seq"] == 105

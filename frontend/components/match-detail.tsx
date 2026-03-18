@@ -127,17 +127,6 @@ export interface CanonicalMatchState {
 }
 
 // Supplementary state — display-only extras. Source: ESPN (or backend timeline) only. Never affects score/phase.
-export interface SupplementaryMatchData {
-  plays: ESPNPlay[];
-  lineup_home: PlayerStatLine[];
-  lineup_away: PlayerStatLine[];
-  boxscore: { homeTeamStats: ESPNTeamStat[]; awayTeamStats: ESPNTeamStat[] } | null;
-  homeTeamName?: string;
-  awayTeamName?: string;
-  homeTeamId?: string;
-  awayTeamId?: string;
-}
-
 interface MatchCenterPlayByPlaySection {
   plays: ESPNPlay[];
   homeTeamName: string;
@@ -571,19 +560,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   };
 
   // Supplementary state — ESPN (or backend timeline/lineup fallback). For play-by-play, lineup, boxscore only.
-  const supplementary: SupplementaryMatchData = {
-    plays: espnData?.plays ?? [],
-    lineup_home: espnData?.homePlayers?.players ?? [],
-    lineup_away: espnData?.awayPlayers?.players ?? [],
-    boxscore: espnData
-      ? { homeTeamStats: espnData.homeTeamStats, awayTeamStats: espnData.awayTeamStats }
-      : null,
-    homeTeamName: espnData?.homeTeamName,
-    awayTeamName: espnData?.awayTeamName,
-    homeTeamId: espnData?.homeTeamId,
-    awayTeamId: espnData?.awayTeamId,
-  };
-
   const live = isLive(canonical.phase);
   const color = phaseColor(canonical.phase);
   const { theme } = useTheme();
