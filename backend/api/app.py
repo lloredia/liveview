@@ -1338,19 +1338,18 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
         redis: RedisManager = Depends(get_redis),
     ) -> dict[str, Any]:
         """Run one live score refresh cycle and invalidate live-facing caches. For manual/cron use."""
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            if force:
-                try:
-                    updated = await _refresh_live_scores(db, redis, client)
-                    await espn_circuit_breaker.record_success()
-                except Exception as exc:
-                    logger.warning("live_refresh_force_failed", error=str(exc))
-                    return {"ok": False, "message": f"Force refresh failed: {exc!s}", "build": "live_scores_raw_sql"}
-            else:
-                try:
-                    updated = await espn_circuit_breaker.call(_refresh_live_scores, db, redis, client)
-                except CircuitBreakerOpen:
-                    return {"ok": False, "message": "ESPN circuit breaker open, try again later or use ?force=true"}
+        if force:
+            try:
+                updated = await _refresh_live_scores_via_router(db, redis, app)
+                await espn_circuit_breaker.record_success()
+            except Exception as exc:
+                logger.warning("live_refresh_force_failed", error=str(exc))
+                return {"ok": False, "message": f"Force refresh failed: {exc!s}", "build": "live_scores_provider_router"}
+        else:
+            try:
+                updated = await espn_circuit_breaker.call(_refresh_live_scores_via_router, db, redis, app)
+            except CircuitBreakerOpen:
+                return {"ok": False, "message": "ESPN circuit breaker open, try again later or use ?force=true"}
         try:
             await _invalidate_today_cache(redis)
             async with db.read_session() as session:
@@ -1364,7 +1363,7 @@ def create_app(*, use_lifespan: bool = True) -> FastAPI:
             await _invalidate_match_stats_cache(redis, all_match_ids)
         except Exception:
             logger.warning("manual_refresh_cache_invalidation_failed", exc_info=True)
-        return {"ok": True, "message": "Refresh cycle run, live caches invalidated", "matches_updated": updated, "build": "live_scores_raw_sql"}
+        return {"ok": True, "message": "Refresh cycle run, live caches invalidated", "matches_updated": updated, "build": "live_scores_provider_router"}
 
     @app.get("/ready", tags=["system"])
     async def readiness() -> Dict[str, Union[str, bool]]:
