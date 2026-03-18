@@ -125,6 +125,9 @@ async def get_today(
         if_none_match = request.headers.get("if-none-match")
         if if_none_match and if_none_match == etag:
             return Response(status_code=304)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "no-store"
+        return json.loads(cached)
 
     async with db.read_session() as session:
         # Matches that started in the resolved UTC date range
@@ -371,7 +374,7 @@ async def get_today(
 
     etag = _compute_etag_content(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = f"public, max-age={min(cache_ttl, 30)}"
+    response.headers["Cache-Control"] = "no-store" if has_live_or_break else f"public, max-age={min(cache_ttl, 30)}"
 
     return payload
 

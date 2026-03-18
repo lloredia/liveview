@@ -166,7 +166,7 @@ async def get_match_center(
     payload_json = json.dumps(payload, default=str)
     etag = _compute_etag(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=2"
+    response.headers["Cache-Control"] = "no-store" if str(phase).startswith("live") or phase == "break" else "public, max-age=2"
 
     return payload
 
@@ -235,7 +235,7 @@ async def get_match_timeline(
     }
 
     # Short cache — timeline changes frequently during live matches
-    response.headers["Cache-Control"] = "public, max-age=1"
+    response.headers["Cache-Control"] = "no-store"
     return payload
 
 

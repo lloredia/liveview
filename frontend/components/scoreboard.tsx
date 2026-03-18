@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchScoreboard } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
-import { useESPNLive } from "@/hooks/use-espn-live";
 import { isLive } from "@/lib/utils";
 import { getLeagueLogo } from "@/lib/league-logos";
 import { MatchCard } from "./match-card";
@@ -62,15 +61,13 @@ export function Scoreboard({
   });
 
   const leagueName = data?.league_name || "";
-  const { patchMatches } = useESPNLive(leagueName, hasLive ? 10000 : 30000);
 
   useMemo(() => {
     setTab("matches");
   }, [leagueId]);
 
   const { liveMatches, scheduledMatches, finishedMatches } = useMemo(() => {
-    const raw = data?.matches || [];
-    const matches = patchMatches(raw);
+    const matches = data?.matches || [];
     return {
       liveMatches: matches.filter((m) => isLive(m.phase)),
       scheduledMatches: matches.filter(
@@ -83,7 +80,7 @@ export function Scoreboard({
           m.phase === "cancelled"
       ),
     };
-  }, [data, patchMatches]);
+  }, [data]);
 
   useEffect(() => {
     setHasLive(liveMatches.length > 0);

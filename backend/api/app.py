@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import signal
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
@@ -133,6 +134,40 @@ async def _invalidate_today_cache(
         if keys:
             await redis.client.delete(*keys)
 
+
+async def _invalidate_scoreboard_cache(
+    redis: RedisManager,
+    league_ids: set[str] | None = None,
+) -> None:
+    """Invalidate cached league scoreboards for changed leagues."""
+    if not league_ids:
+        return
+    keys = [f"api:scoreboard:{league_id}" for league_id in league_ids]
+    await redis.client.delete(*keys)
+
+
+def _normalize_team_name(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]", "", (value or "").strip().lower())
+
+
+def _team_names_match(
+    canonical_name: str | None,
+    canonical_short: str | None,
+    provider_name: str | None,
+    provider_short: str | None,
+) -> bool:
+    canonical_candidates = {
+        _normalize_team_name(canonical_name),
+        _normalize_team_name(canonical_short),
+    }
+    provider_candidates = {
+        _normalize_team_name(provider_name),
+        _normalize_team_name(provider_short),
+    }
+    canonical_candidates.discard("")
+    provider_candidates.discard("")
+    return bool(canonical_candidates & provider_candidates)
+
 SPORT_LEAGUE_ESPN_PATHS: dict[str, str] = {
     "eng.1": "soccer/eng.1",
     "eng.2": "soccer/eng.2",
@@ -245,6 +280,7 @@ async def _refresh_live_scores_via_router(
 
     fetch_date = datetime.now(timezone.utc).date()
     updated = 0
+    changed_league_ids: set[str] = set()
     for league_slug in league_ids:
         sport = ESPN_LEAGUE_SPORT.get(league_slug, "soccer")
         try:
@@ -255,8 +291,9 @@ async def _refresh_live_scores_via_router(
                     "serving_from_espn_fallback",
                     extra={"league_slug": league_slug, "date": str(fetch_date)},
                 )
-            league_updated = await _apply_provider_matches(db, matches, league_slug, sport)
+            league_updated, league_ids_changed = await _apply_provider_matches(db, matches, league_slug, sport)
             updated += league_updated
+            changed_league_ids.update(league_ids_changed)
             if league_updated and matches:
                 LIVE_REFRESH_UPDATES.labels(provider=matches[0].provider_name).inc(league_updated)
         except Exception as exc:
@@ -267,6 +304,7 @@ async def _refresh_live_scores_via_router(
         logger.info("live_scores_refreshed", matches_updated=updated)
     try:
         await _invalidate_today_cache(redis)
+        await _invalidate_scoreboard_cache(redis, changed_league_ids)
     except Exception:
         logger.warning("today_cache_invalidation_failed", exc_info=True)
     return updated
@@ -464,6 +502,58 @@ async def _resolve_match_from_espn_event(
     return match_row[0] if match_row else None
 
 
+async def _resolve_match_from_provider_match(
+    session: Any,
+    league_slug: str,
+    provider_match: Any,
+) -> Optional[tuple[uuid_mod.UUID, uuid_mod.UUID]]:
+    """
+    Resolve a canonical match for provider schedule rows when no direct mapping exists.
+
+    Returns (match_id, league_id) when a single league/time/team match is found.
+    """
+    league_row = (
+        await session.execute(
+            text(
+                "SELECT canonical_id FROM provider_mappings "
+                "WHERE entity_type = 'league' AND provider = 'espn' AND provider_id = :pid"
+            ),
+            {"pid": league_slug},
+        )
+    ).fetchone()
+    if not league_row:
+        return None
+
+    league_id = league_row[0]
+    window_start = provider_match.scheduled_at - timedelta(minutes=90)
+    window_end = provider_match.scheduled_at + timedelta(minutes=90)
+    candidates = (
+        await session.execute(
+            text(
+                "SELECT m.id, ht.name, ht.short_name, at.name, at.short_name "
+                "FROM matches m "
+                "JOIN teams ht ON m.home_team_id = ht.id "
+                "JOIN teams at ON m.away_team_id = at.id "
+                "WHERE m.league_id = :league_id "
+                "AND m.start_time >= :window_start "
+                "AND m.start_time <= :window_end"
+            ),
+            {
+                "league_id": league_id,
+                "window_start": window_start,
+                "window_end": window_end,
+            },
+        )
+    ).fetchall()
+
+    for row in candidates:
+        if _team_names_match(row[1], row[2], provider_match.home_team.name, provider_match.home_team.short_name) and _team_names_match(
+            row[3], row[4], provider_match.away_team.name, provider_match.away_team.short_name
+        ):
+            return row[0], league_id
+    return None
+
+
 def _provider_status_to_phase(status_value: str) -> str:
     """Map infra MatchStatus value to matches.phase / match_state.phase string."""
     m = {
@@ -485,14 +575,15 @@ async def _apply_provider_matches(
     matches: list[Any],
     league_slug: str,
     sport: str,
-) -> int:
-    """Apply ProviderMatch list to DB: update match phase and match_state. Returns count updated."""
+) -> tuple[int, set[str]]:
+    """Apply ProviderMatch list to DB and return (updated_count, canonical_league_ids_changed)."""
     from infra.providers.base import ProviderMatch
 
     if not matches:
-        return 0
+        return 0, set()
     _notif_queue: list[tuple[str, Any]] = []
     count = 0
+    changed_league_ids: set[str] = set()
     async with db.write_session() as session:
         for pm in matches:
             if not isinstance(pm, ProviderMatch):
@@ -509,18 +600,35 @@ async def _apply_provider_matches(
                 ).fetchone()
                 match_id = mapping_row[0] if mapping_row else None
                 if not match_id and pm.provider_name == "sportradar":
-                    mapping_row = (
+                    resolved = await _resolve_match_from_provider_match(session, league_slug, pm)
+                    if resolved:
+                        match_id, canonical_league_id = resolved
+                        changed_league_ids.add(str(canonical_league_id))
                         await session.execute(
                             text(
-                                "SELECT canonical_id FROM provider_mappings "
-                                "WHERE entity_type = 'match' AND provider = 'espn' AND provider_id = :pid"
+                                "INSERT INTO provider_mappings "
+                                "(id, entity_type, canonical_id, provider, provider_id, extra_data, created_at, updated_at) "
+                                "VALUES (:id, 'match', :canonical_id, 'sportradar', :provider_id, '{}'::jsonb, NOW(), NOW()) "
+                                "ON CONFLICT (entity_type, provider, provider_id) DO UPDATE SET "
+                                "canonical_id = EXCLUDED.canonical_id, updated_at = NOW()"
                             ),
-                            {"pid": pm.provider_id},
+                            {
+                                "id": uuid_mod.uuid4(),
+                                "canonical_id": match_id,
+                                "provider_id": pm.provider_id,
+                            },
                         )
-                    ).fetchone()
-                    match_id = mapping_row[0] if mapping_row else None
                 if not match_id:
                     continue
+
+                league_row = (
+                    await session.execute(
+                        text("SELECT league_id FROM matches WHERE id = :id"),
+                        {"id": match_id},
+                    )
+                ).fetchone()
+                if league_row and league_row[0]:
+                    changed_league_ids.add(str(league_row[0]))
 
                 phase_str = _provider_status_to_phase(pm.status.value)
                 await session.execute(
@@ -649,7 +757,7 @@ async def _apply_provider_matches(
         except Exception as notif_exc:
             logger.warning("notification_processing_error", error=str(notif_exc))
 
-    return count
+    return count, changed_league_ids
 
 
 async def _apply_espn_events(db: DatabaseManager, events: list[dict[str, Any]], sport: str = "soccer", espn_league_id: str = "") -> int:

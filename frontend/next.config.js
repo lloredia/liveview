@@ -10,6 +10,11 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   },
   runtimeCaching: [
     {
+      // Never service-worker cache live score/state endpoints.
+      urlPattern: /\/v1\/(today|leagues\/[^/]+\/scoreboard|matches\/[^/]+(?:\/timeline|\/stats)?)(\?.*)?$/i,
+      handler: "NetworkOnly",
+    },
+    {
       // API: NetworkFirst with 4s timeout so fresh data preferred; fallback to cache if network slow/fails
       urlPattern: /\/v1\//,
       handler: "NetworkFirst",

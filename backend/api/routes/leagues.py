@@ -106,7 +106,7 @@ async def league_scoreboard(
         if if_none_match and if_none_match == etag:
             return Response(status_code=304)
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = "public, max-age=2"
+        response.headers["Cache-Control"] = "no-store"
         return data
 
     # Query database
@@ -224,7 +224,7 @@ async def league_scoreboard(
 
     etag = _compute_etag_content(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = f"public, max-age={min(cache_ttl, 30)}"
+    response.headers["Cache-Control"] = "no-store" if live_count > 0 else f"public, max-age={min(cache_ttl, 30)}"
 
     return payload
 

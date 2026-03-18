@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
-import { useESPNLiveMulti } from "@/hooks/use-espn-live";
 import { getLeagueLogo } from "@/lib/league-logos";
 import type { TodayMatch, TodayResponse } from "@/lib/types";
 import { getApiBase, API_REQUEST_TIMEOUT_MS } from "@/lib/api";
@@ -65,8 +64,10 @@ async function fetchTodayWithCache(
     setTodayCache(dateStr, data);
     return data;
   } catch {
-    const cached = getTodayCache(dateStr);
-    if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cached = getTodayCache(dateStr);
+      if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+    }
     throw new Error("Connection failed");
   }
 }
@@ -184,13 +185,6 @@ export function TodayView({
 
   const effectiveData = normalizeTodayResult(data);
   const { fromCache, savedAt: cacheSavedAt } = getCacheMeta(data);
-
-  const leagueNames = useMemo(
-    () => (effectiveData?.leagues || []).map((l) => l.league_name),
-    [effectiveData],
-  );
-  // Backend (API) is canonical for scores on the list; do not overwrite with ESPN (avoids 0-0 when ESPN fails or lags)
-  useESPNLiveMulti(leagueNames, hasLive ? 10000 : 30000);
 
   useEffect(() => {
     setHasLive((effectiveData?.live ?? 0) > 0);
