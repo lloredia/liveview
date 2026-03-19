@@ -36,16 +36,32 @@ try:
 except (ImportError, Exception):
     _INSTRUMENTATION_AVAILABLE = False
 
+def _resolve_otel_env() -> str:
+    raw = os.getenv("LV_ENV") or os.getenv("ENVIRONMENT") or "development"
+    raw = raw.lower()
+    if raw == "dev":
+        return "development"
+    if raw == "prod":
+        return "production"
+    return raw
+
+
+def _resolve_otel_sample_rate(otel_env: str) -> float:
+    raw = os.getenv("OTEL_TRACES_SAMPLE_RATE", "1.0" if otel_env != "production" else "0.1")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 1.0 if otel_env != "production" else 0.1
+    return max(0.0, min(1.0, value))
+
+
 # Configuration
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() in ("true", "1", "yes")
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "liveview-api")
 OTEL_JAEGER_HOST = os.getenv("OTEL_JAEGER_AGENT_HOST", "localhost")
 OTEL_JAEGER_PORT = int(os.getenv("OTEL_JAEGER_AGENT_PORT", "6831"))
-OTEL_ENV = os.getenv("ENVIRONMENT", "development")
-OTEL_SAMPLE_RATE = float(
-    os.getenv("OTEL_TRACES_SAMPLE_RATE", "1.0" if OTEL_ENV != "production" else "0.1")
-)
-OTEL_SAMPLE_RATE = max(0.0, min(1.0, OTEL_SAMPLE_RATE))
+OTEL_ENV = _resolve_otel_env()
+OTEL_SAMPLE_RATE = _resolve_otel_sample_rate(OTEL_ENV)
 
 # Global tracer
 _tracer_provider: Optional[TracerProvider] = None
