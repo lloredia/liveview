@@ -11,17 +11,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
 
   try {
-    const res = await fetch(`${getApiBase()}/v1/matches/${id}`, {
-      next: { revalidate: 30 },
+    const res = await fetch(`${getApiBase()}/v1/matches/${id}/details`, {
+      cache: "no-store",
     });
     if (!res.ok) throw new Error("Not found");
     const data = await res.json();
+    const header = data.header ?? null;
 
-    const home = data.match?.home_team?.short_name || "Home";
-    const away = data.match?.away_team?.short_name || "Away";
-    const scoreHome = data.state?.score_home ?? 0;
-    const scoreAway = data.state?.score_away ?? 0;
-    const phase = data.match?.phase || "scheduled";
+    const home = header?.match?.home_team?.short_name || "Home";
+    const away = header?.match?.away_team?.short_name || "Away";
+    const scoreHome = header?.state?.score_home ?? 0;
+    const scoreAway = header?.state?.score_away ?? 0;
+    const phase = header?.match?.phase || "scheduled";
     const isLive = phase.startsWith("live_") || phase === "break";
 
     const title = isLive
