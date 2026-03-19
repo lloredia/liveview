@@ -98,6 +98,39 @@ def _build_team_stats_payload(match_id: uuid.UUID, match_row: Any, stats: Any) -
     }
 
 
+def _build_match_center_header_payload(match_id: uuid.UUID, match_row: Any, phase: str | None, stats_row: Any) -> dict[str, Any]:
+    """Build the canonical match-center header payload shared with /details."""
+    home_team = {
+        "id": str(match_row.home_team_id) if match_row.home_team_id else None,
+        "name": match_row.ht_name,
+        "short_name": match_row.ht_short,
+        "logo_url": getattr(match_row, "ht_logo", None),
+    }
+    away_team = {
+        "id": str(match_row.away_team_id) if match_row.away_team_id else None,
+        "name": match_row.at_name,
+        "short_name": match_row.at_short,
+        "logo_url": getattr(match_row, "at_logo", None),
+    }
+    league = {
+        "id": str(match_row.league_id) if getattr(match_row, "league_id", None) else None,
+        "name": getattr(match_row, "league_name", None),
+    }
+    state = _state_payload(stats_row, stats_row.score_home is not None) if stats_row and stats_row.score_home is not None else None
+    return {
+        "match": {
+            "id": str(match_id),
+            "phase": phase,
+            "start_time": match_row.start_time.isoformat() if match_row.start_time else None,
+            "venue": getattr(match_row, "venue", None),
+            "home_team": home_team,
+            "away_team": away_team,
+        },
+        "state": state,
+        "league": league,
+    }
+
+
 def _build_timeline_payload(
     match_id: uuid.UUID,
     phase: str | None,
@@ -865,12 +898,23 @@ async def get_match_details(
                 MatchORM.phase,
                 MatchStateORM.phase.label("state_phase"),
                 MatchORM.start_time,
+                MatchORM.venue,
                 MatchORM.home_team_id,
                 MatchORM.away_team_id,
+                MatchStateORM.score_home,
+                MatchStateORM.score_away,
+                MatchStateORM.clock,
+                MatchStateORM.period,
+                MatchStateORM.score_breakdown,
+                MatchStateORM.extra_data,
+                MatchStateORM.version,
                 ht.c.short_name.label("ht_short"),
                 ht.c.name.label("ht_name"),
+                ht.c.logo_url.label("ht_logo"),
                 at.c.short_name.label("at_short"),
                 at.c.name.label("at_name"),
+                at.c.logo_url.label("at_logo"),
+                LeagueORM.id.label("league_id"),
                 LeagueORM.name.label("league_name"),
             )
             .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
@@ -938,6 +982,7 @@ async def get_match_details(
     payload = {
         "match_id": str(match_id),
         "phase": phase,
+        "header": _build_match_center_header_payload(match_id, match_row, phase, match_row),
         "timeline": timeline_payload,
         "stats": stats_payload,
         "soccer_details": soccer_details,

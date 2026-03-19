@@ -317,37 +317,40 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
   const [selectedSoccerPlayer, setSelectedSoccerPlayer] = useState<SoccerPlayerSelection | null>(null);
 
   const matchFetcher = useCallback(() => fetchMatch(matchId), [matchId]);
+  const detailsFetcher = useCallback(() => fetchMatchDetails(matchId), [matchId]);
+  const {
+    data: detailsData,
+    loading: detailsLoading,
+    refresh: refreshDetails,
+  } = usePolling<MatchCenterDetailsResponse>({
+    fetcher: detailsFetcher,
+    interval: 15000,
+    intervalWhenHidden: 45000,
+    enabled: true,
+    key: `match-details-${matchId}`,
+  });
+  const headerData = detailsData?.header ?? null;
+  const matchPollingEnabled = !headerData;
   const { data: matchData, loading: matchLoading, lastError: matchError, refresh: refreshMatch } = usePolling<MatchDetailResponse>({
-    fetcher: matchFetcher, interval: 15000, key: matchId,
+    fetcher: matchFetcher, interval: 15000, enabled: matchPollingEnabled, key: matchId,
   });
 
   useEffect(() => {
-    if (refreshTrigger != null && refreshTrigger > 0) refreshMatch();
-  }, [refreshTrigger, refreshMatch]);
+    if (refreshTrigger != null && refreshTrigger > 0) {
+      refreshMatch();
+      refreshDetails();
+    }
+  }, [refreshTrigger, refreshDetails, refreshMatch]);
 
-  const leagueForESPN = leagueName || matchData?.league?.name || "";
+  const leagueForESPN = leagueName || headerData?.league?.name || matchData?.league?.name || "";
 
   // Soccer: show lineup/player_stats tabs when ESPN says soccer or when league is a known soccer league (so we can show Football-Data.org data even if ESPN has none)
   const isSoccerLeague = !!(leagueForESPN && getLeagueMapping(leagueForESPN)?.sport === "soccer");
   const isSoccer = isSoccerLeague;
-  const detailLive = isLive(matchData?.match?.phase ?? "scheduled");
   const tabs: Tab[] = isSoccer ? ["play_by_play", "player_stats", "lineup", "team_stats"] : ["play_by_play", "player_stats", "team_stats"];
   useEffect(() => {
     if (activeTab === "lineup" && !tabs.includes("lineup")) setActiveTab("play_by_play");
   }, [activeTab, isSoccer]);
-
-  const detailsFetcher = useCallback(() => fetchMatchDetails(matchId), [matchId]);
-  const { data: detailsData, loading: detailsLoading } = usePolling<MatchCenterDetailsResponse>({
-    fetcher: detailsFetcher,
-    interval: detailLive ? 15000 : 0,
-    intervalWhenHidden: detailLive ? 45000 : undefined,
-    enabled:
-      !!matchData &&
-      (activeTab === "play_by_play" ||
-        activeTab === "team_stats" ||
-        ((activeTab === "lineup" || activeTab === "player_stats") && isSoccer)),
-    key: `match-details-${matchId}`,
-  });
   const backendSections = detailsData?.sections ?? null;
   const detailSections: {
     playByPlay: MatchCenterPlayByPlaySection;
@@ -369,10 +372,10 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     return {
       playByPlay: backendSections?.playByPlay ?? {
         plays: [],
-        homeTeamName: matchData?.match.home_team?.short_name || "Home",
-        awayTeamName: matchData?.match.away_team?.short_name || "Away",
-        homeTeamId: matchData?.match.home_team?.id || "",
-        awayTeamId: matchData?.match.away_team?.id || "",
+        homeTeamName: headerData?.match.home_team?.short_name || matchData?.match.home_team?.short_name || "Home",
+        awayTeamName: headerData?.match.away_team?.short_name || matchData?.match.away_team?.short_name || "Away",
+        homeTeamId: headerData?.match.home_team?.id || matchData?.match.home_team?.id || "",
+        awayTeamId: headerData?.match.away_team?.id || matchData?.match.away_team?.id || "",
         loading: detailsLoading,
       },
       playerStats: normalizedPlayerStats,
@@ -380,12 +383,12 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       teamStats: backendSections?.teamStats ?? {
         homeStats: [],
         awayStats: [],
-        homeTeamName: matchData?.match.home_team?.short_name || "Home",
-        awayTeamName: matchData?.match.away_team?.short_name || "Away",
+        homeTeamName: headerData?.match.home_team?.short_name || matchData?.match.home_team?.short_name || "Home",
+        awayTeamName: headerData?.match.away_team?.short_name || matchData?.match.away_team?.short_name || "Away",
         loading: detailsLoading,
       },
     };
-  }, [backendSections, detailsLoading, matchData]);
+  }, [backendSections, detailsLoading, headerData, matchData]);
 
   if (matchLoading && !matchData) {
     return (
@@ -440,7 +443,8 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     );
   }
 
-  const { match, state } = matchData;
+  const match = headerData?.match ?? matchData.match;
+  const state = headerData?.state ?? matchData.state;
 
   // Canonical state — backend API only. Governs score, phase, clock, period. Never overwritten by ESPN.
   const canonical: CanonicalMatchState = {

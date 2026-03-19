@@ -161,6 +161,30 @@ export async function fetchSoccerDetails(matchId: string): Promise<SoccerDetails
 export interface MatchCenterDetailsResponse {
   match_id: string;
   phase: string;
+  header?: {
+    match: {
+      id: string;
+      phase: string;
+      start_time: string | null;
+      venue: string | null;
+      home_team: { id: string | null; name: string; short_name: string; logo_url: string | null };
+      away_team: { id: string | null; name: string; short_name: string; logo_url: string | null };
+    };
+    state: {
+      score_home: number;
+      score_away: number;
+      clock: string | null;
+      period: string | null;
+      period_scores: unknown[];
+      version: number;
+      aggregate_home?: number;
+      aggregate_away?: number;
+    } | null;
+    league: {
+      id: string | null;
+      name: string | null;
+    } | null;
+  };
   sections?: {
     matchId: string;
     phase: string;
