@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchLeagues, fetchScoreboard } from "@/lib/api";
-import type { LeagueGroup, MatchSummary } from "@/lib/types";
+import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
 import { getLeagueLogo } from "@/lib/league-logos";
 import { TeamLogo } from "./team-logo";
 import { isLive, phaseLabel } from "@/lib/utils";
@@ -43,7 +42,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
       const groups = await fetchLeagues();
       const allResults: SearchResult[] = [];
 
-      // Add leagues
       for (const group of groups) {
         for (const league of group.leagues) {
           allResults.push({
@@ -56,53 +54,42 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
         }
       }
 
-      // Add teams and matches from each league
-      const leagueIds = groups.flatMap((g) => g.leagues.map((l) => ({ id: l.id, name: l.name })));
+      // Add teams and matches from the canonical /today snapshot so search stays
+      // aligned with the same live slate used by the home feed.
+      const today = await fetchLiveCounts();
 
-      for (let i = 0; i < leagueIds.length; i += 5) {
-        const batch = leagueIds.slice(i, i + 5);
-        const results = await Promise.allSettled(
-          batch.map((l) => fetchScoreboard(l.id)),
-        );
+      for (const league of today.leagues ?? []) {
+        const leagueName = league.league_name;
+        const seenTeams = new Set<string>();
 
-        for (let j = 0; j < results.length; j++) {
-          const r = results[j];
-          if (r.status !== "fulfilled") continue;
-          const scoreboard = r.value;
-          const leagueName = batch[j].name;
-          const seenTeams = new Set<string>();
+        for (const match of league.matches ?? []) {
+          allResults.push({
+            type: "match",
+            id: match.id,
+            title: `${match.home_team.short_name} vs ${match.away_team.short_name}`,
+            subtitle: `${leagueName} · ${phaseLabel(match.phase)}`,
+            leagueName,
+            live: isLive(match.phase),
+          });
 
-          for (const match of scoreboard.matches) {
-            // Add match
+          for (const team of [match.home_team, match.away_team]) {
+            if (seenTeams.has(team.name)) continue;
+            seenTeams.add(team.name);
             allResults.push({
-              type: "match",
+              type: "team",
               id: match.id,
-              title: `${match.home_team.short_name} vs ${match.away_team.short_name}`,
-              subtitle: `${leagueName} · ${phaseLabel(match.phase)}`,
+              title: team.name,
+              subtitle: leagueName,
+              logoUrl: team.logo_url,
               leagueName,
-              live: isLive(match.phase),
             });
-
-            // Add teams (deduplicated)
-            for (const team of [match.home_team, match.away_team]) {
-              if (seenTeams.has(team.name)) continue;
-              seenTeams.add(team.name);
-              allResults.push({
-                type: "team",
-                id: match.id,
-                title: team.name,
-                subtitle: leagueName,
-                logoUrl: team.logo_url,
-                leagueName,
-              });
-            }
           }
         }
       }
 
       cacheRef.current = allResults;
     } catch {
-      // Silently fail — search just won't have results
+      // Silently fail; search just won't have results.
     }
 
     setSearching(false);
@@ -125,14 +112,13 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
         return tokens.every((t) => haystack.includes(t));
       })
       .sort((a, b) => {
-        // Live matches first
         if (a.live && !b.live) return -1;
         if (!a.live && b.live) return 1;
-        // Exact starts first
+
         const aStarts = a.title.toLowerCase().startsWith(q) ? 0 : 1;
         const bStarts = b.title.toLowerCase().startsWith(q) ? 0 : 1;
         if (aStarts !== bStarts) return aStarts - bStarts;
-        // Leagues, then teams, then matches
+
         const order = { league: 0, team: 1, match: 2 };
         return order[a.type] - order[b.type];
       })
@@ -142,7 +128,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
     setSelectedIdx(0);
   }, [query]);
 
-  // Keyboard shortcut: Cmd/Ctrl+K to open
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -157,7 +142,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Focus input when opened
   useEffect(() => {
     if (open) {
       buildIndex();
@@ -168,7 +152,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
     }
   }, [open, buildIndex]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -213,7 +196,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
 
   return (
     <>
-      {/* Trigger button */}
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface px-3 py-1.5 text-[12px] text-text-muted transition-colors hover:border-surface-border-light hover:text-text-secondary"
@@ -225,7 +207,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
         </kbd>
       </button>
 
-      {/* Modal overlay */}
       {open && (
         <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]">
           <div
@@ -237,7 +218,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
             ref={containerRef}
             className="relative z-10 w-full max-w-lg animate-scale-in overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-2xl"
           >
-            {/* Input */}
             <div className="flex items-center gap-3 border-b border-surface-border px-4 py-3">
               <span className="text-text-muted">🔍</span>
               <input
@@ -260,7 +240,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
               </kbd>
             </div>
 
-            {/* Results */}
             <div className="max-h-[360px] overflow-y-auto">
               {query && results.length === 0 && !searching && (
                 <div className="px-4 py-8 text-center text-[13px] text-text-tertiary">
@@ -303,7 +282,6 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
               ))}
             </div>
 
-            {/* Footer hint */}
             {!query && (
               <div className="border-t border-surface-border px-4 py-3 text-center text-[11px] text-text-muted">
                 Type to search across all leagues, teams, and matches

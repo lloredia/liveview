@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchMatch } from "@/lib/api";
 import { setPinnedMatches, togglePinned, MAX_PINNED } from "@/lib/pinned-matches";
 import { usePolling } from "@/hooks/use-polling";
@@ -8,17 +8,51 @@ import { isLive, phaseLabel } from "@/lib/utils";
 import { endLiveActivity, updateLiveActivity } from "@/lib/live-activity";
 import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
-import type { MatchDetailResponse } from "@/lib/types";
+import type { MatchDetailResponse, MatchSummary, TodayResponse } from "@/lib/types";
 
 interface MultiTrackerProps {
   pinnedIds: string[];
+  todaySnapshot?: TodayResponse | null;
   onPinnedChange: (ids: string[]) => void;
   onMatchSelect: (matchId: string) => void;
   /** When provided (e.g. auth flow), called when user removes one game from tracker instead of local toggle */
   onRemove?: (matchId: string) => void;
 }
 
-export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemove }: MultiTrackerProps) {
+function findTodayMatch(todaySnapshot: TodayResponse | null | undefined, matchId: string): MatchSummary | null {
+  if (!todaySnapshot) return null;
+  for (const league of todaySnapshot.leagues ?? []) {
+    const match = (league.matches ?? []).find((candidate) => candidate.id === matchId);
+    if (match) return match;
+  }
+  return null;
+}
+
+function trackerGameFromSummary(match: MatchSummary) {
+  return {
+    matchId: match.id,
+    homeName: match.home_team?.short_name ?? match.home_team?.name ?? "Home",
+    awayName: match.away_team?.short_name ?? match.away_team?.name ?? "Away",
+    scoreHome: match.score.home ?? 0,
+    scoreAway: match.score.away ?? 0,
+    isLive: isLive(match.phase),
+    phaseLabel: phaseLabel(match.phase),
+  };
+}
+
+function trackerGameFromDetail(result: MatchDetailResponse) {
+  return {
+    matchId: result.match.id,
+    homeName: result.match.home_team?.short_name ?? result.match.home_team?.name ?? "Home",
+    awayName: result.match.away_team?.short_name ?? result.match.away_team?.name ?? "Away",
+    scoreHome: result.state?.score_home ?? 0,
+    scoreAway: result.state?.score_away ?? 0,
+    isLive: isLive(result.match.phase),
+    phaseLabel: phaseLabel(result.match.phase),
+  };
+}
+
+export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, onMatchSelect, onRemove }: MultiTrackerProps) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -27,24 +61,26 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemov
       return;
     }
     const sync = async () => {
-      const results = await Promise.all(pinnedIds.map((id) => fetchMatch(id)));
-      const games = results
-        .filter((r): r is MatchDetailResponse => r != null)
-        .map((r) => ({
-          matchId: r.match.id,
-          homeName: r.match.home_team?.short_name ?? r.match.home_team?.name ?? "Home",
-          awayName: r.match.away_team?.short_name ?? r.match.away_team?.name ?? "Away",
-          scoreHome: r.state?.score_home ?? 0,
-          scoreAway: r.state?.score_away ?? 0,
-          isLive: isLive(r.match.phase),
-          phaseLabel: phaseLabel(r.match.phase),
-        }));
+      const snapshotGames = pinnedIds
+        .map((id) => findTodayMatch(todaySnapshot, id))
+        .filter((match): match is MatchSummary => match != null)
+        .map(trackerGameFromSummary);
+
+      const missingIds = pinnedIds.filter((id) => !findTodayMatch(todaySnapshot, id));
+      const fetchedGames =
+        missingIds.length > 0
+          ? (await Promise.all(missingIds.map((id) => fetchMatch(id))))
+              .filter((r): r is MatchDetailResponse => r != null)
+              .map(trackerGameFromDetail)
+          : [];
+
+      const games = [...snapshotGames, ...fetchedGames];
       await updateLiveActivity(games);
     };
     sync();
     const interval = setInterval(sync, 15000);
     return () => clearInterval(interval);
-  }, [pinnedIds]);
+  }, [pinnedIds, todaySnapshot]);
 
   if (pinnedIds.length === 0) return null;
 
@@ -90,7 +126,7 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemov
         {!expanded && (
           <div className="flex items-center gap-1.5 overflow-x-auto px-4 pb-2 scrollbar-hide">
             {pinnedIds.map((id) => (
-              <TrackerChip key={id} matchId={id} onClick={() => onMatchSelect(id)} />
+              <TrackerChip key={id} matchId={id} todaySnapshot={todaySnapshot} onClick={() => onMatchSelect(id)} />
             ))}
           </div>
         )}
@@ -102,6 +138,7 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemov
               <TrackerCard
                 key={id}
                 matchId={id}
+                todaySnapshot={todaySnapshot}
                 onClick={() => onMatchSelect(id)}
                 onRemove={() => {
                   if (onRemove) {
@@ -120,11 +157,25 @@ export function MultiTracker({ pinnedIds, onPinnedChange, onMatchSelect, onRemov
   );
 }
 
-function TrackerChip({ matchId, onClick }: { matchId: string; onClick: () => void }) {
+function TrackerChip({
+  matchId,
+  todaySnapshot,
+  onClick,
+}: {
+  matchId: string;
+  todaySnapshot?: TodayResponse | null;
+  onClick: () => void;
+}) {
+  const todayMatch = useMemo(() => findTodayMatch(todaySnapshot, matchId), [todaySnapshot, matchId]);
   const fetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data } = usePolling<MatchDetailResponse>({ fetcher, interval: 10000, key: `tracker-${matchId}` });
+  const { data } = usePolling<MatchDetailResponse>({
+    fetcher,
+    interval: 10000,
+    key: `tracker-${matchId}`,
+    enabled: !todayMatch,
+  });
 
-  if (!data) {
+  if (!todayMatch && !data) {
     return (
       <div className="flex h-7 w-20 shrink-0 items-center justify-center rounded-[10px] glass-surface">
         <div className="h-3 w-3 animate-spin rounded-full border border-glass-border border-t-accent-green" />
@@ -132,12 +183,15 @@ function TrackerChip({ matchId, onClick }: { matchId: string; onClick: () => voi
     );
   }
 
-  const { match, state } = data;
-  const live = isLive(match.phase);
-  const home = match.home_team?.short_name || "HOM";
-  const away = match.away_team?.short_name || "AWY";
-  const sh = state?.score_home ?? 0;
-  const sa = state?.score_away ?? 0;
+  const live = todayMatch ? isLive(todayMatch.phase) : isLive(data?.match.phase || "");
+  const home = todayMatch
+    ? todayMatch.home_team?.short_name || "HOM"
+    : data?.match.home_team?.short_name || "HOM";
+  const away = todayMatch
+    ? todayMatch.away_team?.short_name || "AWY"
+    : data?.match.away_team?.short_name || "AWY";
+  const sh = todayMatch ? todayMatch.score.home ?? 0 : data?.state?.score_home ?? 0;
+  const sa = todayMatch ? todayMatch.score.away ?? 0 : data?.state?.score_away ?? 0;
 
   return (
     <button
@@ -163,17 +217,25 @@ function TrackerChip({ matchId, onClick }: { matchId: string; onClick: () => voi
 
 function TrackerCard({
   matchId,
+  todaySnapshot,
   onClick,
   onRemove,
 }: {
   matchId: string;
+  todaySnapshot?: TodayResponse | null;
   onClick: () => void;
   onRemove: () => void;
 }) {
+  const todayMatch = useMemo(() => findTodayMatch(todaySnapshot, matchId), [todaySnapshot, matchId]);
   const fetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data } = usePolling<MatchDetailResponse>({ fetcher, interval: 10000, key: `tracker-card-${matchId}` });
+  const { data } = usePolling<MatchDetailResponse>({
+    fetcher,
+    interval: 10000,
+    key: `tracker-card-${matchId}`,
+    enabled: !todayMatch,
+  });
 
-  if (!data) {
+  if (!todayMatch && !data) {
     return (
       <div className="mb-1.5 flex h-14 items-center justify-center rounded-[14px] glass-surface">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-glass-border border-t-accent-green" />
@@ -181,10 +243,24 @@ function TrackerCard({
     );
   }
 
-  const { match, state } = data;
-  const live = isLive(match.phase);
-  const sh = state?.score_home ?? 0;
-  const sa = state?.score_away ?? 0;
+  const live = todayMatch ? isLive(todayMatch.phase) : isLive(data?.match.phase || "");
+  const sh = todayMatch ? todayMatch.score.home ?? 0 : data?.state?.score_home ?? 0;
+  const sa = todayMatch ? todayMatch.score.away ?? 0 : data?.state?.score_away ?? 0;
+  const homeName = todayMatch
+    ? todayMatch.home_team?.name || "Home"
+    : data?.match.home_team?.name || "Home";
+  const homeShortName = todayMatch
+    ? todayMatch.home_team?.short_name || todayMatch.home_team?.name || "Home"
+    : data?.match.home_team?.short_name || data?.match.home_team?.name || "Home";
+  const homeLogo = todayMatch ? todayMatch.home_team?.logo_url : data?.match.home_team?.logo_url;
+  const awayName = todayMatch
+    ? todayMatch.away_team?.name || "Away"
+    : data?.match.away_team?.name || "Away";
+  const awayShortName = todayMatch
+    ? todayMatch.away_team?.short_name || todayMatch.away_team?.name || "Away"
+    : data?.match.away_team?.short_name || data?.match.away_team?.name || "Away";
+  const awayLogo = todayMatch ? todayMatch.away_team?.logo_url : data?.match.away_team?.logo_url;
+  const phase = todayMatch?.phase || data?.match.phase || "scheduled";
 
   return (
     <div
@@ -197,9 +273,9 @@ function TrackerCard({
     >
       {/* Home team */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <TeamLogo url={match.home_team?.logo_url} name={match.home_team?.name || "Home"} size={20} />
+        <TeamLogo url={homeLogo} name={homeName} size={20} />
         <span className="truncate text-label-lg text-text-primary">
-          {match.home_team?.short_name || match.home_team?.name || "Home"}
+          {homeShortName}
         </span>
       </div>
 
@@ -216,15 +292,15 @@ function TrackerCard({
           <span className="text-label-sm text-text-dim">-</span>
           <span className="font-mono text-score-md text-text-primary">{sa}</span>
         </div>
-        <span className="text-label-xs text-text-muted">{phaseLabel(match.phase)}</span>
+        <span className="text-label-xs text-text-muted">{phaseLabel(phase)}</span>
       </div>
 
       {/* Away team */}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         <span className="truncate text-right text-label-lg text-text-primary">
-          {match.away_team?.short_name || match.away_team?.name || "Away"}
+          {awayShortName}
         </span>
-        <TeamLogo url={match.away_team?.logo_url} name={match.away_team?.name || "Away"} size={20} />
+        <TeamLogo url={awayLogo} name={awayName} size={20} />
       </div>
 
       {/* Remove button */}

@@ -214,6 +214,7 @@ export default function MatchPage() {
 
       <MultiTracker
         pinnedIds={pinnedIds}
+        todaySnapshot={todaySnapshot}
         onPinnedChange={setPinnedIds}
         onMatchSelect={(id) => handleMatchSelect(id)}
         onRemove={
