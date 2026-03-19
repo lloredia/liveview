@@ -40,6 +40,7 @@ export default function MatchPage() {
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
+  const [tabVisible, setTabVisible] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { isAuthed, requireAuth } = useRequireAuth();
   const { token, refresh: refreshToken } = useAuthToken();
@@ -66,6 +67,13 @@ export default function MatchPage() {
   }, []);
 
   useEffect(() => {
+    const onVisibility = () => setTabVisible(document.visibilityState === "visible");
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
     const pollLiveCounts = async () => {
       const data = await fetchLiveCounts();
       setTodaySnapshot(data);
@@ -87,9 +95,10 @@ export default function MatchPage() {
     };
 
     pollLiveCounts();
-    const timer = setInterval(pollLiveCounts, 45000);
+    const interval = tabVisible ? (totalLive > 0 ? 12_000 : 30_000) : 60_000;
+    const timer = setInterval(pollLiveCounts, interval);
     return () => clearInterval(timer);
-  }, []);
+  }, [tabVisible, totalLive]);
 
   const handleLeagueSelect = useCallback(
     (id: string) => {
