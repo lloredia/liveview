@@ -28,6 +28,7 @@ class ServiceRole(str, Enum):
 
 
 DEFAULT_DATABASE_URL = "postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
+DEFAULT_REDIS_URL = "redis://redis:6379/0"
 
 
 def _normalize_postgres_url(raw: str) -> str:
@@ -62,6 +63,26 @@ def resolve_database_url_from_env(
         return normalized_lv
 
     return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
+
+
+def resolve_redis_url_from_env(
+    *,
+    lv_redis_url: Optional[str] = None,
+    redis_url: Optional[str] = None,
+    environment: Optional[str] = None,
+) -> str:
+    """Choose the runtime Redis URL deterministically across local and platform env vars."""
+    raw_lv = lv_redis_url if lv_redis_url is not None else os.environ.get("LV_REDIS_URL")
+    raw_primary = redis_url if redis_url is not None else os.environ.get("REDIS_URL")
+    env_name = (environment if environment is not None else os.environ.get("LV_ENV", "")).lower()
+
+    if env_name in {"production", "prod"}:
+        return raw_primary or raw_lv or DEFAULT_REDIS_URL
+
+    if raw_lv and raw_lv != DEFAULT_REDIS_URL:
+        return raw_lv
+
+    return raw_primary or raw_lv or DEFAULT_REDIS_URL
 
 
 class Settings(BaseSettings):
@@ -120,8 +141,20 @@ class Settings(BaseSettings):
     db_command_timeout: int = 30
 
     # ── Redis ────────────────────────────────────────────────
-    redis_url: RedisDsn = Field(default="redis://redis:6379/0")
+    redis_url: RedisDsn = Field(default=DEFAULT_REDIS_URL)
     redis_max_connections: int = 50
+
+    @model_validator(mode="after")
+    def use_redis_url_fallback(self) -> "Settings":
+        """Resolve REDIS_URL consistently across LV_ and platform-provided env vars."""
+        resolved = resolve_redis_url_from_env(environment=self.environment.value)
+        if str(self.redis_url) == resolved:
+            return self
+        try:
+            self.redis_url = RedisDsn(resolved)
+        except Exception:
+            pass
+        return self
 
     # ── API ──────────────────────────────────────────────────
     api_host: str = "0.0.0.0"

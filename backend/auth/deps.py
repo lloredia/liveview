@@ -12,10 +12,22 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+JWT_DEFAULT_DEV = "liveview-dev-secret-change-in-production"
+
+
+def _is_production() -> bool:
+    return os.environ.get("LV_ENV", "").lower() in ("production", "prod")
+
+
 def _get_jwt_secret() -> str:
-    s = os.environ.get("AUTH_JWT_SECRET")
-    if not s:
-        raise RuntimeError("AUTH_JWT_SECRET must be set for auth (separate from NEXTAUTH_SECRET)")
+    s = (
+        os.environ.get("AUTH_JWT_SECRET")
+        or os.environ.get("LV_JWT_SECRET")
+        or os.environ.get("JWT_SECRET")
+        or JWT_DEFAULT_DEV
+    )
+    if _is_production() and s == JWT_DEFAULT_DEV:
+        raise RuntimeError("AUTH_JWT_SECRET (or LV_JWT_SECRET / JWT_SECRET) must be set for auth")
     return s
 
 

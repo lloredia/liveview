@@ -16,6 +16,7 @@ from typing import Optional
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, EmailStr, Field
+from auth.deps import _get_jwt_secret
 from shared.config import resolve_database_url_from_env
 
 logger = logging.getLogger("liveview.auth")
@@ -27,7 +28,6 @@ favorites_router = APIRouter(prefix="/v1/user", tags=["user"])
 # Prefer LV_ prefix for consistency with rest of backend (see shared/config.py).
 
 JWT_DEFAULT_DEV = "liveview-dev-secret-change-in-production"
-JWT_SECRET = os.getenv("LV_JWT_SECRET") or os.getenv("JWT_SECRET") or JWT_DEFAULT_DEV
 
 
 def _is_production() -> bool:
@@ -92,7 +92,8 @@ def verify_password(password: str, stored: str) -> bool:
 
 def create_token(user_id: str, email: str) -> str:
     """Create a simple HMAC-based JWT-like token."""
-    if _is_production() and (not JWT_SECRET or JWT_SECRET == JWT_DEFAULT_DEV):
+    jwt_secret = _get_jwt_secret()
+    if _is_production() and jwt_secret == JWT_DEFAULT_DEV:
         raise RuntimeError("JWT_SECRET must be set explicitly in production (LV_ENV=production)")
     payload = {
         "sub": user_id,
@@ -103,19 +104,20 @@ def create_token(user_id: str, email: str) -> str:
     payload_b64 = _b64_encode(json.dumps(payload))
     header_b64 = _b64_encode(json.dumps({"alg": "HS256", "typ": "JWT"}))
     signing_input = f"{header_b64}.{payload_b64}"
-    signature = hmac.new(JWT_SECRET.encode(), signing_input.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(jwt_secret.encode(), signing_input.encode(), hashlib.sha256).hexdigest()
     return f"{signing_input}.{signature}"
 
 
 def decode_token(token: str) -> Optional[dict]:
     """Decode and verify token. Returns payload or None."""
     try:
+        jwt_secret = _get_jwt_secret()
         parts = token.split(".")
         if len(parts) != 3:
             return None
 
         signing_input = f"{parts[0]}.{parts[1]}"
-        expected_sig = hmac.new(JWT_SECRET.encode(), signing_input.encode(), hashlib.sha256).hexdigest()
+        expected_sig = hmac.new(jwt_secret.encode(), signing_input.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(expected_sig, parts[2]):
             return None
