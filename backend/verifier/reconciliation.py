@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -29,6 +29,16 @@ VERIFICATION_LAST_CHECKED = "verification:last_checked:{match_id}"
 VERIFICATION_CONFIDENCE = "verification:confidence:{match_id}"
 VERIFICATION_DISPUTES = "verification:disputes"
 DISPUTE_KEY = "dispute:match:{match_id}"
+
+
+async def _invalidate_today_cache_band(redis: RedisManager, start_time: datetime) -> None:
+    """Invalidate cached /today payloads around a corrected match date across tz offsets."""
+    utc_date = start_time.astimezone(timezone.utc).date()
+    for day in (utc_date - timedelta(days=1), utc_date, utc_date + timedelta(days=1)):
+        pattern = f"today:{day.isoformat()}:*"
+        keys = [key async for key in redis.client.scan_iter(match=pattern)]
+        if keys:
+            await redis.client.delete(*keys)
 
 
 def _phase_value(phase: str) -> str:
@@ -120,6 +130,7 @@ async def apply_correction(
         f"snap:match:{match_id}:stats",
         f"api:scoreboard:{league.id}",
     )
+    await _invalidate_today_cache_band(redis, start_time)
     SCORE_STATE_WRITES.labels(writer="verifier", source=corrected.source or "unknown").inc()
 
     logger.info(
