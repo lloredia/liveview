@@ -115,6 +115,19 @@ async def test_apply_correction_invalidates_today_cache_band() -> None:
 
     assert applied is True
     assert session.flushed is True
+    assert len(redis.snapshots) == 1
+    snap_key, _snap_payload, snap_ttl = redis.snapshots[0]
+    assert snap_key == f"snap:match:{match_id}:scoreboard"
+    assert snap_ttl == 300
+    assert len(redis.published) == 1
+    published_match_id, published_tier, _published_payload = redis.published[0]
+    assert published_match_id == str(match_id)
+    assert published_tier == 0
+    assert (
+        f"snap:match:{match_id}:details",
+        f"snap:match:{match_id}:stats",
+        f"api:scoreboard:{league.id}",
+    ) in redis.client.deleted
     assert redis.client.scan_patterns == [
         "today:2026-03-17:*",
         "today:2026-03-18:*",
