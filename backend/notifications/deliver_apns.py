@@ -5,25 +5,25 @@ Uses token-based authentication with a .p8 private key.
 This is a stub implementation — wire credentials to activate.
 
 Required environment variables:
-  LV_APNS_KEY_ID         — 10-char key ID from Apple Developer
-  LV_APNS_TEAM_ID        — 10-char team ID
-  LV_APNS_BUNDLE_ID      — e.g. com.liveview.tracker
-  LV_APNS_P8_PRIVATE_KEY — base64-encoded .p8 file contents
+  APNS_KEY_ID / LV_APNS_KEY_ID
+  APNS_TEAM_ID / LV_APNS_TEAM_ID
+  APNS_BUNDLE_ID / LV_APNS_BUNDLE_ID
+  APNS_P8_PRIVATE_KEY_BASE64 / LV_APNS_P8_PRIVATE_KEY
 
 To generate:
   1. Apple Developer -> Keys -> Create key with APNs
   2. Download .p8 file
   3. base64 encode: base64 -i AuthKey_XXXXXXXXXX.p8
-  4. Store as LV_APNS_P8_PRIVATE_KEY in Railway secrets
+  4. Store as APNS_P8_PRIVATE_KEY_BASE64 (or LV_APNS_P8_PRIVATE_KEY) in Railway secrets
 """
 from __future__ import annotations
 
-import base64
 import json
-import os
 import time
 from typing import Any, Optional
 
+from notifications.apns import _get_config as _get_runtime_apns_config
+from notifications.apns import is_configured as _runtime_apns_is_configured
 from shared.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,34 +31,8 @@ logger = get_logger(__name__)
 # APNs endpoints
 APNS_PRODUCTION = "https://api.push.apple.com"
 APNS_SANDBOX = "https://api.sandbox.push.apple.com"
-
-
-def _get_apns_config() -> dict[str, str]:
-    key_id = os.environ.get("LV_APNS_KEY_ID", "")
-    team_id = os.environ.get("LV_APNS_TEAM_ID", "")
-    bundle_id = os.environ.get("LV_APNS_BUNDLE_ID", "com.liveview.tracker")
-    p8_b64 = os.environ.get("LV_APNS_P8_PRIVATE_KEY", "")
-
-    if not all([key_id, team_id, p8_b64]):
-        raise RuntimeError(
-            "APNs not configured. Set LV_APNS_KEY_ID, LV_APNS_TEAM_ID, "
-            "LV_APNS_P8_PRIVATE_KEY in environment."
-        )
-
-    return {
-        "key_id": key_id,
-        "team_id": team_id,
-        "bundle_id": bundle_id,
-        "private_key": base64.b64decode(p8_b64).decode("utf-8"),
-    }
-
-
 def _is_configured() -> bool:
-    return bool(
-        os.environ.get("LV_APNS_KEY_ID")
-        and os.environ.get("LV_APNS_TEAM_ID")
-        and os.environ.get("LV_APNS_P8_PRIVATE_KEY")
-    )
+    return _runtime_apns_is_configured()
 
 
 async def send_apns_notification(
@@ -89,7 +63,7 @@ async def send_apns_notification(
         logger.error("apns_dependencies_missing", hint="pip install PyJWT cryptography httpx")
         return False
 
-    config = _get_apns_config()
+    config = _get_runtime_apns_config()
 
     # Build JWT token for APNs
     token_payload = {
@@ -117,7 +91,7 @@ async def send_apns_notification(
     if data:
         aps_payload["data"] = data
 
-    base_url = APNS_SANDBOX if sandbox else APNS_PRODUCTION
+    base_url = APNS_SANDBOX if sandbox else (APNS_SANDBOX if config.get("use_sandbox") else APNS_PRODUCTION)
     url = f"{base_url}/3/device/{device_token}"
 
     headers = {
