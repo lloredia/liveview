@@ -132,6 +132,7 @@ async def main() -> None:
     from shared.config import get_settings
 
     config = get_settings()
+    print(f"Migration database: {config.database_url_safe_log}")
     conn = await asyncpg.connect(
         to_asyncpg_dsn(config.database_url_str),
         timeout=config.db_command_timeout,

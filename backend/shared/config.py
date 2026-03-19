@@ -27,6 +27,43 @@ class ServiceRole(str, Enum):
     BUILDER = "builder"
 
 
+DEFAULT_DATABASE_URL = "postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
+
+
+def _normalize_postgres_url(raw: str) -> str:
+    if raw.startswith("postgres://"):
+        return "postgresql+asyncpg://" + raw[len("postgres://") :]
+    if raw.startswith("postgresql://") and "+asyncpg" not in raw:
+        return raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return raw
+
+
+def resolve_database_url_from_env(
+    *,
+    lv_database_url: Optional[str] = None,
+    database_url: Optional[str] = None,
+    postgres_url: Optional[str] = None,
+    environment: Optional[str] = None,
+) -> str:
+    """Choose the runtime Postgres URL deterministically across local and platform env vars."""
+    raw_lv = lv_database_url if lv_database_url is not None else os.environ.get("LV_DATABASE_URL")
+    raw_primary = database_url if database_url is not None else os.environ.get("DATABASE_URL")
+    raw_fallback = postgres_url if postgres_url is not None else os.environ.get("POSTGRES_URL")
+    env_name = (environment if environment is not None else os.environ.get("LV_ENV", "")).lower()
+
+    normalized_lv = _normalize_postgres_url(raw_lv) if raw_lv else ""
+    normalized_primary = _normalize_postgres_url(raw_primary) if raw_primary else ""
+    normalized_fallback = _normalize_postgres_url(raw_fallback) if raw_fallback else ""
+
+    if env_name in {"production", "prod"}:
+        return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
+
+    if normalized_lv and normalized_lv != DEFAULT_DATABASE_URL:
+        return normalized_lv
+
+    return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
+
+
 class Settings(BaseSettings):
     """Root settings shared across all services."""
 
@@ -46,26 +83,17 @@ class Settings(BaseSettings):
     instance_id: str = Field(default="", description="Unique pod/container ID for distributed locking")
 
     # ── Postgres ─────────────────────────────────────────────
-    database_url: PostgresDsn = Field(
-        default="postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
-    )
+    database_url: PostgresDsn = Field(default=DEFAULT_DATABASE_URL)
     db_pool_min: int = 2
 
     @model_validator(mode="after")
     def use_database_url_fallback(self) -> "Settings":
-        """Use DATABASE_URL from env (e.g. Railway) when LV_DATABASE_URL is not set."""
-        default_pg = "postgresql+asyncpg://liveview:liveview@postgres:5432/liveview"
-        if str(self.database_url) != default_pg:
+        """Resolve DATABASE_URL consistently across LV_ and platform-provided env vars."""
+        resolved = resolve_database_url_from_env(environment=self.environment.value)
+        if str(self.database_url) == resolved:
             return self
-        raw = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
-        if not raw:
-            return self
-        if raw.startswith("postgres://"):
-            raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
-        elif raw.startswith("postgresql://") and "+asyncpg" not in raw:
-            raw = raw.replace("postgresql://", "postgresql+asyncpg://", 1)
         try:
-            self.database_url = PostgresDsn(raw)
+            self.database_url = PostgresDsn(resolved)
         except Exception:
             pass
         return self

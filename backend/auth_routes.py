@@ -16,6 +16,7 @@ from typing import Optional
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, EmailStr, Field
+from shared.config import resolve_database_url_from_env
 
 logger = logging.getLogger("liveview.auth")
 
@@ -148,8 +149,8 @@ _pool: Optional[asyncpg.Pool] = None
 
 
 def _get_database_url() -> str:
-    """Database URL for asyncpg (no +asyncpg driver suffix). Prefers LV_DATABASE_URL."""
-    raw = os.getenv("LV_DATABASE_URL") or os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or "postgresql://liveview:liveview@postgres:5432/liveview"
+    """Database URL for asyncpg (no +asyncpg driver suffix)."""
+    raw = resolve_database_url_from_env()
     if "+asyncpg" in raw:
         raw = raw.replace("postgresql+asyncpg://", "postgresql://", 1)
     elif raw.startswith("postgres://"):
