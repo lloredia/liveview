@@ -726,7 +726,10 @@ async def get_match_center(
     payload_json = json.dumps(payload, default=str)
     etag = _compute_etag(payload_json)
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "no-store" if str(phase).startswith("live") or phase == "break" else "public, max-age=2"
+    phase_key = str(phase or "").lower()
+    response.headers["Cache-Control"] = "no-store" if phase_key.startswith("live") or phase_key == "break" else "public, max-age=2"
+    cache_ttl = 15 if phase_key.startswith("live") or phase_key == "break" else 60
+    await redis.client.set(snap_key, payload_json, ex=cache_ttl)
 
     return payload
 
@@ -834,6 +837,8 @@ async def get_match_stats(
         match_stmt = (
             select(
                 MatchORM.id,
+                MatchORM.phase,
+                MatchStateORM.phase.label("state_phase"),
                 MatchORM.home_team_id,
                 MatchORM.away_team_id,
                 ht.c.short_name.label("ht_short"),
@@ -860,6 +865,10 @@ async def get_match_stats(
     etag = _compute_etag(payload_json)
     response.headers["ETag"] = etag
     _no_store(response)
+    phase = _canonical_phase(getattr(match_row, "phase", None), getattr(match_row, "state_phase", None))
+    phase_key = str(phase or "").lower()
+    cache_ttl = 15 if phase_key.startswith("live") or phase_key == "break" else 60
+    await redis.client.set(snap_key, payload_json, ex=cache_ttl)
 
     return payload
 
