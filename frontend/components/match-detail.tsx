@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Highlights } from "./highlights";
-import { ApiError, fetchMatch, fetchMatchDetails, type LineupResponse, type MatchCenterDetailsResponse, type PlayerStatsResponse } from "@/lib/api";
+import { ApiError, fetchMatch, fetchMatchDetails, type LineupResponse, type MatchCenterDetailsResponse } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import {
   formatDate,
@@ -96,24 +96,6 @@ export interface SubstitutionEntry {
   playerOff: string;
   playerOn: string;
   homeAway: "home" | "away";
-}
-
-interface ESPNSummaryData {
-  plays: ESPNPlay[];
-  homeTeamStats: ESPNTeamStat[];
-  awayTeamStats: ESPNTeamStat[];
-  homeTeamName: string;
-  awayTeamName: string;
-  homeTeamId: string;
-  awayTeamId: string;
-  homePlayers: TeamPlayerStats;
-  awayPlayers: TeamPlayerStats;
-  injuries: { home: InjuryEntry[]; away: InjuryEntry[] };
-  sport: string;
-  homeFormation?: string;
-  awayFormation?: string;
-  /** Soccer: substitutions parsed from plays (home and away combined, ordered by time). */
-  substitutions?: SubstitutionEntry[];
 }
 
 // Canonical state — authoritative. Source: backend API only. Never overwritten by ESPN.
@@ -366,35 +348,6 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
         ((activeTab === "lineup" || activeTab === "player_stats") && isSoccer)),
     key: `match-details-${matchId}`,
   });
-  const timelineData = detailsData?.timeline ?? null;
-  const statsData: MatchStatsResponse | null = detailsData?.stats ?? null;
-  const lineupData: LineupResponse | null = detailsData?.soccer_details?.lineup ?? null;
-  const playerStatsData: PlayerStatsResponse | null = detailsData?.soccer_details?.player_stats ?? null;
-  const espnData: ESPNSummaryData | null = useMemo(() => {
-    const supplementary = detailsData?.supplementary?.espn;
-    if (!supplementary) return null;
-    return {
-      plays: supplementary.plays.map((play) => ({
-        ...play,
-        team: play.team ?? undefined,
-      })),
-      homeTeamStats: supplementary.team_stats.home,
-      awayTeamStats: supplementary.team_stats.away,
-      homeTeamName: supplementary.team_display.home_name,
-      awayTeamName: supplementary.team_display.away_name,
-      homeTeamId: supplementary.team_display.home_team_id,
-      awayTeamId: supplementary.team_display.away_team_id,
-      homePlayers: supplementary.player_stats.home as TeamPlayerStats,
-      awayPlayers: supplementary.player_stats.away as TeamPlayerStats,
-      injuries: supplementary.injuries,
-      sport: supplementary.sport,
-      homeFormation: supplementary.formations.home ?? undefined,
-      awayFormation: supplementary.formations.away ?? undefined,
-      substitutions: supplementary.substitutions ?? undefined,
-    };
-  }, [detailsData?.supplementary?.espn]);
-
-  const backendTeamStats = useMemo(() => backendStatsToDisplay(statsData), [statsData]);
   const backendSections = detailsData?.sections ?? null;
   const detailSections: {
     playByPlay: MatchCenterPlayByPlaySection;
@@ -402,150 +355,37 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
     lineup: MatchCenterLineupSection | null;
     teamStats: MatchCenterTeamStatsSection;
   } = useMemo(() => {
-    if (backendSections) {
-      let normalizedPlayerStats: MatchCenterPlayerStatsSection | null = null;
-      if (backendSections.playerStats?.home && backendSections.playerStats?.away) {
-        normalizedPlayerStats = {
-          source: backendSections.playerStats.source,
-          sport: backendSections.playerStats.sport || "soccer",
-          home: backendSections.playerStats.home,
-          away: backendSections.playerStats.away,
-          injuries: backendSections.playerStats.injuries,
-        };
-      }
-      return {
-        playByPlay: backendSections.playByPlay,
-        playerStats: normalizedPlayerStats,
-        lineup: backendSections.lineup,
-        teamStats: backendSections.teamStats,
+    let normalizedPlayerStats: MatchCenterPlayerStatsSection | null = null;
+    if (backendSections?.playerStats?.home && backendSections.playerStats?.away) {
+      normalizedPlayerStats = {
+        source: backendSections.playerStats.source,
+        sport: backendSections.playerStats.sport || "soccer",
+        home: backendSections.playerStats.home,
+        away: backendSections.playerStats.away,
+        injuries: backendSections.playerStats.injuries,
       };
     }
 
-    const fallbackPlayerStatsAvailable = !!(
-      playerStatsData?.source &&
-      (playerStatsData.home?.players?.length || playerStatsData.away?.players?.length)
-    );
-    const espnPlayerStatsAvailable = !!(
-      espnData &&
-      (espnData.homePlayers.players.length > 0 || espnData.awayPlayers.players.length > 0)
-    );
-    const playerStats: MatchCenterPlayerStatsSection | null =
-      fallbackPlayerStatsAvailable && playerStatsData?.home && playerStatsData?.away
-        ? {
-            source: playerStatsData.source,
-            sport: "soccer",
-            home: {
-              teamName: playerStatsData.home.teamName,
-              players: playerStatsData.home.players as PlayerStatLine[],
-              statColumns: playerStatsData.home.statColumns,
-            },
-            away: {
-              teamName: playerStatsData.away.teamName,
-              players: playerStatsData.away.players as PlayerStatLine[],
-              statColumns: playerStatsData.away.statColumns,
-            },
-            injuries: { home: [], away: [] },
-          }
-        : espnPlayerStatsAvailable && espnData
-        ? {
-            source: "espn",
-            sport: espnData.sport || "soccer",
-            home: espnData.homePlayers,
-            away: espnData.awayPlayers,
-            injuries: espnData.injuries,
-          }
-        : fallbackPlayerStatsAvailable && playerStatsData?.home && playerStatsData?.away
-          ? {
-              source: playerStatsData.source,
-              sport: "soccer",
-              home: {
-                teamName: playerStatsData.home.teamName,
-                players: playerStatsData.home.players as PlayerStatLine[],
-                statColumns: playerStatsData.home.statColumns,
-              },
-              away: {
-                teamName: playerStatsData.away.teamName,
-                players: playerStatsData.away.players as PlayerStatLine[],
-                statColumns: playerStatsData.away.statColumns,
-              },
-              injuries: { home: [], away: [] },
-            }
-          : null;
-
-    const fallbackLineupAvailable = !!(
-      lineupData?.source &&
-      (lineupData.home?.lineup?.length || lineupData.away?.lineup?.length)
-    );
-    const homeStarters = espnData?.homePlayers?.players?.filter((player) => player.starter) ?? [];
-    const awayStarters = espnData?.awayPlayers?.players?.filter((player) => player.starter) ?? [];
-    const homeBench = espnData?.homePlayers?.players?.filter((player) => !player.starter) ?? [];
-    const awayBench = espnData?.awayPlayers?.players?.filter((player) => !player.starter) ?? [];
-    const primaryLineupAvailable = !!(
-      homeStarters.length ||
-      awayStarters.length ||
-      espnData?.homeFormation ||
-      espnData?.awayFormation
-    );
-    const lineup: MatchCenterLineupSection | null =
-      fallbackLineupAvailable && lineupData
-        ? {
-            source: lineupData.source,
-            homeFormation: null,
-            awayFormation: null,
-            homeStarters: [],
-            awayStarters: [],
-            homeBench: [],
-            awayBench: [],
-            substitutions: [],
-            fallback: lineupData,
-          }
-        : primaryLineupAvailable || fallbackLineupAvailable
-        ? {
-            source: primaryLineupAvailable ? "espn" : lineupData?.source ?? null,
-            homeFormation: espnData?.homeFormation ?? lineupData?.home?.formation ?? null,
-            awayFormation: espnData?.awayFormation ?? lineupData?.away?.formation ?? null,
-            homeStarters,
-            awayStarters,
-            homeBench,
-            awayBench,
-            substitutions: espnData?.substitutions ?? [],
-            fallback: fallbackLineupAvailable ? lineupData : null,
-          }
-        : null;
-
-    const playByPlayPlays =
-      timelineData?.events?.length
-        ? backendEventsToPlays(timelineData.events)
-        : espnData?.plays?.length
-          ? espnData.plays
-          : backendEventsToPlays(matchData?.recent_events || []);
-
-    const playByPlay: MatchCenterPlayByPlaySection = {
-      plays: playByPlayPlays,
-      homeTeamName: matchData?.match.home_team?.short_name || espnData?.homeTeamName || "Home",
-      awayTeamName: matchData?.match.away_team?.short_name || espnData?.awayTeamName || "Away",
-      homeTeamId: matchData?.match.home_team?.id || espnData?.homeTeamId || "",
-      awayTeamId: matchData?.match.away_team?.id || espnData?.awayTeamId || "",
-      loading: detailsLoading && playByPlayPlays.length === 0,
-    };
-
-    const teamStatsHome = backendTeamStats?.homeStats ?? espnData?.homeTeamStats ?? [];
-    const teamStatsAway = backendTeamStats?.awayStats ?? espnData?.awayTeamStats ?? [];
-    const teamStats: MatchCenterTeamStatsSection = {
-      homeStats: teamStatsHome,
-      awayStats: teamStatsAway,
-      homeTeamName: matchData?.match.home_team?.short_name || espnData?.homeTeamName || "Home",
-      awayTeamName: matchData?.match.away_team?.short_name || espnData?.awayTeamName || "Away",
-      loading: detailsLoading && !(teamStatsHome.length || teamStatsAway.length),
-    };
-
     return {
-      playByPlay,
-      playerStats,
-      lineup,
-      teamStats,
+      playByPlay: backendSections?.playByPlay ?? {
+        plays: [],
+        homeTeamName: matchData?.match.home_team?.short_name || "Home",
+        awayTeamName: matchData?.match.away_team?.short_name || "Away",
+        homeTeamId: matchData?.match.home_team?.id || "",
+        awayTeamId: matchData?.match.away_team?.id || "",
+        loading: detailsLoading,
+      },
+      playerStats: normalizedPlayerStats,
+      lineup: backendSections?.lineup ?? null,
+      teamStats: backendSections?.teamStats ?? {
+        homeStats: [],
+        awayStats: [],
+        homeTeamName: matchData?.match.home_team?.short_name || "Home",
+        awayTeamName: matchData?.match.away_team?.short_name || "Away",
+        loading: detailsLoading,
+      },
     };
-  }, [backendSections, backendTeamStats, detailsLoading, espnData, lineupData, matchData, playerStatsData, timelineData?.events]);
+  }, [backendSections, detailsLoading, matchData]);
 
   if (matchLoading && !matchData) {
     return (

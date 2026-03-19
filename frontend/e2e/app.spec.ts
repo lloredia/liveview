@@ -194,6 +194,65 @@ test.describe("LiveView E2E Tests", () => {
           body: JSON.stringify({
             match_id: "test-match",
             phase: "live",
+            sections: {
+              matchId: "test-match",
+              phase: "live",
+              playByPlay: {
+                source: "timeline",
+                plays: [
+                  {
+                    id: "play-1",
+                    text: "Goal by Bukayo Saka",
+                    homeScore: 1,
+                    awayScore: 0,
+                    period: { number: 1, displayValue: "1st" },
+                    clock: { displayValue: "63'" },
+                    scoringPlay: true,
+                    scoreValue: 1,
+                    team: { id: "home-1" },
+                    participants: [{ athlete: { displayName: "Bukayo Saka" } }],
+                    type: { id: "goal", text: "goal" },
+                  },
+                ],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                homeTeamId: "home-1",
+                awayTeamId: "away-1",
+                loading: false,
+              },
+              teamStats: {
+                source: null,
+                homeStats: [],
+                awayStats: [],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                loading: false,
+              },
+              playerStats: null,
+              lineup: {
+                source: "football_data",
+                homeFormation: null,
+                awayFormation: null,
+                homeStarters: [],
+                awayStarters: [],
+                homeBench: [],
+                awayBench: [],
+                substitutions: [],
+                fallback: {
+                  source: "football_data",
+                  home: {
+                    formation: "4-3-3",
+                    lineup: [{ id: 1, name: "David Raya", position: "GK", shirt_number: 22 }],
+                    bench: [{ id: 2, name: "Leandro Trossard", position: "FW", shirt_number: 19 }],
+                  },
+                  away: {
+                    formation: "4-2-3-1",
+                    lineup: [{ id: 3, name: "Robert Sanchez", position: "GK", shirt_number: 1 }],
+                    bench: [{ id: 4, name: "Mykhailo Mudryk", position: "FW", shirt_number: 10 }],
+                  },
+                },
+              },
+            },
             timeline: {
               match_id: "test-match",
               phase: "live",
@@ -568,6 +627,59 @@ test.describe("LiveView E2E Tests", () => {
           body: JSON.stringify({
             match_id: "test-match",
             phase: "live",
+            sections: {
+              matchId: "test-match",
+              phase: "live",
+              playByPlay: {
+                source: "timeline",
+                plays: [],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                homeTeamId: "home-1",
+                awayTeamId: "away-1",
+                loading: false,
+              },
+              teamStats: {
+                source: null,
+                homeStats: [],
+                awayStats: [],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                loading: false,
+              },
+              playerStats: {
+                source: "football_data",
+                sport: "soccer",
+                home: {
+                  teamName: "Arsenal",
+                  statColumns: ["G", "A", "YC"],
+                  players: [
+                    {
+                      name: "Bukayo Saka",
+                      jersey: "7",
+                      position: "FW",
+                      stats: { G: 1, A: 0, YC: 0 },
+                      starter: true,
+                    },
+                  ],
+                },
+                away: {
+                  teamName: "Chelsea",
+                  statColumns: ["G", "A", "YC"],
+                  players: [
+                    {
+                      name: "Cole Palmer",
+                      jersey: "20",
+                      position: "FW",
+                      stats: { G: 0, A: 0, YC: 1 },
+                      starter: true,
+                    },
+                  ],
+                },
+                injuries: { home: [], away: [] },
+              },
+              lineup: null,
+            },
             timeline: {
               match_id: "test-match",
               phase: "live",
@@ -726,6 +838,35 @@ test.describe("LiveView E2E Tests", () => {
           body: JSON.stringify({
             match_id: "test-match",
             phase: "live",
+            sections: {
+              matchId: "test-match",
+              phase: "live",
+              playByPlay: {
+                source: "timeline",
+                plays: [],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                homeTeamId: "home-1",
+                awayTeamId: "away-1",
+                loading: false,
+              },
+              teamStats: {
+                source: "db",
+                homeStats: [
+                  { name: "possession", displayValue: "61", label: "Possession" },
+                  { name: "shotsOnTarget", displayValue: "5", label: "Shots On Target" },
+                ],
+                awayStats: [
+                  { name: "possession", displayValue: "39", label: "Possession" },
+                  { name: "shotsOnTarget", displayValue: "2", label: "Shots On Target" },
+                ],
+                homeTeamName: "ARS",
+                awayTeamName: "CHE",
+                loading: false,
+              },
+              playerStats: null,
+              lineup: null,
+            },
             timeline: {
               match_id: "test-match",
               phase: "live",
@@ -863,6 +1004,73 @@ test.describe("LiveView E2E Tests", () => {
           body: JSON.stringify({
             match_id: "test-match",
             phase: "live",
+            sections: {
+              matchId: "test-match",
+              phase: "live",
+              playByPlay: {
+                source: "espn",
+                plays: [
+                  {
+                    id: "play-1",
+                    text: "Jayson Tatum makes three point jumper",
+                    homeScore: 88,
+                    awayScore: 84,
+                    period: { number: 4, displayValue: "4th" },
+                    clock: { displayValue: "03:21" },
+                    scoringPlay: true,
+                    scoreValue: 3,
+                    team: { id: "home-1", displayName: "Boston Celtics" },
+                    participants: [{ athlete: { displayName: "Jayson Tatum" } }],
+                    type: { id: "437", text: "Made Shot" },
+                  },
+                ],
+                homeTeamName: "BOS",
+                awayTeamName: "NYK",
+                homeTeamId: "home-1",
+                awayTeamId: "away-1",
+                loading: false,
+              },
+              teamStats: {
+                source: "espn",
+                homeStats: [{ name: "rebounds", displayValue: "44", label: "Rebounds" }],
+                awayStats: [{ name: "rebounds", displayValue: "38", label: "Rebounds" }],
+                homeTeamName: "BOS",
+                awayTeamName: "NYK",
+                loading: false,
+              },
+              playerStats: {
+                source: "espn",
+                sport: "basketball",
+                home: {
+                  teamName: "Boston Celtics",
+                  statColumns: ["PTS", "REB", "AST"],
+                  players: [
+                    {
+                      name: "Jayson Tatum",
+                      jersey: "0",
+                      position: "SF",
+                      stats: { PTS: 31, REB: 9, AST: 6 },
+                      starter: true,
+                    },
+                  ],
+                },
+                away: {
+                  teamName: "New York Knicks",
+                  statColumns: ["PTS", "REB", "AST"],
+                  players: [
+                    {
+                      name: "Jalen Brunson",
+                      jersey: "11",
+                      position: "PG",
+                      stats: { PTS: 27, REB: 3, AST: 7 },
+                      starter: true,
+                    },
+                  ],
+                },
+                injuries: { home: [], away: [] },
+              },
+              lineup: null,
+            },
             timeline: {
               match_id: "test-match",
               phase: "live",
