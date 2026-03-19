@@ -9,17 +9,25 @@ import json
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+def _resolve_health_port() -> int | None:
+    port_str = (os.environ.get("PORT") or os.environ.get("LV_API_PORT") or "").strip()
+    if not port_str:
+        return None
+    try:
+        return int(port_str)
+    except ValueError:
+        return None
+
+
 def start_health_server(service_name: str) -> None:
     """
     Start a daemon thread that listens on PORT and responds to GET /health.
     Only starts when PORT is set (e.g. on Railway); otherwise no-op.
     """
-    port_str = os.environ.get("PORT")
-    if not port_str:
-        return
-    try:
-        port = int(port_str)
-    except ValueError:
+    port = _resolve_health_port()
+    if port is None:
         return
 
     body = json.dumps({"status": "ok", "service": service_name}).encode("utf-8")
