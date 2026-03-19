@@ -81,6 +81,137 @@ test.describe("LiveView E2E Tests", () => {
         expect(options).toBeGreaterThan(0);
       }
     });
+
+    test("should prefer today snapshot data for selected home league scoreboard", async ({ page }) => {
+      await page.route("**/health", async (route) => {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) });
+      });
+
+      await page.route("**/v1/leagues", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              sport: "soccer",
+              sport_display: "Soccer",
+              leagues: [
+                {
+                  id: "league-1",
+                  name: "Premier League",
+                  short_name: "EPL",
+                  country: "England",
+                  logo_url: null,
+                },
+              ],
+            },
+          ]),
+        });
+      });
+
+      await page.route("**/v1/today**", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            date: "2026-03-18",
+            total_matches: 1,
+            live: 1,
+            finished: 0,
+            scheduled: 0,
+            generated_at: "2026-03-18T19:03:00Z",
+            leagues: [
+              {
+                league_id: "league-1",
+                league_name: "Premier League",
+                league_short_name: "EPL",
+                league_country: "England",
+                league_logo_url: null,
+                sport: "soccer",
+                sport_type: "soccer",
+                matches: [
+                  {
+                    id: "today-match-1",
+                    phase: "live_second_half",
+                    start_time: "2026-03-18T19:00:00Z",
+                    venue: "Emirates Stadium",
+                    score: { home: 2, away: 1 },
+                    clock: "67'",
+                    period: "2",
+                    version: 4,
+                    home_team: {
+                      id: "home-1",
+                      name: "Today Snapshot FC",
+                      short_name: "TSF",
+                      logo_url: null,
+                    },
+                    away_team: {
+                      id: "away-1",
+                      name: "Snapshot United",
+                      short_name: "SUN",
+                      logo_url: null,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+      });
+
+      await page.route("**/v1/leagues/league-1/scoreboard", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            league_id: "league-1",
+            league_name: "Premier League",
+            generated_at: "2026-03-18T19:03:00Z",
+            matches: [
+              {
+                id: "scoreboard-match-1",
+                phase: "live_second_half",
+                start_time: "2026-03-18T19:00:00Z",
+                venue: "Wrong Stadium",
+                score: { home: 9, away: 9 },
+                clock: "99'",
+                period: "2",
+                version: 1,
+                home_team: {
+                  id: "wrong-home",
+                  name: "Wrong Endpoint FC",
+                  short_name: "WEF",
+                  logo_url: null,
+                },
+                away_team: {
+                  id: "wrong-away",
+                  name: "Wrong Endpoint United",
+                  short_name: "WEU",
+                  logo_url: null,
+                },
+              },
+            ],
+          }),
+        });
+      });
+
+      await goto(page, "/?league=league-1");
+
+      await expect(
+        page.getByRole("heading", { name: "Premier League" }),
+      ).toBeVisible();
+
+      const scoreboardCard = page
+        .locator("[data-testid=match-item], .match-card")
+        .first();
+
+      await expect(scoreboardCard).toContainText("Today Snapshot FC");
+      await expect(scoreboardCard).toContainText("Snapshot United");
+      await expect(scoreboardCard).toContainText("67'");
+      await expect(scoreboardCard).toContainText("2");
+      await expect(scoreboardCard).toContainText("1");
+      await expect(scoreboardCard).not.toContainText("Wrong Endpoint FC");
+    });
   });
 
   test.describe("Match Detail View", () => {
