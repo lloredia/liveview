@@ -178,7 +178,7 @@ function HomeContent() {
     [leagues, favLeagueIds],
   );
 
-  useScoreAlerts(leagues, favoriteLeagueIds);
+  useScoreAlerts(leagues, favoriteLeagueIds, todaySnapshot);
 
   const handleLeagueSelect = useCallback(
     (id: string) => {

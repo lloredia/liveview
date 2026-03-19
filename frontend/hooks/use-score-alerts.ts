@@ -7,7 +7,7 @@ import {
   getPushPermission,
   sendLocalNotification,
 } from "@/lib/push-notifications";
-import type { LeagueGroup, MatchSummary } from "@/lib/types";
+import type { LeagueGroup, MatchSummary, TodayResponse } from "@/lib/types";
 
 interface ScoreSnapshot {
   home: number;
@@ -18,20 +18,20 @@ interface ScoreSnapshot {
 }
 
 /**
- * Monitors live matches across all leagues for score changes.
- * Sends browser notifications and plays sounds when a score changes.
+ * Monitors live matches across favorite leagues for score changes.
+ * Uses the shared /today snapshot first so alerts stay aligned with the home feed.
  */
 export function useScoreAlerts(
   leagues: LeagueGroup[],
   favoriteLeagueIds: string[],
+  todaySnapshot: TodayResponse | null = null,
 ): void {
   const prevScores = useRef<Record<string, ScoreSnapshot>>({});
 
   useEffect(() => {
     if (leagues.length === 0) return;
 
-    // Get all league IDs to monitor (favorites first, then all)
-    const allLeagueIds = leagues.flatMap((g) => g.leagues.map((l) => l.id));
+    const allLeagueIds = leagues.flatMap((group) => group.leagues.map((league) => league.id));
     const idsToMonitor =
       favoriteLeagueIds.length > 0
         ? allLeagueIds.filter((id) => favoriteLeagueIds.includes(id))
@@ -39,35 +39,13 @@ export function useScoreAlerts(
 
     if (idsToMonitor.length === 0) return;
 
-    const checkScores = async () => {
-      for (let i = 0; i < idsToMonitor.length; i += 3) {
-        const batch = idsToMonitor.slice(i, i + 3);
-        const results = await Promise.allSettled(
-          batch.map((id) => fetchScoreboard(id)),
-        );
-
-        for (const result of results) {
-          if (result.status !== "fulfilled") continue;
-
-          const { matches, league_name } = result.value;
-          const liveMatches = matches.filter((m) => isLive(m.phase));
-
-          for (const match of liveMatches) {
-            processMatch(match, league_name);
-          }
-        }
-      }
-    };
-
     const processMatch = (match: MatchSummary, leagueName: string) => {
       const key = match.id;
       const currentHome = match.score.home;
       const currentAway = match.score.away;
-
       const prev = prevScores.current[key];
 
       if (!prev) {
-        // First time seeing this match — store snapshot
         prevScores.current[key] = {
           home: currentHome,
           away: currentAway,
@@ -81,39 +59,65 @@ export function useScoreAlerts(
       const homeScored = currentHome > prev.home;
       const awayScored = currentAway > prev.away;
 
-      if (homeScored || awayScored) {
-        const scorer = homeScored ? match.home_team.name : match.away_team.name;
-        const scoreLine = `${match.home_team.short_name} ${currentHome} - ${currentAway} ${match.away_team.short_name}`;
+      if (!homeScored && !awayScored) return;
 
-        // Play sound
-        if (isSoundEnabled()) {
-          playGoalSound();
+      const scorer = homeScored ? match.home_team.name : match.away_team.name;
+      const scoreLine = `${match.home_team.short_name} ${currentHome} - ${currentAway} ${match.away_team.short_name}`;
+
+      if (isSoundEnabled()) {
+        playGoalSound();
+      }
+
+      if (getPushPermission() === "granted") {
+        sendLocalNotification(
+          `⚽ ${scorer} scores!`,
+          `${scoreLine} · ${leagueName}`,
+          match.home_team.logo_url || undefined,
+        );
+      }
+
+      prevScores.current[key] = {
+        home: currentHome,
+        away: currentAway,
+        homeName: match.home_team.name,
+        awayName: match.away_team.name,
+        league: leagueName,
+      };
+    };
+
+    const checkScores = async () => {
+      if (todaySnapshot?.leagues?.length) {
+        for (const league of todaySnapshot.leagues) {
+          if (!favoriteLeagueIds.includes(league.league_id)) continue;
+
+          const liveMatches = (league.matches ?? []).filter((match) => isLive(match.phase));
+          for (const match of liveMatches) {
+            processMatch(match, league.league_name);
+          }
         }
+        return;
+      }
 
-        // Send browser notification
-        if (getPushPermission() === "granted") {
-          sendLocalNotification(
-            `⚽ ${scorer} scores!`,
-            `${scoreLine} · ${leagueName}`,
-            match.home_team.logo_url || undefined,
-          );
+      for (let i = 0; i < idsToMonitor.length; i += 3) {
+        const batch = idsToMonitor.slice(i, i + 3);
+        const results = await Promise.allSettled(
+          batch.map((id) => fetchScoreboard(id)),
+        );
+
+        for (const result of results) {
+          if (result.status !== "fulfilled") continue;
+
+          const { matches, league_name } = result.value;
+          const liveMatches = matches.filter((match) => isLive(match.phase));
+          for (const match of liveMatches) {
+            processMatch(match, league_name);
+          }
         }
-
-        // Update snapshot
-        prevScores.current[key] = {
-          home: currentHome,
-          away: currentAway,
-          homeName: match.home_team.name,
-          awayName: match.away_team.name,
-          league: leagueName,
-        };
       }
     };
 
-    // Poll every 30 seconds
     checkScores();
     const timer = setInterval(checkScores, 30000);
-
     return () => clearInterval(timer);
-  }, [leagues, favoriteLeagueIds]);
+  }, [favoriteLeagueIds, leagues, todaySnapshot]);
 }
