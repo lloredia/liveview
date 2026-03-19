@@ -23,7 +23,11 @@ router = APIRouter(prefix="/v1", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def _get_oauth_secret() -> str:
-    return (os.environ.get("OAUTH_ENSURE_SECRET") or "").strip()
+    return (
+        os.environ.get("LV_OAUTH_ENSURE_SECRET")
+        or os.environ.get("OAUTH_ENSURE_SECRET")
+        or ""
+    ).strip()
 
 
 def _require_ajax(x_requested_with: Optional[str] = Header(None, alias="X-Requested-With")) -> None:
