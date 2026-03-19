@@ -115,6 +115,11 @@ async def apply_correction(
     snap_key = SNAP_SCOREBOARD_KEY.format(match_id=str(match_id))
     await redis.set_snapshot(snap_key, scoreboard.model_dump_json(), ttl_s=300)
     await redis.publish_delta(str(match_id), Tier.SCOREBOARD.value, scoreboard.model_dump_json())
+    await redis.client.delete(
+        f"snap:match:{match_id}:details",
+        f"snap:match:{match_id}:stats",
+        f"api:scoreboard:{league.id}",
+    )
     SCORE_STATE_WRITES.labels(writer="verifier", source=corrected.source or "unknown").inc()
 
     logger.info(
