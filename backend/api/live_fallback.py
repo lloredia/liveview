@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 from sqlalchemy import select, text
 
+from shared.config import get_settings
 from shared.models.enums import MatchPhase
 from shared.models.orm import MatchORM, ProviderMappingORM
 from shared.utils.database import DatabaseManager
@@ -29,7 +30,6 @@ logger = get_logger(__name__)
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 TSDB_BASE = "https://www.thesportsdb.com/api/v1/json"
-TSDB_KEY = os.getenv("LV_THESPORTSDB_API_KEY") or os.getenv("THESPORTSDB_API_KEY") or "3"
 
 TSDB_LEAGUE_MAP: dict[str, str] = {
     "eng.1": "4328", "esp.1": "4335", "ger.1": "4331", "ita.1": "4332",
@@ -87,8 +87,13 @@ async def tsdb_fallback_for_league(
     if not tsdb_league:
         return 0
 
+    tsdb_key = _get_tsdb_key()
+    if not tsdb_key:
+        logger.debug("tsdb_fallback_not_configured", league=espn_league_id)
+        return 0
+
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    url = f"{TSDB_BASE}/{TSDB_KEY}/eventsday.php"
+    url = f"{TSDB_BASE}/{tsdb_key}/eventsday.php"
     try:
         resp = await client.get(url, params={"d": today_str, "l": tsdb_league}, timeout=10.0)
         resp.raise_for_status()
@@ -217,3 +222,21 @@ def _safe_int(val: Any) -> int | None:
         return int(val)
     except (ValueError, TypeError):
         return None
+
+
+def _get_tsdb_key() -> str:
+    settings = get_settings()
+    configured = (settings.thesportsdb_api_key or "").strip()
+    if configured:
+        return configured
+
+    legacy = os.getenv("LV_THESPORTSDB_API_KEY") or os.getenv("THESPORTSDB_API_KEY") or ""
+    legacy = legacy.strip()
+    if legacy:
+        return legacy
+
+    runtime_env = (os.getenv("LV_ENV") or settings.environment.value).lower()
+    if runtime_env in {"production", "prod"}:
+        return ""
+
+    return "3"
