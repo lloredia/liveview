@@ -110,3 +110,107 @@ def test_detail_sections_fall_back_to_espn_when_soccer_details_are_missing() -> 
     assert sections["lineup"]["homeFormation"] == "4-3-3"
     assert sections["lineup"]["homeStarters"][0]["name"] == "Bukayo Saka"
     assert sections["lineup"]["awayBench"][0]["name"] == "Noni Madueke"
+
+
+def test_detail_sections_prefer_timeline_and_db_stats_when_present() -> None:
+    row = _match_row()
+    timeline_payload = {
+        "events": [
+            {
+                "id": "evt-1",
+                "event_type": "goal",
+                "detail": "Goal by Bukayo Saka",
+                "period": "2",
+                "minute": 63,
+                "second": 0,
+                "score_home": 1,
+                "score_away": 0,
+                "team_id": str(row.home_team_id),
+                "player_name": "Bukayo Saka",
+            }
+        ]
+    }
+    stats_payload = {
+        "teams": [
+            {"side": "home", "stats": {"possession": 61, "shots_on_target": 5}},
+            {"side": "away", "stats": {"possession": 39, "shots_on_target": 2}},
+        ]
+    }
+    supplementary_espn = {
+        "plays": [
+            {
+                "id": "espn-play-1",
+                "text": "Wrong fallback play",
+                "homeScore": 0,
+                "awayScore": 0,
+                "period": {"number": 1, "displayValue": "1st"},
+                "clock": {"displayValue": "12:00"},
+                "scoringPlay": False,
+                "scoreValue": 0,
+                "type": {"id": "0", "text": "noop"},
+            }
+        ],
+        "team_stats": {
+            "home": [{"name": "possession", "displayValue": "50", "label": "Possession"}],
+            "away": [{"name": "possession", "displayValue": "50", "label": "Possession"}],
+        },
+    }
+
+    sections = _build_detail_sections(
+        row,
+        uuid.uuid4(),
+        "live",
+        timeline_payload,
+        stats_payload,
+        None,
+        supplementary_espn,
+    )
+
+    assert sections["playByPlay"]["source"] == "timeline"
+    assert sections["playByPlay"]["plays"][0]["text"] == "Goal by Bukayo Saka"
+    assert sections["teamStats"]["source"] == "db"
+    assert sections["teamStats"]["homeStats"][0]["displayValue"] == "61"
+    assert sections["teamStats"]["awayStats"][0]["displayValue"] == "39"
+
+
+def test_detail_sections_fall_back_to_espn_plays_and_team_stats_when_backend_is_empty() -> None:
+    row = _match_row()
+    timeline_payload = {"events": []}
+    stats_payload = {"teams": []}
+    supplementary_espn = {
+        "plays": [
+            {
+                "id": "espn-play-1",
+                "text": "Jayson Tatum makes three point jumper",
+                "homeScore": 88,
+                "awayScore": 84,
+                "period": {"number": 4, "displayValue": "4th"},
+                "clock": {"displayValue": "03:21"},
+                "scoringPlay": True,
+                "scoreValue": 3,
+                "team": {"id": str(row.home_team_id)},
+                "participants": [{"athlete": {"displayName": "Jayson Tatum"}}],
+                "type": {"id": "437", "text": "Made Shot"},
+            }
+        ],
+        "team_stats": {
+            "home": [{"name": "rebounds", "displayValue": "44", "label": "Rebounds"}],
+            "away": [{"name": "rebounds", "displayValue": "38", "label": "Rebounds"}],
+        },
+    }
+
+    sections = _build_detail_sections(
+        row,
+        uuid.uuid4(),
+        "live",
+        timeline_payload,
+        stats_payload,
+        None,
+        supplementary_espn,
+    )
+
+    assert sections["playByPlay"]["source"] == "espn"
+    assert sections["playByPlay"]["plays"][0]["text"] == "Jayson Tatum makes three point jumper"
+    assert sections["teamStats"]["source"] == "espn"
+    assert sections["teamStats"]["homeStats"][0]["displayValue"] == "44"
+    assert sections["teamStats"]["awayStats"][0]["displayValue"] == "38"
