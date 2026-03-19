@@ -86,7 +86,7 @@ export function Scoreboard({
 
   const leagueName = effectiveData?.league_name || "";
 
-  useMemo(() => {
+  useEffect(() => {
     setTab("matches");
   }, [leagueId]);
 
