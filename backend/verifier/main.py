@@ -59,8 +59,8 @@ async def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
             asyncio.get_running_loop().add_signal_handler(sig, on_signal)
-        except NotImplementedError:
-            pass
+        except (NotImplementedError, ValueError, OSError, RuntimeError) as exc:
+            logger.warning("signal_handler_unavailable", signal=sig, error=str(exc))
 
     logger.info("verifier_started")
     await shutdown.wait()
