@@ -12,10 +12,20 @@ import uvicorn
 from shared.config import get_settings
 
 
+def _resolve_api_bind_port(default_port: int) -> int:
+    port_str = (os.environ.get("PORT") or os.environ.get("LV_API_PORT") or "").strip()
+    if not port_str:
+        return default_port
+    try:
+        return int(port_str)
+    except ValueError:
+        return default_port
+
+
 def main() -> None:
     """Start the API service."""
     settings = get_settings()
-    port = int(os.environ.get("PORT", settings.api_port))
+    port = _resolve_api_bind_port(settings.api_port)
 
     uvicorn.run(
         "api.app:app",
