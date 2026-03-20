@@ -1186,7 +1186,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     setup_logging("api")
     init_tracing()  # Initialize OpenTelemetry distributed tracing
-    start_metrics_server(9090)
+    start_metrics_server(settings.metrics_port)
 
     # Initialize infrastructure (retry so healthcheck can pass once ready)
     redis = RedisManager(settings)
