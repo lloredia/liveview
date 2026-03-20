@@ -32,7 +32,7 @@ def main() -> None:
         host=settings.api_host,
         port=port,
         workers=settings.api_workers,
-        log_level="info",
+        log_level=settings.log_level.lower(),
         access_log=False,  # We handle logging via middleware
         ws_ping_interval=30.0,
         ws_ping_timeout=10.0,
