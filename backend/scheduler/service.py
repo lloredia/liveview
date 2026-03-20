@@ -953,7 +953,10 @@ async def main() -> None:
         def shutdown_all(s=sig):
             service.request_shutdown()
             sync_service.request_shutdown()
-        loop.add_signal_handler(sig, shutdown_all)
+        try:
+            loop.add_signal_handler(sig, shutdown_all)
+        except (ValueError, OSError, RuntimeError) as exc:
+            logger.warning("signal_handler_unavailable", signal=sig, error=str(exc))
 
     logger.info(
         "scheduler_service_started",
