@@ -2,7 +2,7 @@
 """
 Run 002_add_football_sport.sql so the Football (NFL) sport exists.
 No psql required. From repo root: python3 backend/run_migration_002.py
-Requires LV_DATABASE_URL in the environment (or .env in backend/).
+Requires DATABASE_URL or LV_DATABASE_URL in the environment (or .env in backend/).
 Use Railway's *public* Postgres URL (not postgres.railway.internal).
 Install deps first: pip3 install -r backend/requirements.txt (or use a venv).
 """
@@ -16,15 +16,6 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 os.chdir(_backend_dir)
 
-# Use asyncpg (backend driver). Config only rewrites DATABASE_URL, not LV_DATABASE_URL.
-_url = os.environ.get("LV_DATABASE_URL") or ""
-if _url and "+asyncpg" not in _url:
-    if _url.startswith("postgres://"):
-        _url = "postgresql+asyncpg://" + _url[len("postgres://") :]
-    elif _url.startswith("postgresql://"):
-        _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    os.environ["LV_DATABASE_URL"] = _url
-
 from sqlalchemy import text
 
 from shared.config import get_settings
@@ -33,9 +24,6 @@ from shared.utils.database import DatabaseManager
 
 async def main() -> None:
     settings = get_settings()
-    if not settings.database_url_str:
-        print("LV_DATABASE_URL is not set. Set it or run from backend with .env.")
-        sys.exit(1)
     db = DatabaseManager(settings)
     await db.connect()
     try:

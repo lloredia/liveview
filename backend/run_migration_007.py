@@ -2,7 +2,7 @@
 """
 Run 007_provider_columns.sql: add provider_name, provider_id to matches.
 No psql required. From repo root: python backend/run_migration_007.py
-Requires LV_DATABASE_URL (or DATABASE_URL) in the environment or .env in backend/.
+Requires DATABASE_URL or LV_DATABASE_URL in the environment or .env in backend/.
 """
 import asyncio
 import os
@@ -13,14 +13,6 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 os.chdir(_backend_dir)
 
-_url = os.environ.get("LV_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
-if _url and "+asyncpg" not in _url:
-    if _url.startswith("postgres://"):
-        _url = "postgresql+asyncpg://" + _url[len("postgres://") :]
-    elif _url.startswith("postgresql://"):
-        _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    os.environ["LV_DATABASE_URL"] = _url
-
 from sqlalchemy import text
 
 from shared.config import get_settings
@@ -29,9 +21,6 @@ from shared.utils.database import DatabaseManager
 
 async def main() -> None:
     settings = get_settings()
-    if not getattr(settings, "database_url", None):
-        print("LV_DATABASE_URL or DATABASE_URL is not set.")
-        sys.exit(1)
     db = DatabaseManager(settings)
     await db.connect()
     try:
