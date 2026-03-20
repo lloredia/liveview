@@ -56,13 +56,13 @@ def resolve_database_url_from_env(
     normalized_primary = _normalize_postgres_url(raw_primary) if raw_primary else ""
     normalized_fallback = _normalize_postgres_url(raw_fallback) if raw_fallback else ""
 
-    if env_name in {"production", "prod"}:
-        return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
-
     if normalized_lv and normalized_lv != DEFAULT_DATABASE_URL:
         return normalized_lv
 
-    return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
+    if env_name in {"production", "prod"}:
+        return normalized_primary or normalized_fallback or normalized_lv or DEFAULT_DATABASE_URL
+
+    return normalized_primary or normalized_fallback or DEFAULT_DATABASE_URL
 
 
 def resolve_redis_url_from_env(
@@ -76,13 +76,13 @@ def resolve_redis_url_from_env(
     raw_primary = redis_url if redis_url is not None else os.environ.get("REDIS_URL")
     env_name = (environment if environment is not None else os.environ.get("LV_ENV", "")).lower()
 
-    if env_name in {"production", "prod"}:
-        return raw_primary or raw_lv or DEFAULT_REDIS_URL
-
     if raw_lv and raw_lv != DEFAULT_REDIS_URL:
         return raw_lv
 
-    return raw_primary or raw_lv or DEFAULT_REDIS_URL
+    if env_name in {"production", "prod"}:
+        return raw_primary or raw_lv or DEFAULT_REDIS_URL
+
+    return raw_primary or DEFAULT_REDIS_URL
 
 
 class Settings(BaseSettings):
