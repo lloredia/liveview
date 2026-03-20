@@ -2,9 +2,9 @@
 Web Push delivery adapter using pywebpush + VAPID.
 
 Environment variables:
-  LV_VAPID_PRIVATE_KEY  — base64-encoded VAPID private key
-  LV_VAPID_PUBLIC_KEY   — base64-encoded VAPID public key
-  LV_VAPID_CLAIM_EMAIL  — mailto: for VAPID claims (e.g. mailto:admin@liveview.app)
+  VAPID_PRIVATE_KEY / LV_VAPID_PRIVATE_KEY
+  VAPID_PUBLIC_KEY / LV_VAPID_PUBLIC_KEY
+  VAPID_CLAIM_EMAIL / LV_VAPID_CLAIM_EMAIL
 """
 from __future__ import annotations
 
@@ -33,10 +33,18 @@ def _get_pywebpush():
 
 
 def _get_vapid_config() -> dict[str, str]:
-    private_key = os.environ.get("LV_VAPID_PRIVATE_KEY", "")
-    claim_email = os.environ.get("LV_VAPID_CLAIM_EMAIL", "mailto:admin@liveview.app")
+    private_key = (
+        os.environ.get("VAPID_PRIVATE_KEY")
+        or os.environ.get("LV_VAPID_PRIVATE_KEY")
+        or ""
+    )
+    claim_email = (
+        os.environ.get("VAPID_CLAIM_EMAIL")
+        or os.environ.get("LV_VAPID_CLAIM_EMAIL")
+        or "mailto:admin@liveview.app"
+    )
     if not private_key:
-        raise RuntimeError("LV_VAPID_PRIVATE_KEY is not set")
+        raise RuntimeError("VAPID_PRIVATE_KEY (or LV_VAPID_PRIVATE_KEY) is not set")
     return {
         "private_key": private_key,
         "claims": {"sub": claim_email},
