@@ -48,6 +48,8 @@ from scheduler.engine.polling import AdaptivePollingEngine
 logger = get_logger(__name__)
 
 POLL_COMMAND_CHANNEL = "ingest:poll_commands"
+CONNECT_RETRY_ATTEMPTS = 10
+CONNECT_RETRY_BASE_DELAY_S = 2.0
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 
@@ -90,6 +92,31 @@ SCHEDULE_SYNC_LEAGUES: list[dict[str, str]] = [
     {"sport": "baseball", "espn_sport": "baseball", "espn_league": "mlb", "name": "MLB", "country": "USA"},
     {"sport": "football", "espn_sport": "football", "espn_league": "nfl", "name": "NFL", "country": "USA"},
 ]
+
+
+async def _connect_with_retry(connect_fn, name: str) -> None:
+    """Call async connect_fn(); retry with exponential backoff on failure."""
+    last_exc: Exception | None = None
+    for attempt in range(1, CONNECT_RETRY_ATTEMPTS + 1):
+        try:
+            await connect_fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt == CONNECT_RETRY_ATTEMPTS:
+                raise
+            delay = CONNECT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+            logger.warning(
+                "connect_retry",
+                name=name,
+                attempt=attempt,
+                max_attempts=CONNECT_RETRY_ATTEMPTS,
+                delay_s=delay,
+                error=str(exc),
+            )
+            await asyncio.sleep(delay)
+    if last_exc:
+        raise last_exc
 
 SCHEDULE_SYNC_INTERVAL_S = 3600  # 1 hour — discover new matches more often (was 4h)
 
@@ -939,8 +966,8 @@ async def main() -> None:
     redis = RedisManager(settings)
     db = DatabaseManager(settings)
 
-    await redis.connect()
-    await db.connect()
+    await _connect_with_retry(redis.connect, "Redis")
+    await _connect_with_retry(db.connect, "Database")
 
     polling_engine = AdaptivePollingEngine(redis, settings)
     health_scorer = HealthScorer(redis, settings)
