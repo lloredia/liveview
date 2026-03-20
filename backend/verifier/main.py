@@ -16,6 +16,7 @@ if str(_backend) not in sys.path:
 
 from shared.config import get_settings
 from shared.utils.database import DatabaseManager
+from shared.utils.health_server import start_health_server
 from shared.utils.logging import get_logger, setup_logging
 from shared.utils.redis_manager import RedisManager
 
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 
 async def main() -> None:
     setup_logging("verifier")
+    start_health_server("verifier")
     settings = get_settings()
     verifier_settings = get_verifier_settings()
 
