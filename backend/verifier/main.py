@@ -25,6 +25,33 @@ from verifier.engine import ContinuousMatchVerificationEngine, run_verification_
 from verifier.metrics import metrics_http_server
 
 logger = get_logger(__name__)
+CONNECT_RETRY_ATTEMPTS = 10
+CONNECT_RETRY_BASE_DELAY_S = 2.0
+
+
+async def _connect_with_retry(connect_fn, name: str) -> None:
+    """Call async connect_fn(); retry with exponential backoff on failure."""
+    last_exc: Exception | None = None
+    for attempt in range(1, CONNECT_RETRY_ATTEMPTS + 1):
+        try:
+            await connect_fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt == CONNECT_RETRY_ATTEMPTS:
+                raise
+            delay = CONNECT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+            logger.warning(
+                "connect_retry",
+                name=name,
+                attempt=attempt,
+                max_attempts=CONNECT_RETRY_ATTEMPTS,
+                delay_s=delay,
+                error=str(exc),
+            )
+            await asyncio.sleep(delay)
+    if last_exc:
+        raise last_exc
 
 
 async def main() -> None:
@@ -37,8 +64,8 @@ async def main() -> None:
     redis = RedisManager(settings)
 
     try:
-        await db.connect()
-        await redis.connect()
+        await _connect_with_retry(db.connect, "Database")
+        await _connect_with_retry(redis.connect, "Redis")
     except Exception as e:
         logger.exception("startup_connect_failed", error=str(e))
         raise
