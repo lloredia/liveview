@@ -31,7 +31,7 @@ JWT_DEFAULT_DEV = "liveview-dev-secret-change-in-production"
 
 
 def _is_production() -> bool:
-    return os.getenv("LV_ENV", "").lower() in ("production", "prod")
+    return (os.getenv("LV_ENV") or os.getenv("ENVIRONMENT") or "").lower() in ("production", "prod")
 
 
 JWT_EXPIRY = 60 * 60 * 24 * 30  # 30 days
