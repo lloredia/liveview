@@ -38,6 +38,7 @@ from shared.utils.logging import get_logger, setup_logging
 from shared.utils.metrics import (
     LIVE_MATCHES,
     SCHEDULER_ACTIVE_TASKS,
+    resolve_metrics_port,
     start_metrics_server,
 )
 from shared.utils.redis_manager import RedisManager
@@ -960,7 +961,7 @@ async def main() -> None:
         service="scheduler",
         pid=os.getpid(),
     )
-    start_metrics_server(9092)
+    start_metrics_server(resolve_metrics_port(9092, "LV_SCHEDULER_METRICS_PORT"))
     start_health_server("scheduler")
 
     redis = RedisManager(settings)

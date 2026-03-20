@@ -31,7 +31,7 @@ from shared.models.orm import (
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger, setup_logging
 from shared.utils.health_server import start_health_server
-from shared.utils.metrics import SYNTHETIC_EVENTS, start_metrics_server
+from shared.utils.metrics import SYNTHETIC_EVENTS, resolve_metrics_port, start_metrics_server
 from shared.utils.redis_manager import RedisManager
 
 from builder.timeline.synthetic import SyntheticTimelineGenerator
@@ -539,7 +539,7 @@ async def main() -> None:
     """Builder service entrypoint."""
     settings = get_settings()
     setup_logging("builder")
-    start_metrics_server(9093)
+    start_metrics_server(resolve_metrics_port(9093, "LV_BUILDER_METRICS_PORT"))
     start_health_server("builder")
 
     redis = RedisManager(settings)

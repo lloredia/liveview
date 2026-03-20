@@ -4,6 +4,7 @@ Wraps prometheus_client with async-safe patterns.
 """
 from __future__ import annotations
 
+import os
 import time
 from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncIterator, Iterator
@@ -171,3 +172,18 @@ def start_metrics_server(port: int | None = None) -> None:
         logger.info("metrics_server_started", port=metrics_port)
     except OSError as exc:
         logger.warning("metrics_server_failed", error=str(exc), port=metrics_port)
+
+
+def resolve_metrics_port(default_port: int, env_var: str | None = None) -> int:
+    """Resolve a metrics port from service-specific env, shared env, then service default."""
+    raw = ""
+    if env_var:
+        raw = (os.environ.get(env_var) or "").strip()
+    if not raw:
+        raw = (os.environ.get("LV_METRICS_PORT") or "").strip()
+    if not raw:
+        return default_port
+    try:
+        return int(raw)
+    except ValueError:
+        return default_port

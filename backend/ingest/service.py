@@ -21,6 +21,7 @@ from shared.utils.logging import get_logger, setup_logging
 from shared.utils.metrics import (
     INGEST_PROCESSING,
     atrack_latency,
+    resolve_metrics_port,
     start_metrics_server,
 )
 from shared.utils.redis_manager import RedisManager
@@ -310,7 +311,7 @@ async def main() -> None:
     """Ingest service entrypoint."""
     settings = get_settings()
     setup_logging("ingest")
-    start_metrics_server(9091)
+    start_metrics_server(resolve_metrics_port(9091, "LV_INGEST_METRICS_PORT"))
     start_health_server("ingest")  # GET /health on PORT for Railway healthcheck
 
     redis = RedisManager(settings)
