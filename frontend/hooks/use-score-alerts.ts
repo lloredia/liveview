@@ -3,10 +3,7 @@ import { fetchScoreboard } from "@/lib/api";
 import { isLive } from "@/lib/utils";
 import { isSoundEnabled } from "@/lib/notification-settings";
 import { playGoalSound } from "@/lib/sounds";
-import {
-  getPushPermission,
-  sendLocalNotification,
-} from "@/lib/push-notifications";
+import { sendScoreNotification } from "@/lib/native-notifications";
 import type { LeagueGroup, MatchSummary, TodayResponse } from "@/lib/types";
 
 interface ScoreSnapshot {
@@ -68,13 +65,11 @@ export function useScoreAlerts(
         playGoalSound();
       }
 
-      if (getPushPermission() === "granted") {
-        sendLocalNotification(
-          `⚽ ${scorer} scores!`,
-          `${scoreLine} · ${leagueName}`,
-          match.home_team.logo_url || undefined,
-        );
-      }
+      sendScoreNotification(
+        `⚽ ${scorer} scores!`,
+        `${scoreLine} · ${leagueName}`,
+        match.id,
+      );
 
       prevScores.current[key] = {
         home: currentHome,

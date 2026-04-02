@@ -6,6 +6,7 @@ import { setPinnedMatches, togglePinned, MAX_PINNED } from "@/lib/pinned-matches
 import { usePolling } from "@/hooks/use-polling";
 import { isLive, phaseLabel } from "@/lib/utils";
 import { endLiveActivity, updateLiveActivity } from "@/lib/live-activity";
+import { sendTrackedScoreSummary } from "@/lib/native-notifications";
 import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
 import type { MatchDetailResponse, MatchSummary, TodayResponse } from "@/lib/types";
@@ -76,6 +77,8 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
 
       const games = [...snapshotGames, ...fetchedGames];
       await updateLiveActivity(games);
+      // Send lock screen summary notification for live tracked matches
+      await sendTrackedScoreSummary(games);
     };
     sync();
     const interval = setInterval(sync, 15000);
