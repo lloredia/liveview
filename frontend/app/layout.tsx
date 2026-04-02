@@ -40,6 +40,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          if (window.Capacitor || navigator.userAgent.includes('Capacitor')) {
+            document.documentElement.classList.add('capacitor');
+          }
+        `}} />
+      </head>
       <body className="safe-top safe-bottom">
         <a
           href="#main-content"
