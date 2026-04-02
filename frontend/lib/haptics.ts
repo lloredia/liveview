@@ -1,6 +1,6 @@
 /**
  * Haptic feedback for iOS (Capacitor). No-op on web.
- * Use selection or light impact only for subtle feedback.
+ * Provides selection, impact (light/medium/heavy), and notification haptics.
  */
 
 interface WindowWithCapacitor extends Window {
@@ -44,6 +44,66 @@ export async function hapticLightImpact(): Promise<void> {
   if (H) {
     try {
       await H.Haptics.impact({ style: H.ImpactStyle.Light });
+    } catch {
+      // Silent failure
+    }
+  }
+}
+
+/** Medium impact — e.g. pin/unpin a match, toggle tracking */
+export async function hapticMediumImpact(): Promise<void> {
+  const H = await getHaptics();
+  if (H) {
+    try {
+      await H.Haptics.impact({ style: H.ImpactStyle.Medium });
+    } catch {
+      // Silent failure
+    }
+  }
+}
+
+/** Heavy impact — e.g. goal scored, important event */
+export async function hapticHeavyImpact(): Promise<void> {
+  const H = await getHaptics();
+  if (H) {
+    try {
+      await H.Haptics.impact({ style: H.ImpactStyle.Heavy });
+    } catch {
+      // Silent failure
+    }
+  }
+}
+
+/** Success notification — e.g. game tracked successfully */
+export async function hapticSuccess(): Promise<void> {
+  const H = await getHaptics();
+  if (H) {
+    try {
+      await H.Haptics.notification({ type: H.NotificationType.Success });
+    } catch {
+      // Silent failure
+    }
+  }
+}
+
+/** Warning notification — e.g. max pinned reached */
+export async function hapticWarning(): Promise<void> {
+  const H = await getHaptics();
+  if (H) {
+    try {
+      await H.Haptics.notification({ type: H.NotificationType.Warning });
+    } catch {
+      // Silent failure
+    }
+  }
+}
+
+/** Error notification — e.g. action failed */
+export async function hapticError(): Promise<void> {
+  const H = await getHaptics();
+  if (H) {
+    try {
+      await H.Haptics.notification({ type: H.NotificationType.Error });
     } catch {
       // Silent failure
     }

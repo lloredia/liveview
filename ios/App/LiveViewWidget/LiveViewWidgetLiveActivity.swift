@@ -1,7 +1,25 @@
 import ActivityKit
 import WidgetKit
 import SwiftUI
-import LiveViewLiveActivity
+
+// Types duplicated here because widget extensions are separate compile targets
+struct LiveGameItem: Codable, Hashable {
+    let matchId: String
+    let homeName: String
+    let awayName: String
+    let scoreHome: Int
+    let scoreAway: Int
+    let isLive: Bool
+    let phaseLabel: String
+}
+
+struct LiveGameAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        var games: [LiveGameItem]
+        var updatedAt: Date
+    }
+    var fixedLabel: String = "LiveView"
+}
 
 struct LiveViewWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
@@ -24,27 +42,18 @@ struct LiveViewWidgetLiveActivity: Widget {
                         ForEach(Array(context.state.games.enumerated()), id: \.element.matchId) { _, game in
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
-                                    Text(game.homeName)
-                                        .lineLimit(1)
-                                        .font(.caption)
+                                    Text(game.homeName).lineLimit(1).font(.caption)
                                     Spacer()
                                     Text("\(game.scoreHome)–\(game.scoreAway)")
                                         .font(.caption.monospacedDigit().bold())
                                     if game.isLive {
-                                        Circle()
-                                            .fill(.red)
-                                            .frame(width: 5, height: 5)
+                                        Circle().fill(.red).frame(width: 5, height: 5)
                                     }
                                     Spacer()
-                                    Text(game.awayName)
-                                        .lineLimit(1)
-                                        .font(.caption)
+                                    Text(game.awayName).lineLimit(1).font(.caption)
                                 }
-
                                 if !game.phaseLabel.isEmpty {
-                                    Text(game.phaseLabel)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                    Text(game.phaseLabel).font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
                             .padding(.horizontal, 8)
@@ -58,27 +67,19 @@ struct LiveViewWidgetLiveActivity: Widget {
             } compactLeading: {
                 if let first = context.state.games.first {
                     Text("\(shortName(first.homeName)) \(first.scoreHome)–\(first.scoreAway)")
-                        .lineLimit(1)
-                        .font(.caption2.monospacedDigit())
+                        .lineLimit(1).font(.caption2.monospacedDigit())
                 } else {
-                    Text("LiveView")
-                        .font(.caption2)
+                    Text("LiveView").font(.caption2)
                 }
             } compactTrailing: {
                 if let first = context.state.games.first {
-                    Text(shortName(first.awayName))
-                        .lineLimit(1)
-                        .font(.caption2)
+                    Text(shortName(first.awayName)).lineLimit(1).font(.caption2)
                 }
             } minimal: {
                 if context.state.games.first?.isLive == true {
-                    Image(systemName: "sportscourt.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
+                    Image(systemName: "sportscourt.fill").font(.caption2).foregroundStyle(.red)
                 } else {
-                    Image(systemName: "sportscourt.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "sportscourt.fill").font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -87,33 +88,21 @@ struct LiveViewWidgetLiveActivity: Widget {
 
 private struct LockScreenView: View {
     let state: LiveGameAttributes.ContentState
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(state.games, id: \.matchId) { game in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(shortName(game.homeName))
-                            .lineLimit(1)
-                            .font(.caption)
+                        Text(shortName(game.homeName)).lineLimit(1).font(.caption)
                         Spacer()
                         Text("\(game.scoreHome)–\(game.scoreAway)")
                             .font(.subheadline.monospacedDigit().bold())
-                        if game.isLive {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 6, height: 6)
-                        }
+                        if game.isLive { Circle().fill(.red).frame(width: 6, height: 6) }
                         Spacer()
-                        Text(shortName(game.awayName))
-                            .lineLimit(1)
-                            .font(.caption)
+                        Text(shortName(game.awayName)).lineLimit(1).font(.caption)
                     }
-
                     if !game.phaseLabel.isEmpty {
-                        Text(game.phaseLabel)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        Text(game.phaseLabel).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 4)
@@ -126,11 +115,7 @@ private struct LockScreenView: View {
 private func shortName(_ name: String) -> String {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "—" }
-
     let parts = trimmed.split(separator: " ")
-    if let last = parts.last, last.count >= 3 {
-        return String(last.prefix(3)).uppercased()
-    }
-
+    if let last = parts.last, last.count >= 3 { return String(last.prefix(3)).uppercased() }
     return String(trimmed.prefix(3)).uppercased()
 }

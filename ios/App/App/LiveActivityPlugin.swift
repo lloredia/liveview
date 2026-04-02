@@ -1,5 +1,5 @@
 import Capacitor
-import LiveViewLiveActivity
+// LiveGameAttributes and LiveGameItem are defined locally
 
 @objc(LiveActivityPlugin)
 public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {

@@ -1,6 +1,6 @@
 import ActivityKit
 import Foundation
-import LiveViewLiveActivity
+// LiveGameAttributes and LiveGameItem are defined in the widget extension
 
 /// Starts, updates, or ends the Live Activity for tracked games.
 enum LiveActivityManager {

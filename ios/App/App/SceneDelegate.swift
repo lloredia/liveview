@@ -1,4 +1,5 @@
 import UIKit
+import Capacitor
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
@@ -14,11 +15,19 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func sceneDidDisconnect(_ scene: UIScene) {}
 
-    func sceneDidBecomeActive(_ scene: UIScene) {}
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        // When the app returns to the foreground, notify the web layer
+        // so it can refresh stale scores and Live Activity state.
+        NotificationCenter.default.post(name: .capacitorDidBecomeActive, object: nil)
+    }
 
     func sceneWillResignActive(_ scene: UIScene) {}
 
     func sceneWillEnterForeground(_ scene: UIScene) {}
 
     func sceneDidEnterBackground(_ scene: UIScene) {}
+}
+
+extension Notification.Name {
+    static let capacitorDidBecomeActive = Notification.Name("capacitorDidBecomeActive")
 }

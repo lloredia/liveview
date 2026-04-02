@@ -267,6 +267,21 @@ export function TodayView({
 
   const effectiveLeagues = filteredLeagues;
 
+  // MY TEAMS section: matches involving favorited teams, across all leagues
+  const myTeamsMatches = useMemo(() => {
+    if (!effectiveData?.leagues || favoriteTeamIds.length === 0 || filter === "favorites") return [];
+    const favSet = new Set(favoriteTeamIds);
+    const matches: { match: TodayMatch; leagueName: string; leagueId: string }[] = [];
+    for (const league of effectiveData.leagues) {
+      for (const m of league.matches) {
+        if (favSet.has(m.home_team.id) || favSet.has(m.away_team.id)) {
+          matches.push({ match: m, leagueName: league.league_name, leagueId: league.league_id });
+        }
+      }
+    }
+    return matches;
+  }, [effectiveData?.leagues, favoriteTeamIds, filter]);
+
   const groupedBySport = useMemo(() => {
     const groups: { sport: string; sportType: string; leagues: typeof effectiveLeagues }[] = [];
     const map = new Map<string, typeof effectiveLeagues>();
@@ -427,6 +442,37 @@ export function TodayView({
           <GlassButton variant="primary" onClick={() => refresh()}>
             Try again
           </GlassButton>
+        </div>
+      )}
+
+      {/* MY TEAMS — favorite team matches pinned to top */}
+      {myTeamsMatches.length > 0 && (
+        <div className="mb-5">
+          <div className="mb-2 flex items-center gap-2.5 px-3 py-1.5">
+            <span className="text-base leading-none">&#9733;</span>
+            <h2 className="text-heading-sm uppercase tracking-wide text-accent-amber">
+              My Teams
+            </h2>
+            <GlassDivider className="ml-2 flex-1" />
+            <span className="text-label-sm text-text-dim">
+              {myTeamsMatches.length}
+            </span>
+          </div>
+          <section className="mx-2">
+            <div className="overflow-hidden rounded-[14px] border border-glass-border bg-glass">
+              {myTeamsMatches.map(({ match: m, leagueName }) => (
+                <MatchCard
+                  key={`fav-${m.id}`}
+                  match={toMatchSummary(m)}
+                  leagueNameForLink={leagueName}
+                  pinned={pinnedIds.includes(m.id)}
+                  onTogglePin={onTogglePin}
+                  favoriteTeamIds={favoriteTeamIds}
+                  onToggleFavoriteTeam={onToggleFavoriteTeam}
+                />
+              ))}
+            </div>
+          </section>
         </div>
       )}
 

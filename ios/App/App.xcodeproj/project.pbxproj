@@ -22,6 +22,7 @@
 		79E8CECD2F4E833300567579 /* LiveViewWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 79E8CEB62F4E833100567579 /* LiveViewWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		79E8CED92F4E833300567579 /* LiveViewLiveActivity in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D82FED79650016851F /* LiveViewLiveActivity */; };
 		A1B2C3D41FED79650016851F /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D31FED79650016851F /* LiveActivityManager.swift */; };
+		A1B2C3E01FED79650016851F /* LiveGameTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3DF1FED79650016851F /* LiveGameTypes.swift */; };
 		A1B2C3D51FED79650016851F /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D61FED79650016851F /* LiveActivityPlugin.swift */; };
 /* End PBXBuildFile section */
 
@@ -79,6 +80,7 @@
 		79E8CEBA2F4E833100567579 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A1B2C3D31FED79650016851F /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		A1B2C3DF1FED79650016851F /* LiveGameTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveGameTypes.swift; sourceTree = "<group>"; };
 		A1B2C3D61FED79650016851F /* LiveActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -146,6 +148,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				5C4E5D001FED79650016851F /* SceneDelegate.swift */,
 				A1B2C3D31FED79650016851F /* LiveActivityManager.swift */,
+				A1B2C3DF1FED79650016851F /* LiveGameTypes.swift */,
 				A1B2C3D61FED79650016851F /* LiveActivityPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -290,6 +293,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				5C4E5D011FED79650016851F /* SceneDelegate.swift in Sources */,
 				A1B2C3D41FED79650016851F /* LiveActivityManager.swift in Sources */,
+				A1B2C3E01FED79650016851F /* LiveGameTypes.swift in Sources */,
 				A1B2C3D51FED79650016851F /* LiveActivityPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

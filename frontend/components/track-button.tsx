@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { isPinned, togglePinned } from "@/lib/pinned-matches";
 import { trackGameOnServer, untrackGameOnServer } from "@/lib/notification-api";
+import { hapticMediumImpact } from "@/lib/haptics";
 
 interface TrackButtonProps {
   matchId: string;
@@ -34,6 +35,7 @@ export function TrackButton({
       e.preventDefault();
       if (loading) return;
 
+      hapticMediumImpact();
       setLoading(true);
       try {
         if (controlledPinned !== undefined) {

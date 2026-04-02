@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchSummary } from "@/lib/types";
 import { formatTime, isLive, phaseLabel, phaseShortLabel, phaseShortLabelWithClock } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
@@ -9,6 +9,7 @@ import { TeamLogo } from "./team-logo";
 import { GlassPill } from "./ui/glass";
 import { TrackButton } from "./track-button";
 import { hapticSelection } from "@/lib/haptics";
+import { buildTeamGradient, getTeamColor } from "@/lib/team-colors";
 
 /* ── Animated score digit ─────────────────────────────────────────── */
 
@@ -33,9 +34,9 @@ function AnimatedScore({ value, live }: { value: number; live: boolean }) {
 
   return (
     <span
-      className={`inline-block font-mono text-score-md tabular-nums ${
+      className={`inline-block font-mono text-lg md:text-xl font-bold tracking-tighter tabular-nums ${
         live ? liveScoreClass : "text-text-primary"
-      } ${pop ? "score-pop" : ""}`}
+      } ${pop ? "score-pop-dramatic" : ""}`}
     >
       {value}
     </span>
@@ -190,40 +191,83 @@ export const MatchCard = memo(function MatchCard({
 
   const prevScoreRef = useRef({ home: match.score.home, away: match.score.away });
   const [flash, setFlash] = useState(false);
+  const [scoringTeam, setScoringTeam] = useState<"home" | "away" | null>(null);
 
   useEffect(() => {
     const prev = prevScoreRef.current;
     if (live && (match.score.home !== prev.home || match.score.away !== prev.away)) {
+      const team = match.score.home !== prev.home ? "home" : "away";
       prevScoreRef.current = { home: match.score.home, away: match.score.away };
+      setScoringTeam(team);
       setFlash(true);
-      const id = setTimeout(() => setFlash(false), 1200);
+      const id = setTimeout(() => {
+        setFlash(false);
+        setScoringTeam(null);
+      }, 1500);
       return () => clearTimeout(id);
     }
   }, [live, match.score.home, match.score.away]);
 
+  // Team color gradient background
+  const teamGradient = useMemo(
+    () => buildTeamGradient(match.home_team.name, match.away_team.name),
+    [match.home_team.name, match.away_team.name],
+  );
+
+  // Scoring team flash color
+  const scoringFlashColor = useMemo(() => {
+    if (!scoringTeam) return undefined;
+    const name = scoringTeam === "home" ? match.home_team.name : match.away_team.name;
+    const hex = getTeamColor(name);
+    if (!hex) return undefined;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},0.20)`;
+  }, [scoringTeam, match.home_team.name, match.away_team.name]);
+
   const href = buildMatchHref(match.id, leagueNameForLink);
+
+  // Period / extra info line
+  const periodInfo = useMemo(() => {
+    if (live && match.period) {
+      const p = match.period.trim();
+      // Show short period label prominently
+      if (/^Q?\d+$/i.test(p)) return `Q${p.replace(/\D/g, "")}`;
+      if (/half/i.test(p)) return p;
+      if (/^OT/i.test(p) || /overtime/i.test(p)) return "OT";
+      return p;
+    }
+    return null;
+  }, [live, match.period]);
 
   return (
     <Link
       href={href}
       data-testid="match-item"
       className={`
-        group relative flex h-12 items-center
+        group relative flex min-h-[56px] items-center
         border-b border-glass-border-light
         transition-all duration-150
         hover:bg-glass-hover glass-press
         ${live ? "bg-accent-red/[0.03]" : ""}
-        ${flash ? "score-flash" : ""}
+        ${flash ? "score-flash-team" : ""}
         ${hasFavorite ? "border-l-2 border-l-accent-amber/70" : ""}
       `}
+      style={{
+        backgroundImage: teamGradient || undefined,
+        ...(flash && scoringFlashColor
+          ? { "--flash-color": scoringFlashColor } as React.CSSProperties
+          : {}),
+      }}
       aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
     >
       {/* Status column */}
-      <div className="flex w-[60px] shrink-0 flex-col items-center justify-center px-1">
+      <div className="flex w-[64px] shrink-0 flex-col items-center justify-center px-1">
         {live ? (
           <>
             <GlassPill variant="live" size="xs" pulse>
-              {phaseShortLabelWithClock(match.phase, match.clock)}
+              {periodInfo || phaseShortLabelWithClock(match.phase, match.clock)}
             </GlassPill>
             <span className="mt-0.5 font-mono text-label-sm font-bold leading-tight text-accent-green tabular-nums">
               <LiveClock
@@ -237,9 +281,16 @@ export const MatchCard = memo(function MatchCard({
         ) : finished ? (
           <GlassPill variant="ft" size="xs">FT</GlassPill>
         ) : scheduled && match.start_time ? (
-          <span className="text-label-md text-text-muted">
-            {formatTime(match.start_time)}
-          </span>
+          <div className="flex flex-col items-center">
+            <span className="text-label-md text-text-muted">
+              {formatTime(match.start_time)}
+            </span>
+            {match.venue && (
+              <span className="mt-0.5 max-w-[58px] truncate text-center text-label-xs text-text-dim" title={match.venue}>
+                {match.venue}
+              </span>
+            )}
+          </div>
         ) : (
           <span className="text-label-sm text-text-muted">
             {phaseLabel(match.phase)}

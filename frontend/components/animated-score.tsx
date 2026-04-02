@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { hapticHeavyImpact } from "@/lib/haptics";
 
 interface AnimatedScoreProps {
   value: number;
@@ -18,9 +19,12 @@ export function AnimatedScore({ value, className = "" }: AnimatedScoreProps) {
     const prev = prevRef.current;
     prevRef.current = value;
 
-    // Flash effect
+    // Flash effect - more dramatic
     setFlash(true);
-    setTimeout(() => setFlash(false), 600);
+    setTimeout(() => setFlash(false), 900);
+
+    // Heavy haptic on score change (goal)
+    hapticHeavyImpact();
 
     // Animate counting
     const diff = value - prev;
@@ -45,9 +49,14 @@ export function AnimatedScore({ value, className = "" }: AnimatedScoreProps) {
   return (
     <span
       className={`inline-block transition-transform ${className} ${
-        flash ? "scale-110 !text-accent-green drop-shadow-[0_0_20px_rgba(0,230,118,0.5)]" : ""
+        flash
+          ? "score-goal-moment !text-accent-green drop-shadow-[0_0_24px_rgba(0,230,118,0.6)]"
+          : ""
       }`}
-      style={{ transition: "transform 0.3s cubic-bezier(0.22,1,0.36,1), color 0.6s ease, filter 0.6s ease" }}
+      style={{
+        transition:
+          "transform 0.4s cubic-bezier(0.22,1,0.36,1), color 0.8s ease, filter 0.8s ease",
+      }}
     >
       {display}
     </span>

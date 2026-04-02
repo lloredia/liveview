@@ -74,6 +74,9 @@ const config: Config = {
         "scale-in": "scaleIn 0.2s ease forwards",
         "glass-shimmer": "glass-shimmer 2s ease-in-out infinite",
         "score-pulse": "score-pulse 1.5s ease-in-out",
+        "score-pop-dramatic": "score-pop-dramatic 0.75s cubic-bezier(0.22,1,0.36,1)",
+        "score-goal-moment": "score-goal-moment 0.9s cubic-bezier(0.22,1,0.36,1)",
+        "score-flash-team": "score-flash-team 1.5s ease-out",
         "glass-fade-in": "glass-fade-in 0.25s ease forwards",
       },
       keyframes: {
