@@ -3,8 +3,28 @@ import { NextRequest, NextResponse } from "next/server";
 /** Maximum image size: 10MB */
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
-/** Allowed image hosts (whitelist) */
-const ALLOWED_HOSTS = ['espn.com', 'thescoreapi.com', 'football-data.org'];
+/** Allowed image hosts (whitelist) — covers major sports news sources and CDNs */
+const ALLOWED_HOSTS = [
+  'espn.com', 'espncdn.com',
+  'thescoreapi.com',
+  'football-data.org',
+  'bbc.co.uk', 'bbci.co.uk', 'ichef.bbci.co.uk',
+  'skysports.com', 'skysport.com',
+  'theguardian.com', 'guim.co.uk',
+  'cbssports.com', 'cbsimg.net',
+  'yahoo.com', 'yimg.com', 's.yimg.com',
+  'marca.com', 'uecdn.es',
+  '90min.com',
+  'transfermarkt.com',
+  'images.unsplash.com',
+  'reuters.com', 'reutersconnect.com',
+  'ap.org', 'apnews.com',
+  'gettyimages.com',
+  'cloudfront.net',
+  'amazonaws.com',
+  'wp.com', 'wordpress.com',
+  'imgresizer.eurosport.com', 'eurosport.com',
+];
 
 /** Blocklist: private/local hostnames (SSRF protection). Allow all other public hostnames. */
 function isAllowedUrl(url: string): boolean {
@@ -44,7 +64,7 @@ export async function GET(request: NextRequest) {
   // Validate host is in allowlist
   try {
     const urlObj = new URL(decoded);
-    const isAllowed = ALLOWED_HOSTS.some(host => urlObj.hostname.endsWith(host));
+    const isAllowed = ALLOWED_HOSTS.some(host => urlObj.hostname === host || urlObj.hostname.endsWith('.' + host));
     if (!isAllowed) {
       return NextResponse.json({ error: "Host not in allowlist" }, { status: 403 });
     }

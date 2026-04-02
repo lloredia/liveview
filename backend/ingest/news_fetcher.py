@@ -144,13 +144,32 @@ def _extract_image(entry: Any, source: str) -> Optional[str]:
                 raw = href
                 break
 
-    # first img in description/summary
+    # first img in description/summary/content
     if not raw:
-        summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
-        if summary:
-            match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary, re.I)
-            if match:
-                raw = match.group(1)
+        # Check summary, description, and content:encoded
+        html_sources = [
+            getattr(entry, "summary", "") or "",
+            getattr(entry, "description", "") or "",
+        ]
+        # feedparser stores content:encoded in entry.content
+        content_list = getattr(entry, "content", []) or []
+        for c in content_list:
+            val = c.get("value", "") if isinstance(c, dict) else getattr(c, "value", "")
+            if val:
+                html_sources.append(val)
+
+        for html in html_sources:
+            if html:
+                match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.I)
+                if match:
+                    raw = match.group(1)
+                    break
+
+    # Try entry.image (some feeds set this)
+    if not raw:
+        img_obj = getattr(entry, "image", None)
+        if img_obj:
+            raw = getattr(img_obj, "href", None) or (img_obj.get("href") if isinstance(img_obj, dict) else None)
 
     if not raw or not str(raw).strip():
         return None

@@ -57,6 +57,13 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "a.espncdn.com", pathname: "/**" },
+      { protocol: "https", hostname: "**.bbci.co.uk", pathname: "/**" },
+      { protocol: "https", hostname: "**.skysports.com", pathname: "/**" },
+      { protocol: "https", hostname: "**.guim.co.uk", pathname: "/**" },
+      { protocol: "https", hostname: "**.yimg.com", pathname: "/**" },
+      { protocol: "https", hostname: "**.cbsimg.net", pathname: "/**" },
+      { protocol: "https", hostname: "**.uecdn.es", pathname: "/**" },
+      { protocol: "https", hostname: "**.cloudfront.net", pathname: "/**" },
     ],
   },
   env: {
