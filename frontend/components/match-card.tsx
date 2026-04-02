@@ -208,10 +208,11 @@ export const MatchCard = memo(function MatchCard({
     }
   }, [live, match.score.home, match.score.away]);
 
-  // Team color gradient background
+  // Team color gradient background — stronger in light mode
+  const { theme } = useTheme();
   const teamGradient = useMemo(
-    () => buildTeamGradient(match.home_team.name, match.away_team.name),
-    [match.home_team.name, match.away_team.name],
+    () => buildTeamGradient(match.home_team.name, match.away_team.name, theme === "light" ? 0.12 : 0.08),
+    [match.home_team.name, match.away_team.name, theme],
   );
 
   // Scoring team flash color
