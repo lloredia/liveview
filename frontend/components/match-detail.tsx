@@ -578,6 +578,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
             leagueName={leagueForESPN}
+            phase={canonical.phase}
             onPlayerClick={detailSections.playerStats?.sport === "soccer" ? (player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side }) : undefined}
           />
         )}
@@ -589,6 +590,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
             awayTeamLogo={match.away_team?.logo_url || null}
             homeTeamName={match.home_team?.name || "Home"}
             awayTeamName={match.away_team?.name || "Away"}
+            phase={canonical.phase}
             onPlayerClick={(player, teamName, teamLogo, side) => setSelectedSoccerPlayer({ player, teamName, teamLogo, side })}
           />
         )}
@@ -602,6 +604,7 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
             awayTeamName={detailSections.teamStats.awayTeamName}
             loading={detailSections.teamStats.loading}
             live={live}
+            phase={canonical.phase}
           />
         )}
       </div>
@@ -775,10 +778,12 @@ interface PlayerStatsTabProps {
   homeTeamName: string;
   awayTeamName: string;
   leagueName: string;
+  phase?: string;
   onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function PlayerStatsTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, onPlayerClick }: PlayerStatsTabProps) {
+function PlayerStatsTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, phase, onPlayerClick }: PlayerStatsTabProps) {
+  const isScheduled = phase === "scheduled" || phase === "pre_match";
   const mapping = getLeagueMapping(leagueName);
   const [activeSide, setActiveSide] = useState<"home" | "away">("home");
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -818,7 +823,13 @@ function PlayerStatsTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeam
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
         <div className="mb-3 text-3xl opacity-60">👤</div>
         <div className="mb-1 text-[14px] font-semibold text-text-secondary">No Player Stats</div>
-        <div className="text-[12px] text-text-muted">Player statistics are not yet available for this match</div>
+        <div className="text-[12px] text-text-muted">
+          {isScheduled
+            ? "Player stats will be available once the match starts"
+            : live
+              ? "Player stats will populate as the match progresses"
+              : "Player statistics were not available for this match"}
+        </div>
       </div>
     );
   }
@@ -1097,10 +1108,12 @@ interface LineupTabProps {
   awayTeamLogo: string | null;
   homeTeamName: string;
   awayTeamName: string;
+  phase?: string;
   onPlayerClick?: (player: PlayerStatLine, teamName: string, teamLogo: string | null, side: "home" | "away") => void;
 }
 
-function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, onPlayerClick }: LineupTabProps) {
+function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, phase, onPlayerClick }: LineupTabProps) {
+  const isScheduled = phase === "scheduled" || phase === "pre_match";
   if (loading) {
     return (
       <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
@@ -1205,7 +1218,11 @@ function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName,
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
         <div className="mb-3 text-3xl opacity-60">XI</div>
         <div className="mb-1 text-[14px] font-semibold text-text-secondary">Lineup Unavailable</div>
-        <div className="text-[12px] text-text-muted">Match data is not available</div>
+        <div className="text-[12px] text-text-muted">
+          {isScheduled
+            ? "Lineups are typically announced ~1 hour before kickoff"
+            : "Lineup data was not available for this match"}
+        </div>
       </div>
     );
   }
@@ -1445,6 +1462,7 @@ interface TeamStatsTabProps {
   awayTeamName: string;
   loading: boolean;
   live: boolean;
+  phase?: string;
 }
 
 const EXCLUDED_TEAM_STATS = new Set([
@@ -1452,7 +1470,8 @@ const EXCLUDED_TEAM_STATS = new Set([
   "flagrantFouls", "leadChanges", "leadPercentage",
 ]);
 
-function TeamStatsTab({ homeStats, awayStats, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, loading, live }: TeamStatsTabProps) {
+function TeamStatsTab({ homeStats, awayStats, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, loading, live, phase }: TeamStatsTabProps) {
+  const isScheduled = phase === "scheduled" || phase === "pre_match";
   if (loading) {
     return (
       <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
@@ -1477,10 +1496,14 @@ function TeamStatsTab({ homeStats, awayStats, homeTeamLogo, awayTeamLogo, homeTe
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
         <div className="mb-3 text-3xl opacity-60">📊</div>
         <div className="mb-1 text-[14px] font-semibold text-text-secondary">
-          {live ? "Waiting for Statistics" : "No Statistics Available"}
+          {isScheduled ? "Pre-Match Stats" : live ? "Waiting for Statistics" : "No Statistics Available"}
         </div>
         <div className="text-[12px] text-text-muted">
-          {live ? "Stats will populate as the match progresses" : "Match stats were not available for this game"}
+          {isScheduled
+            ? "Season statistics will appear here. In-match stats available during the game."
+            : live
+              ? "Stats will populate as the match progresses"
+              : "Match stats were not available for this game"}
         </div>
       </div>
     );
