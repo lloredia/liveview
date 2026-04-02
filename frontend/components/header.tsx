@@ -52,7 +52,8 @@ export function Header({
   return (
     <header
       role="banner"
-      className="sticky top-0 z-50 flex h-[44px] items-center justify-between px-3 md:px-4 glass-surface-elevated glass-blur border-b border-glass-border"
+      className="sticky top-0 z-50 flex h-[44px] items-center justify-between px-3 md:px-4 bg-surface-raised/95 backdrop-blur-md border-b border-surface-border"
+      style={{ position: "sticky", top: 0 }}
     >
       <div className="flex items-center gap-2">
         <button
