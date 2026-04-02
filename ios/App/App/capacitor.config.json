@@ -1,0 +1,22 @@
+{
+  "appId": "com.lloredia.liveview",
+  "appName": "LiveView",
+  "webDir": "public",
+  "server": {
+    "url": "https://frontend-lloredias-projects.vercel.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 500,
+      "launchAutoHide": true,
+      "backgroundColor": "#111118",
+      "showSpinner": false
+    }
+  },
+  "packageClassList": []
+}
