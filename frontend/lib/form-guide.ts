@@ -30,8 +30,31 @@ interface ESPNCompetitor {
     displayName?: string;
     id?: string;
   };
-  score?: string | number;
+  score?: string | number | { value?: number; displayValue?: string } | null;
   winner?: boolean;
+}
+
+// ESPN's team-schedule endpoint returns `score` as an object
+// (`{ value: number, displayValue: string }`) on some sports/seasons and
+// as a primitive string/number on others. Coerce safely for both shapes;
+// `Number({...})` is NaN, which otherwise collapses every game to 0-0.
+function readScore(raw: unknown): number | null {
+  if (raw == null) return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === "string") {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof raw === "object") {
+    const obj = raw as { value?: unknown; displayValue?: unknown };
+    if (typeof obj.value === "number" && Number.isFinite(obj.value)) return obj.value;
+    if (typeof obj.displayValue === "string" && obj.displayValue.trim() !== "") {
+      const n = Number(obj.displayValue);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
 }
 
 export async function fetchTeamForm(
@@ -71,22 +94,32 @@ export async function fetchTeamForm(
 
       if (!us || !them) continue;
 
-      const ourScore = Number(us.score) || 0;
-      const theirScore = Number(them.score) || 0;
-      const winner = us.winner;
+      const ourScore = readScore(us.score);
+      const theirScore = readScore(them.score);
 
-      let result: "W" | "L" | "D";
-      if (ourScore === theirScore) {
-        result = "D";
-      } else if (winner === true) {
+      // Prefer ESPN's explicit `winner` boolean (set on completed games).
+      // Fall back to score comparison only when both sides have real numeric
+      // scores. If we cannot determine W/L with confidence, skip the event —
+      // defaulting to "D" paints every unresolved game as a draw.
+      let result: "W" | "L" | null = null;
+      if (us.winner === true || them.winner === false) {
         result = "W";
-      } else {
+      } else if (us.winner === false || them.winner === true) {
         result = "L";
+      } else if (ourScore !== null && theirScore !== null && ourScore !== theirScore) {
+        result = ourScore > theirScore ? "W" : "L";
       }
+
+      if (result === null) continue;
+
+      const scoreLabel =
+        ourScore !== null && theirScore !== null
+          ? `${ourScore}-${theirScore}`
+          : "";
 
       results.push({
         result,
-        score: `${ourScore}-${theirScore}`,
+        score: scoreLabel,
         opponent: them.team?.abbreviation || them.team?.displayName || "???",
         date: event.date || "",
       });

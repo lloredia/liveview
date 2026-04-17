@@ -73,7 +73,26 @@ function mapEspnPhase(
   sport: string,
   leagueSlug: string = "",
 ): string {
-  const st = statusName.toLowerCase();
+  // ESPN feeds `status.type.name` as STATUS_* tokens (STATUS_SCHEDULED,
+  // STATUS_IN_PROGRESS, STATUS_FINAL, STATUS_POSTPONED, etc.). The rest of
+  // this function expects the short tokens ("pre", "in", "post"), so
+  // normalize first — without this, every game falls through to "scheduled"
+  // and the scoreboard shows FT 0-0 on completed games.
+  const raw = statusName.toLowerCase();
+  const normalize = (s: string): string => {
+    if (s.startsWith("status_")) {
+      const tail = s.slice("status_".length);
+      if (tail === "scheduled") return "pre";
+      if (tail === "in_progress" || tail === "halftime" || tail === "end_period") return "in";
+      if (tail === "final" || tail === "full_time") return "post";
+      if (tail === "postponed") return "postponed";
+      if (tail === "canceled" || tail === "cancelled") return "cancelled";
+      if (tail === "suspended" || tail === "delayed" || tail === "rain_delay") return "suspended";
+      return tail;
+    }
+    return s;
+  };
+  const st = normalize(raw);
   const detail = statusDetail.toLowerCase();
 
   if (st === "pre") return "scheduled";

@@ -19,6 +19,31 @@ interface H2HMatch {
   homeScore: number;
   awayScore: number;
   venue: string;
+  winnerSide: "home" | "away" | "draw";
+  hasScores: boolean;
+}
+
+// ESPN's team-schedule endpoint returns `score` as an object
+// (`{ value: number, displayValue: string }`) on some sports/seasons and
+// as a primitive on others. `Number({...})` is NaN, which collapses every
+// game to 0-0 and every H2H bar to draws.
+function readScore(raw: unknown): number | null {
+  if (raw == null) return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === "string") {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof raw === "object") {
+    const obj = raw as { value?: unknown; displayValue?: unknown };
+    if (typeof obj.value === "number" && Number.isFinite(obj.value)) return obj.value;
+    if (typeof obj.displayValue === "string" && obj.displayValue.trim() !== "") {
+      const n = Number(obj.displayValue);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
 }
 
 interface H2HSummary {
@@ -84,7 +109,8 @@ async function fetchH2H(
   if (!homeId) return empty;
 
   try {
-    const url = `/api/espn/site/${sport}/${slug}/teams/${homeId}/schedule?season=2025`;
+    const season = new Date().getFullYear();
+    const url = `/api/espn/site/${sport}/${slug}/teams/${homeId}/schedule?season=${season}`;
     const res = await fetch(url);
     if (!res.ok) return empty;
 
@@ -124,21 +150,36 @@ async function fetchH2H(
 
       if (!homeComp || !awayComp) continue;
 
-      const hScore = Number(homeComp.score) || 0;
-      const aScore = Number(awayComp.score) || 0;
+      const hScoreRaw = readScore(homeComp.score);
+      const aScoreRaw = readScore(awayComp.score);
+      const hScore = hScoreRaw ?? 0;
+      const aScore = aScoreRaw ?? 0;
 
       const hName = homeComp.team?.displayName || "";
       const aName = awayComp.team?.displayName || "";
 
-      if (hScore > aScore) {
-        if (homeComp.team?.id === homeId) homeWins++;
-        else awayWins++;
-      } else if (aScore > hScore) {
-        if (awayComp.team?.id === homeId) homeWins++;
-        else awayWins++;
-      } else {
+      // Trust ESPN's `winner` boolean when defined; only fall back to score
+      // compare when neither side has it set. A 0-0 with no winner flag is
+      // almost always missing data rather than an actual scoreless draw.
+      const homeWinner = homeComp.winner;
+      const awayWinner = awayComp.winner;
+      let winnerSide: "home" | "away" | "draw";
+      if (homeWinner === true) winnerSide = "home";
+      else if (awayWinner === true) winnerSide = "away";
+      else if (homeWinner === false && awayWinner === false) winnerSide = "draw";
+      else if (hScore > aScore) winnerSide = "home";
+      else if (aScore > hScore) winnerSide = "away";
+      else winnerSide = "draw";
+
+      if (winnerSide === "draw") {
         draws++;
+      } else {
+        const winningComp = winnerSide === "home" ? homeComp : awayComp;
+        if (winningComp.team?.id === homeId) homeWins++;
+        else awayWins++;
       }
+
+      const hasScores = hScore > 0 || aScore > 0 || (hScoreRaw !== null && aScoreRaw !== null && hScore !== aScore);
 
       h2hMatches.push({
         date: event.date || "",
@@ -147,6 +188,8 @@ async function fetchH2H(
         homeScore: hScore,
         awayScore: aScore,
         venue: comp.venue?.fullName || "",
+        winnerSide,
+        hasScores,
       });
     }
 
@@ -234,8 +277,8 @@ export function HeadToHead({
 
       {/* Recent matches */}
       {data.matches.map((m, i) => {
-        const homeWon = m.homeScore > m.awayScore;
-        const awayWon = m.awayScore > m.homeScore;
+        const homeWon = m.winnerSide === "home";
+        const awayWon = m.winnerSide === "away";
         const dateStr = m.date
           ? new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
           : "";
@@ -253,7 +296,7 @@ export function HeadToHead({
               {m.homeTeam}
             </span>
             <span className="min-w-[45px] text-center font-mono font-bold text-text-primary">
-              {m.homeScore} - {m.awayScore}
+              {m.hasScores ? `${m.homeScore} - ${m.awayScore}` : "—"}
             </span>
             <span className={`flex-1 text-left ${awayWon ? "font-bold text-text-primary" : "text-text-tertiary"}`}>
               {m.awayTeam}
