@@ -14,7 +14,6 @@ import {
 } from "@/lib/utils";
 import { TeamLogo } from "./team-logo";
 import { ShareButton } from "./share-button";
-import { CalendarButton } from "./calendar-button";
 import { AnimatedScore } from "./animated-score";
 import { MatchForm } from "./match-form";
 import { HeadToHead } from "./head-to-head";
@@ -470,26 +469,29 @@ export function MatchDetail({ matchId, onBack, leagueName = "", pinned = false, 
       <ScoreWatcher scoreHome={canonical.score_home} scoreAway={canonical.score_away} live={live} />
 
       {/* Back + Actions */}
-      <div className="mb-4 flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] text-accent-blue transition-colors hover:bg-surface-hover hover:text-text-primary">
-          ← Back to scoreboard
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 rounded-full border border-surface-border bg-surface-card px-3 py-1.5 text-[12px] font-medium text-accent-blue transition-all hover:border-accent-blue/40 hover:bg-accent-blue/10 active:scale-95"
+        >
+          <span aria-hidden>←</span> Back to scoreboard
         </button>
         <div className="flex items-center gap-2">
           {onTogglePin && (
             <button
               type="button"
               onClick={() => onTogglePin(matchId)}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all active:scale-95 ${
                 pinned
-                  ? "bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25"
-                  : "text-text-secondary hover:bg-surface-hover hover:text-accent-blue"
+                  ? "border-accent-blue/40 bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25"
+                  : "border-surface-border bg-surface-card text-text-secondary hover:border-surface-border-light hover:text-accent-blue"
               }`}
               aria-label={pinned ? "Untrack this match" : "Track this match"}
             >
-              {pinned ? "★ Tracked" : "☆ Track match"}
+              <span aria-hidden>{pinned ? "★" : "☆"}</span>
+              {pinned ? "Tracked" : "Track match"}
             </button>
           )}
-          <CalendarButton match={{ id: matchId, phase: canonical.phase, start_time: match.start_time, venue: match.venue, score: { home: canonical.score_home, away: canonical.score_away }, clock: canonical.clock, period: canonical.period, version: canonical.version, home_team: match.home_team as any, away_team: match.away_team as any }} leagueName={leagueName} />
           <ShareButton title={`${match.home_team?.name} vs ${match.away_team?.name}`} text={`${match.home_team?.short_name} ${canonical.score_home} - ${canonical.score_away} ${match.away_team?.short_name}`} url={`/match/${matchId}`} />
         </div>
       </div>
