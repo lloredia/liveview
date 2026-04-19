@@ -786,6 +786,7 @@ interface PlayerStatsTabProps {
 
 function PlayerStatsTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName, awayTeamName, leagueName, phase, onPlayerClick }: PlayerStatsTabProps) {
   const isScheduled = phase === "scheduled" || phase === "pre_match";
+  const live = isLive(phase ?? "");
   const mapping = getLeagueMapping(leagueName);
   const [activeSide, setActiveSide] = useState<"home" | "away">("home");
   const [sortCol, setSortCol] = useState<string | null>(null);
