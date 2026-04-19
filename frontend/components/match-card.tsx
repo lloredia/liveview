@@ -247,16 +247,17 @@ export const MatchCard = memo(function MatchCard({
       href={href}
       data-testid="match-item"
       className={`
-        group relative flex min-h-[56px] items-center
+        group relative flex min-h-[56px] items-center touch-manipulation
         border-b border-glass-border-light
         transition-all duration-150
-        hover:bg-glass-hover glass-press
+        [@media(hover:hover)]:hover:bg-glass-hover glass-press
         ${live ? "bg-accent-red/[0.03]" : ""}
         ${flash ? "score-flash-team" : ""}
         ${hasFavorite ? "border-l-2 border-l-accent-amber/70" : ""}
       `}
       style={{
         backgroundImage: teamGradient || undefined,
+        WebkitTapHighlightColor: "transparent",
         ...(flash && scoringFlashColor
           ? { "--flash-color": scoringFlashColor } as React.CSSProperties
           : {}),
@@ -264,7 +265,7 @@ export const MatchCard = memo(function MatchCard({
       aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
     >
       {/* Status column */}
-      <div className="flex w-[64px] shrink-0 flex-col items-center justify-center px-1">
+      <div className="flex w-[52px] shrink-0 flex-col items-center justify-center px-0.5">
         {live ? (
           <>
             <GlassPill variant="live" size="xs" pulse>
@@ -287,7 +288,7 @@ export const MatchCard = memo(function MatchCard({
               {formatTime(match.start_time)}
             </span>
             {match.venue && (
-              <span className="mt-0.5 max-w-[58px] truncate text-center text-label-xs text-text-dim" title={match.venue}>
+              <span className="mt-0.5 max-w-[48px] truncate text-center text-label-xs text-text-dim" title={match.venue}>
                 {match.venue}
               </span>
             )}
@@ -300,7 +301,7 @@ export const MatchCard = memo(function MatchCard({
       </div>
 
       {/* Home team */}
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pr-2">
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 pr-1.5">
         {onToggleFavoriteTeam && (
           <FavoriteStar
             teamId={match.home_team.id}
@@ -309,19 +310,20 @@ export const MatchCard = memo(function MatchCard({
           />
         )}
         <span
-          className={`truncate text-right text-body-sm ${
+          className={`min-w-0 truncate text-right text-body-sm ${
             !finished || match.score.home > match.score.away
               ? "font-semibold text-text-primary"
               : "text-text-secondary"
           }`}
         >
-          {match.home_team.name}
+          <span className="md:hidden">{match.home_team.short_name || match.home_team.name}</span>
+          <span className="hidden md:inline">{match.home_team.name}</span>
         </span>
         <TeamLogo
           url={match.home_team.logo_url}
           name={match.home_team.short_name}
           size={20}
-          className="shrink-0 md:h-5 md:w-5 h-4 w-4"
+          className="shrink-0 h-4 w-4 md:h-5 md:w-5"
         />
       </div>
 
@@ -359,21 +361,22 @@ export const MatchCard = memo(function MatchCard({
       </div>
 
       {/* Away team */}
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-1.5">
         <TeamLogo
           url={match.away_team.logo_url}
           name={match.away_team.short_name}
           size={20}
-          className="shrink-0 md:h-5 md:w-5 h-4 w-4"
+          className="shrink-0 h-4 w-4 md:h-5 md:w-5"
         />
         <span
-          className={`truncate text-body-sm ${
+          className={`min-w-0 truncate text-body-sm ${
             !finished || match.score.away > match.score.home
               ? "font-semibold text-text-primary"
               : "text-text-secondary"
           }`}
         >
-          {match.away_team.name}
+          <span className="md:hidden">{match.away_team.short_name || match.away_team.name}</span>
+          <span className="hidden md:inline">{match.away_team.name}</span>
         </span>
         {onToggleFavoriteTeam && (
           <FavoriteStar
@@ -387,7 +390,9 @@ export const MatchCard = memo(function MatchCard({
       {/* Track */}
       {onTogglePin && (
         <div className={`mr-1 shrink-0 transition-opacity ${
-          pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          pinned
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto"
         }`}>
           <TrackButton
             matchId={match.id}
