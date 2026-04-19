@@ -192,7 +192,7 @@ export function TodayView({
 
   useEffect(() => {
     if (scrollRef.current) {
-      const todayBtn = scrollRef.current.querySelector("[data-today]");
+      const todayBtn = scrollRef.current.querySelector<HTMLElement>("[data-today]");
       if (todayBtn) {
         todayBtn.scrollIntoView({ inline: "center", block: "nearest" });
       }
@@ -339,7 +339,7 @@ export function TodayView({
       {/* Date strip */}
       <div
         ref={scrollRef}
-        className="mb-3 flex gap-1.5 overflow-x-auto px-2 pb-1 scrollbar-hide"
+        className="mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-hide snap-x snap-mandatory scroll-px-4"
       >
         {dateStrip.map((item) => {
           const active = item.iso === dateStr;
@@ -351,7 +351,7 @@ export function TodayView({
                 setSelectedDate(new Date(item.date));
               }}
               className={`
-                flex-shrink-0 rounded-glass-pill px-3 py-1.5 text-label-md transition-all duration-200 glass-press
+                flex-shrink-0 snap-center rounded-glass-pill px-3 py-1.5 text-label-md transition-all duration-200 glass-press
                 ${active
                   ? "bg-accent-green text-white shadow-glass-sm"
                   : "text-text-muted hover:bg-glass-hover hover:text-text-secondary"
