@@ -8,9 +8,9 @@ interface FormBadgeProps {
 }
 
 const COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  W: { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30" },
-  L: { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/30" },
-  D: { bg: "bg-amber-500/15", text: "text-amber-400", border: "border-amber-500/30" },
+  W: { bg: "bg-accent-green/15", text: "text-accent-green", border: "border-accent-green/30" },
+  L: { bg: "bg-accent-red/15", text: "text-accent-red", border: "border-accent-red/30" },
+  D: { bg: "bg-accent-amber/15", text: "text-accent-amber", border: "border-accent-amber/30" },
 };
 
 export function FormBadge({ results, size = "sm" }: FormBadgeProps) {

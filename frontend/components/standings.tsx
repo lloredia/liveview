@@ -239,8 +239,8 @@ function SoccerTable({ rows, groupName }: { rows: StandingsRow[]; groupName?: st
               <th className="w-[36px] px-2 py-2.5 text-center">W</th>
               <th className="w-[36px] px-2 py-2.5 text-center">D</th>
               <th className="w-[36px] px-2 py-2.5 text-center">L</th>
-              <th className="w-[36px] px-2 py-2.5 text-center">GF</th>
-              <th className="w-[36px] px-2 py-2.5 text-center">GA</th>
+              <th className="hidden sm:table-cell w-[36px] px-2 py-2.5 text-center">GF</th>
+              <th className="hidden sm:table-cell w-[36px] px-2 py-2.5 text-center">GA</th>
               <th className="w-[45px] px-2 py-2.5 text-center">GD</th>
               <th className="w-[48px] px-2 py-2.5 text-center font-extrabold">Pts</th>
             </tr>
@@ -266,8 +266,8 @@ function SoccerTable({ rows, groupName }: { rows: StandingsRow[]; groupName?: st
                 <td className="px-2 py-2.5 text-center font-semibold text-text-primary">{row.wins}</td>
                 <td className="px-2 py-2.5 text-center text-text-secondary">{row.draws}</td>
                 <td className="px-2 py-2.5 text-center text-text-secondary">{row.losses}</td>
-                <td className="px-2 py-2.5 text-center text-text-secondary">{row.goalsFor}</td>
-                <td className="px-2 py-2.5 text-center text-text-secondary">{row.goalsAgainst}</td>
+                <td className="hidden sm:table-cell px-2 py-2.5 text-center text-text-secondary">{row.goalsFor}</td>
+                <td className="hidden sm:table-cell px-2 py-2.5 text-center text-text-secondary">{row.goalsAgainst}</td>
                 <td className="px-2 py-2.5 text-center">
                   <DiffBadge value={row.goalDifference} />
                 </td>
