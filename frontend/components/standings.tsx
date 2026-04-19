@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { TeamLogo } from "./team-logo";
 import { KnockoutBracket } from "./knockout-bracket";
+import { GlassTabBar } from "./ui/glass";
 import {
   getCompetitionMeta,
   isSoccerCompetition,
@@ -120,18 +121,14 @@ export function Standings({ leagueId, leagueName, leagueShortName }: StandingsPr
     <div className="animate-fade-in space-y-3">
       {/* Mode tabs (Table / Knockout) if hybrid or cup */}
       {(showTable && showKnockout) && (
-        <div className="flex gap-1 rounded-lg bg-surface-hover/40 p-1">
-          {showTable && (
-            <ModeButton active={mode === "table"} onClick={() => setMode("table")}>
-              Table
-            </ModeButton>
-          )}
-          {showKnockout && (
-            <ModeButton active={mode === "knockout"} onClick={() => setMode("knockout")}>
-              Knockout
-            </ModeButton>
-          )}
-        </div>
+        <GlassTabBar
+          tabs={[
+            ...(showTable ? [{ key: "table", label: "Table" }] : []),
+            ...(showKnockout ? [{ key: "knockout", label: "Knockout" }] : []),
+          ]}
+          active={mode}
+          onSelect={(k) => setMode(k as StandingsMode)}
+        />
       )}
 
       {/* Pure cup: only knockout, no table tabs */}
@@ -355,29 +352,6 @@ function OtherSportsStandings({
 }
 
 // ── Shared UI pieces ────────────────────────────────────────────────
-
-function ModeButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 rounded-md px-3 py-1.5 text-label-md font-semibold uppercase tracking-wider transition-all ${
-        active
-          ? "bg-surface-card text-text-primary shadow-sm"
-          : "text-text-muted hover:text-text-secondary"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function PositionBadge({ position, total }: { position: number; total: number }) {
   return (

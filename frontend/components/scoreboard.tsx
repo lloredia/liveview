@@ -10,6 +10,7 @@ import { MatchCard } from "./match-card";
 import { ScoreboardSkeleton } from "./skeleton";
 import { Standings } from "./standings";
 import { StatsDashboard } from "./stats-dashboard";
+import { EmptyState } from "./ui/empty-state";
 import { GlassTabBar, GlassPill, GlassDivider } from "./ui/glass";
 import { LastUpdatedIndicator } from "./last-updated-indicator";
 
@@ -254,9 +255,7 @@ export function Scoreboard({
           )}
 
           {(effectiveData?.matches || []).length === 0 && (
-            <div className="py-16 text-center text-body-md text-text-muted">
-              No matches today
-            </div>
+            <EmptyState title="No matches today" />
           )}
         </>
       )}

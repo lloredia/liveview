@@ -8,7 +8,7 @@ import { getApiBase, API_REQUEST_TIMEOUT_MS } from "@/lib/api";
 import { getTodayCache, setTodayCache } from "@/lib/today-cache";
 import { MatchCard } from "./match-card";
 import { TodayViewSkeleton } from "./skeleton";
-import { GlassPill, GlassDivider, GlassButton } from "./ui/glass";
+import { GlassPill, GlassDivider, GlassButton, GlassTabBar } from "./ui/glass";
 import { LastUpdatedIndicator } from "./last-updated-indicator";
 
 export type { TodayLeagueGroup, TodayResponse } from "@/lib/types";
@@ -377,36 +377,17 @@ export function TodayView({
 
       {/* Filter tabs — glass pill bar */}
       <div className="mb-4 px-2">
-        <div className="flex gap-0.5 rounded-[14px] border border-glass-border bg-glass p-1">
-          {filterTabs.map(({ key, label, count }) => {
-            const isActive = filter === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`
-                  relative flex-1 rounded-[10px] px-2 py-1.5 text-label-md uppercase tracking-wider
-                  transition-all duration-200
-                  ${isActive
-                    ? "bg-glass-elevated text-text-primary shadow-glass-sm"
-                    : "text-text-muted hover:text-text-secondary hover:bg-glass-hover"
-                  }
-                `}
-              >
-                {key === "live" && (count ?? 0) > 0 && (
-                  <span className="relative mr-1 inline-flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-red opacity-60" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
-                  </span>
-                )}
-                {label}
-                {(count ?? 0) > 0 && (
-                  <span className={`ml-1 text-label-xs ${isActive ? "opacity-60" : "opacity-40"}`}>({count})</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <GlassTabBar
+          tabs={filterTabs.map((t) => ({
+            key: t.key,
+            label: t.label,
+            count: (t.count ?? 0) > 0 ? t.count : undefined,
+            indicator:
+              t.key === "live" && (t.count ?? 0) > 0 ? "live" : null,
+          }))}
+          active={filter}
+          onSelect={(k) => setFilter(k as typeof filter)}
+        />
       </div>
 
       {/* Stale/cached banner */}
