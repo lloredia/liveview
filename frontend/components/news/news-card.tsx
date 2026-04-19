@@ -21,7 +21,7 @@ function CategoryBadge({ category }: { category: string }) {
   const label = CATEGORY_LABELS[category] ?? category;
   return (
     <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text} ${style.border}`}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-label-sm font-semibold uppercase tracking-wide ${style.bg} ${style.text} ${style.border}`}
     >
       {label}
     </span>
@@ -50,7 +50,7 @@ function SourceLogo({
   }
   return (
     <span
-      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-glass-hover text-[9px] font-bold text-text-muted ${className ?? ""}`}
+      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-glass-hover text-label-xs font-bold text-text-muted ${className ?? ""}`}
       aria-hidden
     >
       {source.charAt(0).toUpperCase()}
@@ -120,7 +120,7 @@ export const NewsCard = memo(function NewsCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               {article.sport ? (
-                <span className="text-[14px]" title={article.sport ?? undefined} aria-hidden>
+                <span className="text-body-md" title={article.sport ?? undefined} aria-hidden>
                   {sportIcon(article.sport)}
                 </span>
               ) : null}
@@ -133,7 +133,7 @@ export const NewsCard = memo(function NewsCard({
                 {article.teams.slice(0, 3).map((t) => (
                   <span
                     key={t}
-                    className="rounded bg-glass-hover px-1.5 py-0.5 text-[10px] font-medium text-text-secondary"
+                    className="rounded bg-glass-hover px-1.5 py-0.5 text-label-sm font-medium text-text-secondary"
                   >
                     {t}
                   </span>
@@ -145,7 +145,7 @@ export const NewsCard = memo(function NewsCard({
                 {article.summary}
               </p>
             )}
-            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-text-muted">
+            <div className="mt-1.5 flex items-center gap-2 text-label-md text-text-muted">
               <SourceLogo source={article.source} logoUrl={logoUrl} className="h-3.5 w-3.5 rounded-full object-contain" />
               <span>{article.source}</span>
               <span aria-hidden>·</span>
@@ -231,12 +231,12 @@ export const NewsCard = memo(function NewsCard({
             ) : null}
             <CategoryBadge category={article.category} />
             {article.leagues?.length ? (
-              <span className="text-[10px] text-text-muted">
+              <span className="text-label-sm text-text-muted">
                 · {article.leagues.slice(0, 2).join(", ")}
               </span>
             ) : null}
           </div>
-          <Heading className="line-clamp-2 text-[15px] font-semibold leading-snug text-text-primary">
+          <Heading className="line-clamp-2 text-heading-sm font-semibold leading-snug text-text-primary">
             {article.title}
           </Heading>
           {article.teams?.length ? (
@@ -244,7 +244,7 @@ export const NewsCard = memo(function NewsCard({
               {article.teams.slice(0, 4).map((t) => (
                 <span
                   key={t}
-                  className="rounded bg-glass-hover px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                  className="rounded bg-glass-hover px-2 py-0.5 text-label-md font-medium text-text-secondary"
                 >
                   {t}
                 </span>
@@ -256,7 +256,7 @@ export const NewsCard = memo(function NewsCard({
               {article.summary}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-text-muted">
+          <div className="mt-2 flex items-center gap-2 text-label-md text-text-muted">
             <SourceLogo source={article.source} logoUrl={logoUrl} className="h-3.5 w-3.5 rounded-full object-contain" />
             <span>{article.source}</span>
             <span aria-hidden>·</span>

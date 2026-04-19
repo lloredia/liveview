@@ -7,6 +7,7 @@ import type {
   ESPNEvent,
   ESPNVideo,
 } from "@/lib/espn-types";
+import { LEAGUE_ESPN } from "@/lib/league-map";
 
 interface HighlightsProps {
   homeTeamName: string;
@@ -22,23 +23,6 @@ interface VideoItem {
   duration: string;
   url: string;
 }
-
-const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
-  NBA: { sport: "basketball", slug: "nba" },
-  WNBA: { sport: "basketball", slug: "wnba" },
-  NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
-  NCAAW: { sport: "basketball", slug: "womens-college-basketball" },
-  NFL: { sport: "football", slug: "nfl" },
-  NHL: { sport: "hockey", slug: "nhl" },
-  MLB: { sport: "baseball", slug: "mlb" },
-  MLS: { sport: "soccer", slug: "usa.1" },
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  Bundesliga: { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-};
 
 function fmtDur(sec: number): string {
   return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
@@ -231,18 +215,18 @@ export function Highlights({
       >
         <div className="flex items-center gap-2">
           <span className="text-sm">🎬</span>
-          <span className="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">
+          <span className="text-label-lg font-bold uppercase tracking-wider text-text-tertiary">
             Highlights &amp; Recap
           </span>
           {(videos.length > 0 || loading) && (
-            <span className="rounded-full bg-accent-green/10 px-1.5 py-0.5 text-[9px] font-bold text-accent-green">
+            <span className="rounded-full bg-accent-green/10 px-1.5 py-0.5 text-label-xs font-bold text-accent-green">
               {videos.length > 0 ? videos.length : "…"}
             </span>
           )}
         </div>
         <span
           className={
-            "text-[11px] text-text-muted transition-transform " +
+            "text-label-md text-text-muted transition-transform " +
             (expanded ? "rotate-180" : "")
           }
         >
@@ -283,16 +267,16 @@ export function Highlights({
                       </div>
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-3">
-                      <p className="text-[13px] font-semibold text-white">
+                      <p className="text-body-sm font-semibold text-white">
                         {homeTeamName} vs {awayTeamName}
                       </p>
-                      <p className="text-[11px] text-white/90">Watch highlights & recap on YouTube</p>
+                      <p className="text-label-md text-white/90">Watch highlights & recap on YouTube</p>
                     </div>
                   </a>
                 )}
                 {firstYoutubeVideo && (
                   <div className="border-t border-surface-border bg-surface-card px-3 py-2">
-                    <p className="line-clamp-1 text-[11px] font-medium text-text-secondary">
+                    <p className="line-clamp-1 text-label-md font-medium text-text-secondary">
                       {firstYoutubeVideo.title}
                     </p>
                   </div>
@@ -334,13 +318,13 @@ export function Highlights({
                           </div>
                         </div>
                         {vid.duration && (
-                          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 font-mono text-label-sm font-bold text-white">
                             {vid.duration}
                           </span>
                         )}
                       </div>
                       <div className="px-3 py-2.5">
-                        <div className="line-clamp-2 text-[12px] font-medium text-text-secondary group-hover/vid:text-text-primary">
+                        <div className="line-clamp-2 text-label-lg font-medium text-text-secondary group-hover/vid:text-text-primary">
                           {vid.title}
                         </div>
                       </div>
@@ -355,7 +339,7 @@ export function Highlights({
                     href={recapUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-[11px] font-semibold text-text-secondary transition-colors hover:border-surface-border-light hover:text-text-primary"
+                    className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-label-md font-semibold text-text-secondary transition-colors hover:border-surface-border-light hover:text-text-primary"
                   >
                     📰 ESPN Recap ↗
                   </a>
@@ -364,14 +348,14 @@ export function Highlights({
                   href={ytUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-[11px] font-semibold text-text-secondary transition-colors hover:border-surface-border-light hover:text-text-primary"
+                  className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-label-md font-semibold text-text-secondary transition-colors hover:border-surface-border-light hover:text-text-primary"
                 >
                   ▶️ Search YouTube ↗
                 </a>
               </div>
 
               {videos.length === 0 && !embedId && (
-                <div className="mt-2 text-[11px] text-text-muted">
+                <div className="mt-2 text-label-md text-text-muted">
                   Use the links above to watch highlights.
                 </div>
               )}

@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { TeamLogo } from "./team-logo";
+import { LEAGUE_ESPN } from "@/lib/league-map";
 
 interface HeadToHeadProps {
   homeTeamName: string;
@@ -52,20 +53,6 @@ interface H2HSummary {
   awayWins: number;
   draws: number;
 }
-
-const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  "Bundesliga": { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "MLS": { sport: "soccer", slug: "usa.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-  "NBA": { sport: "basketball", slug: "nba" },
-  "WNBA": { sport: "basketball", slug: "wnba" },
-  "NHL": { sport: "hockey", slug: "nhl" },
-  "MLB": { sport: "baseball", slug: "mlb" },
-};
 
 async function findTeamId(
   teamName: string,
@@ -211,7 +198,7 @@ export function HeadToHead({
   awayTeamLogo,
   leagueName,
 }: HeadToHeadProps) {
-  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  const mapping = LEAGUE_ESPN[leagueName];
 
   const fetcher = useCallback(async (): Promise<H2HSummary> => {
     if (!mapping) return { matches: [], homeWins: 0, awayWins: 0, draws: 0 };
@@ -243,11 +230,11 @@ export function HeadToHead({
           <div className="mb-2 flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-1.5">
               <TeamLogo url={homeTeamLogo} name={homeTeamName} size={16} />
-              <span className="font-bold text-emerald-400">{data.homeWins}</span>
+              <span className="font-bold text-accent-green">{data.homeWins}</span>
             </div>
             <span className="text-text-muted">{data.draws} draw{data.draws !== 1 ? "s" : ""}</span>
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-red-400">{data.awayWins}</span>
+              <span className="font-bold text-accent-red">{data.awayWins}</span>
               <TeamLogo url={awayTeamLogo} name={awayTeamName} size={16} />
             </div>
           </div>
@@ -255,19 +242,19 @@ export function HeadToHead({
           <div className="flex h-2 overflow-hidden rounded-full">
             {data.homeWins > 0 && (
               <div
-                className="bg-emerald-500 transition-all"
+                className="bg-accent-green transition-all"
                 style={{ width: `${(data.homeWins / total) * 100}%` }}
               />
             )}
             {data.draws > 0 && (
               <div
-                className="bg-amber-500/60 transition-all"
+                className="bg-accent-amber/60 transition-all"
                 style={{ width: `${(data.draws / total) * 100}%` }}
               />
             )}
             {data.awayWins > 0 && (
               <div
-                className="bg-red-500 transition-all"
+                className="bg-accent-red transition-all"
                 style={{ width: `${(data.awayWins / total) * 100}%` }}
               />
             )}

@@ -13,8 +13,8 @@ export const CATEGORY_COLORS: Record<
     border: "border-blue-500/30",
   },
   injury: {
-    bg: "bg-red-500/15",
-    text: "text-red-400",
+    bg: "bg-accent-red/15",
+    text: "text-accent-red",
     border: "border-red-500/30",
   },
   draft: {
@@ -28,13 +28,13 @@ export const CATEGORY_COLORS: Record<
     border: "border-green-500/30",
   },
   streak: {
-    bg: "bg-amber-500/15",
-    text: "text-amber-400",
+    bg: "bg-accent-amber/15",
+    text: "text-accent-amber",
     border: "border-amber-500/30",
   },
   breaking: {
-    bg: "bg-red-600/20",
-    text: "text-red-300",
+    bg: "bg-accent-red/20",
+    text: "text-accent-red",
     border: "border-red-500/40",
   },
   rumor: {

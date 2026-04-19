@@ -153,7 +153,7 @@ export function Standings({ leagueId, leagueName, leagueShortName }: StandingsPr
                     <button
                       key={g.name}
                       onClick={() => setSelectedGroup(i)}
-                      className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      className={`rounded-full px-3 py-1 text-label-md font-semibold transition-colors ${
                         selectedGroup === i
                           ? "bg-accent-green text-white"
                           : "bg-surface-hover text-text-secondary hover:text-text-primary"
@@ -193,10 +193,10 @@ export function Standings({ leagueId, leagueName, leagueShortName }: StandingsPr
           ) : !bracketData || bracketData.rounds.length === 0 ? (
             <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
               <div className="mb-2 text-2xl">&#127942;</div>
-              <div className="text-[13px] text-text-tertiary">
+              <div className="text-body-sm text-text-tertiary">
                 Knockout bracket not available yet
               </div>
-              <div className="mt-1 text-[11px] text-text-muted">
+              <div className="mt-1 text-label-md text-text-muted">
                 Bracket data will appear once knockout rounds are scheduled
               </div>
             </div>
@@ -223,16 +223,16 @@ function SoccerTable({ rows, groupName }: { rows: StandingsRow[]; groupName?: st
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-        <h3 className="text-[12px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+        <h3 className="text-label-lg font-bold uppercase tracking-[0.1em] text-text-tertiary">
           {groupName ?? "Standings"}
         </h3>
-        <span className="text-[10px] text-text-muted">{rows.length} teams</span>
+        <span className="text-label-sm text-text-muted">{rows.length} teams</span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-[12px]">
+        <table className="w-full text-left text-label-lg">
           <thead>
-            <tr className="border-b border-surface-border text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            <tr className="border-b border-surface-border text-label-sm font-bold uppercase tracking-wider text-text-muted">
               <th className="w-[40px] px-3 py-2.5 text-center">#</th>
               <th className="min-w-[160px] px-3 py-2.5">Team</th>
               <th className="w-[40px] px-2 py-2.5 text-center">Pld</th>
@@ -300,16 +300,16 @@ function OtherSportsStandings({
   return (
     <div className="animate-fade-in overflow-hidden rounded-xl border border-surface-border bg-surface-card">
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-        <h3 className="text-[12px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+        <h3 className="text-label-lg font-bold uppercase tracking-[0.1em] text-text-tertiary">
           Standings
         </h3>
-        <span className="text-[10px] text-text-muted">{rows.length} teams</span>
+        <span className="text-label-sm text-text-muted">{rows.length} teams</span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-[12px]">
+        <table className="w-full text-left text-label-lg">
           <thead>
-            <tr className="border-b border-surface-border text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            <tr className="border-b border-surface-border text-label-sm font-bold uppercase tracking-wider text-text-muted">
               <th className="w-[40px] px-3 py-2.5 text-center">#</th>
               <th className="min-w-[160px] px-3 py-2.5">Team</th>
               <th className="w-[40px] px-2 py-2.5 text-center">GP</th>
@@ -368,7 +368,7 @@ function ModeButton({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-all ${
+      className={`flex-1 rounded-md px-3 py-1.5 text-label-md font-semibold uppercase tracking-wider transition-all ${
         active
           ? "bg-surface-card text-text-primary shadow-sm"
           : "text-text-muted hover:text-text-secondary"
@@ -382,7 +382,7 @@ function ModeButton({
 function PositionBadge({ position, total }: { position: number; total: number }) {
   return (
     <span
-      className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${
+      className={`inline-flex h-5 w-5 items-center justify-center rounded text-label-sm font-bold ${
         position <= 4
           ? "bg-accent-green/10 text-accent-green"
           : position > total - 3
@@ -398,7 +398,7 @@ function PositionBadge({ position, total }: { position: number; total: number })
 function DiffBadge({ value }: { value: number }) {
   return (
     <span
-      className={`font-mono text-[11px] font-semibold ${
+      className={`font-mono text-label-md font-semibold ${
         value > 0
           ? "text-accent-green"
           : value < 0
@@ -424,7 +424,7 @@ function EmptyState() {
   return (
     <div className="rounded-xl border border-surface-border bg-surface-card py-8 text-center">
       <div className="mb-2 text-2xl">&#128202;</div>
-      <div className="text-[13px] text-text-tertiary">
+      <div className="text-body-sm text-text-tertiary">
         Standings not available for this league
       </div>
     </div>
@@ -442,7 +442,7 @@ function DebugFooter({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-2 rounded border border-dashed border-surface-border/60 px-3 py-1.5 text-[10px] text-text-muted">
+    <div className="mt-2 rounded border border-dashed border-surface-border/60 px-3 py-1.5 text-label-sm text-text-muted">
       <button onClick={() => setOpen(!open)} className="font-mono hover:text-text-secondary">
         [debug] {open ? "hide" : "show"}
       </button>

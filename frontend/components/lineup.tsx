@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { TeamLogo } from "./team-logo";
+import { LEAGUE_ESPN } from "@/lib/league-map";
 
 interface ESPNSearchTeamWrapper {
   team: {
@@ -41,26 +42,13 @@ interface LineupData {
   away: TeamRoster;
 }
 
-const LEAGUE_ESPN_MAP: Record<string, { sport: string; slug: string }> = {
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  "Bundesliga": { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "MLS": { sport: "soccer", slug: "usa.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-  "NBA": { sport: "basketball", slug: "nba" },
-  "WNBA": { sport: "basketball", slug: "wnba" },
-  "NHL": { sport: "hockey", slug: "nhl" },
-  "MLB": { sport: "baseball", slug: "mlb" },
-};
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  injured: { bg: "bg-red-500/10", text: "text-red-400" },
-  out: { bg: "bg-red-500/10", text: "text-red-400" },
-  doubtful: { bg: "bg-amber-500/10", text: "text-amber-400" },
-  questionable: { bg: "bg-amber-500/10", text: "text-amber-400" },
+  active: { bg: "bg-accent-green/10", text: "text-accent-green" },
+  injured: { bg: "bg-accent-red/10", text: "text-accent-red" },
+  out: { bg: "bg-accent-red/10", text: "text-accent-red" },
+  doubtful: { bg: "bg-accent-amber/10", text: "text-accent-amber" },
+  questionable: { bg: "bg-accent-amber/10", text: "text-accent-amber" },
 };
 
 async function findTeamId(
@@ -173,7 +161,7 @@ export function Lineup({
   awayTeamLogo,
   leagueName,
 }: LineupProps) {
-  const mapping = LEAGUE_ESPN_MAP[leagueName];
+  const mapping = LEAGUE_ESPN[leagueName];
 
   const fetcher = useCallback(async (): Promise<LineupData> => {
     if (!mapping) {
@@ -204,7 +192,7 @@ export function Lineup({
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-surface-border bg-surface-card">
       <div className="border-b border-surface-border px-4 py-2.5">
-        <h4 className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-tertiary">
+        <h4 className="text-label-sm font-bold uppercase tracking-[0.1em] text-text-tertiary">
           Roster & Injuries
         </h4>
       </div>
@@ -212,7 +200,7 @@ export function Lineup({
       {/* Injuries */}
       {hasInjuries && (
         <div className="border-b border-surface-border">
-          <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-red-400">
+          <div className="px-4 py-2 text-label-sm font-bold uppercase tracking-wider text-accent-red">
             🏥 Injury Report
           </div>
 
@@ -237,7 +225,7 @@ export function Lineup({
       {/* Key Players */}
       {hasRoster && (
         <div>
-          <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+          <div className="px-4 py-2 text-label-sm font-bold uppercase tracking-wider text-text-tertiary">
             Key Players
           </div>
           <div className="grid grid-cols-2 gap-px bg-surface-border/30">
@@ -269,7 +257,7 @@ function TeamInjuryList({
 }) {
   return (
     <div className="px-4 py-2">
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
+      <div className="mb-1.5 flex items-center gap-1.5 text-label-md font-medium text-text-secondary">
         <TeamLogo url={teamLogo} name={teamName} size={14} />
         {teamName}
       </div>
@@ -280,10 +268,10 @@ function TeamInjuryList({
             <span
               key={i}
               title={`${p.name} — ${p.injuryNote}`}
-              className={`inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[10px] ${colors.bg}`}
+              className={`inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-label-sm ${colors.bg}`}
             >
               {p.jersey && (
-                <span className="font-mono text-[9px] text-text-muted">#{p.jersey}</span>
+                <span className="font-mono text-label-xs text-text-muted">#{p.jersey}</span>
               )}
               <span className="font-medium text-text-secondary">{p.name}</span>
               <span className={`font-bold uppercase ${colors.text}`}>{p.status}</span>
@@ -306,7 +294,7 @@ function TeamPlayerList({
 }) {
   return (
     <div className="bg-surface-card p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
+      <div className="mb-2 flex items-center gap-1.5 text-label-md font-medium text-text-secondary">
         <TeamLogo url={teamLogo} name={teamName} size={14} />
         {teamName}
       </div>
@@ -314,16 +302,16 @@ function TeamPlayerList({
         {players.slice(0, 8).map((p, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 rounded px-1.5 py-1 text-[10px] transition-colors hover:bg-surface-hover/30"
+            className="flex items-center gap-2 rounded px-1.5 py-1 text-label-sm transition-colors hover:bg-surface-hover/30"
             style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both` }}
           >
             {p.jersey && (
-              <span className="min-w-[20px] font-mono text-[9px] font-bold text-text-muted">
+              <span className="min-w-[20px] font-mono text-label-xs font-bold text-text-muted">
                 #{p.jersey}
               </span>
             )}
             <span className="flex-1 truncate text-text-secondary">{p.name}</span>
-            <span className="text-[9px] font-semibold text-text-muted">{p.position}</span>
+            <span className="text-label-xs font-semibold text-text-muted">{p.position}</span>
           </div>
         ))}
       </div>

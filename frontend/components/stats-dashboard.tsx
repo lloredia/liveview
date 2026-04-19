@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { TeamLogo } from "./team-logo";
 import type { ESPNCompetitor, ESPNEvent, LeaderCategory } from "@/lib/espn-types";
+import { LEAGUE_ESPN } from "@/lib/league-map";
 
 interface StatsDashboardProps {
   leagueName: string;
@@ -45,22 +46,6 @@ interface LeagueStats {
   drawPct: number;
   sport: string;
 }
-
-const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
-  NBA: { sport: "basketball", slug: "nba" },
-  WNBA: { sport: "basketball", slug: "wnba" },
-  NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
-  NCAAW: { sport: "basketball", slug: "womens-college-basketball" },
-  NHL: { sport: "hockey", slug: "nhl" },
-  MLB: { sport: "baseball", slug: "mlb" },
-  MLS: { sport: "soccer", slug: "usa.1" },
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  Bundesliga: { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-};
 
 function sportLabel(sport: string, key: "points" | "ppg" | "matches") {
   if (key === "points") {
@@ -292,8 +277,8 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
     return (
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
         <div className="mb-3 text-3xl opacity-60">📊</div>
-        <div className="text-[14px] font-semibold text-text-secondary">No Stats Available</div>
-        <div className="mt-1 text-[12px] text-text-muted">Check back when games are in progress</div>
+        <div className="text-body-md font-semibold text-text-secondary">No Stats Available</div>
+        <div className="mt-1 text-label-lg text-text-muted">Check back when games are in progress</div>
       </div>
     );
   }
@@ -328,7 +313,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
       {stats.totalMatches > 0 && (
         <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
           <div className="px-4 py-3">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+            <div className="mb-3 text-label-sm font-bold uppercase tracking-[0.12em] text-text-muted">
               Result Distribution
             </div>
             <div className="flex h-3 overflow-hidden rounded-full bg-surface-hover/50">
@@ -356,7 +341,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 }}
               />
             </div>
-            <div className="mt-2.5 flex items-center justify-between text-[11px]">
+            <div className="mt-2.5 flex items-center justify-between text-label-md">
               <div className="flex items-center gap-1.5">
                 <div className="h-2 w-2 rounded-full bg-accent-green" />
                 <span className="font-semibold text-text-secondary">Home</span>
@@ -383,7 +368,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
       {stats.leaderCategories.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
           <div className="border-b border-surface-border px-4 py-3">
-            <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+            <div className="mb-2.5 text-label-sm font-bold uppercase tracking-[0.12em] text-text-muted">
               Game Leaders
             </div>
             <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
@@ -391,7 +376,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 <button
                   key={cat}
                   onClick={() => setActiveLeaderCat(i)}
-                  className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-label-md font-semibold transition-all ${
                     i === activeLeaderCat
                       ? "bg-accent-blue/10 text-accent-blue ring-1 ring-accent-blue/20"
                       : "bg-surface-hover/40 text-text-muted hover:text-text-secondary"
@@ -419,10 +404,10 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] font-bold text-text-primary">
+                <div className="truncate text-heading-sm font-bold text-text-primary">
                   {catLeaders[0].name}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                <div className="flex items-center gap-2 text-label-md text-text-muted">
                   {catLeaders[0].teamLogo && (
                     <TeamLogo url={catLeaders[0].teamLogo} name={catLeaders[0].team} size={14} />
                   )}
@@ -433,7 +418,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 <div className="font-mono text-2xl font-black text-accent-blue">
                   {catLeaders[0].value}
                 </div>
-                <div className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                <div className="text-label-xs font-semibold uppercase tracking-wider text-text-muted">
                   {stats.leaderCategories[activeLeaderCat]}
                 </div>
               </div>
@@ -448,7 +433,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 i < catLeaders.length - 2 ? "border-b border-surface-border/40" : ""
               }`}
             >
-              <span className={`min-w-[20px] text-center font-mono text-[11px] font-bold ${
+              <span className={`min-w-[20px] text-center font-mono text-label-md font-bold ${
                 l.rank <= 3 ? "text-accent-amber" : "text-text-dim"
               }`}>
                 {l.rank}
@@ -464,17 +449,17 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                 <TeamLogo url={l.teamLogo} name={l.team} size={24} />
               ) : null}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] font-semibold text-text-primary">{l.name}</div>
-                <div className="text-[10px] text-text-muted">{l.team}</div>
+                <div className="truncate text-label-lg font-semibold text-text-primary">{l.name}</div>
+                <div className="text-label-sm text-text-muted">{l.team}</div>
               </div>
-              <span className="font-mono text-[14px] font-bold text-text-primary">
+              <span className="font-mono text-body-md font-bold text-text-primary">
                 {l.value}
               </span>
             </div>
           ))}
 
           {catLeaders.length === 0 && (
-            <div className="py-6 text-center text-[12px] text-text-muted">
+            <div className="py-6 text-center text-label-lg text-text-muted">
               No leader data for today&apos;s games
             </div>
           )}
@@ -485,14 +470,14 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
       {stats.teamForm.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
           <div className="border-b border-surface-border px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">
+            <div className="text-label-sm font-bold uppercase tracking-[0.12em] text-text-muted">
               Team Rankings
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-label-lg">
               <thead>
-                <tr className="border-b border-surface-border text-[9px] font-bold uppercase tracking-wider text-text-dim">
+                <tr className="border-b border-surface-border text-label-xs font-bold uppercase tracking-wider text-text-dim">
                   <th className="w-[32px] px-2 py-2.5 text-center">#</th>
                   <th className="min-w-[140px] px-3 py-2.5 text-left">Team</th>
                   <th className="px-2 py-2.5 text-center">Record</th>
@@ -512,7 +497,7 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                     }`}
                   >
                     <td className="px-2 py-2.5 text-center">
-                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-label-sm font-bold ${
                         t.rank <= 3 ? "text-accent-green" : "text-text-dim"
                       }`}>
                         {t.rank}
@@ -582,7 +567,7 @@ function HeroCard({ label, value, accent }: { label: string; value: string; acce
 
   return (
     <div className={`rounded-xl border bg-gradient-to-br p-4 ${colors[accent]}`}>
-      <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.12em] text-text-muted">
+      <div className="mb-1 text-label-xs font-bold uppercase tracking-[0.12em] text-text-muted">
         {label}
       </div>
       <div className={`font-mono text-2xl font-black ${valueColors[accent]}`}>

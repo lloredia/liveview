@@ -1,4 +1,5 @@
 import type { Team } from "./types";
+import { LEAGUE_ESPN } from "./league-map";
 
 export interface FormResult {
   result: "W" | "L" | "D";
@@ -134,16 +135,5 @@ export async function fetchTeamForm(
 /**
  * Maps our league names to ESPN API slugs for team schedule lookups.
  */
-export const LEAGUE_ESPN_SLUGS: Record<string, { sport: string; slug: string }> = {
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  "Bundesliga": { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "MLS": { sport: "soccer", slug: "usa.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-  "NBA": { sport: "basketball", slug: "nba" },
-  "WNBA": { sport: "basketball", slug: "wnba" },
-  "NHL": { sport: "hockey", slug: "nhl" },
-  "MLB": { sport: "baseball", slug: "mlb" },
-};
+/** @deprecated Import from `@/lib/league-map` instead. Kept as an alias for back-compat. */
+export const LEAGUE_ESPN_SLUGS = LEAGUE_ESPN;

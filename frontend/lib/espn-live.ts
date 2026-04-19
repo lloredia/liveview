@@ -5,6 +5,7 @@
  */
 
 import { isHalvesBasketball } from "./game-clock";
+import { LEAGUE_ESPN } from "./league-map";
 
 const ESPN_BASE = "/api/espn/site";
 
@@ -48,24 +49,6 @@ interface RawESPNEvent {
   competitions?: RawESPNCompetition[];
   date?: string;
 }
-
-const LEAGUE_ESPN: Record<string, { sport: string; slug: string }> = {
-  NBA: { sport: "basketball", slug: "nba" },
-  WNBA: { sport: "basketball", slug: "wnba" },
-  NCAAM: { sport: "basketball", slug: "mens-college-basketball" },
-  NCAAW: { sport: "basketball", slug: "womens-college-basketball" },
-  NFL: { sport: "football", slug: "nfl" },
-  NHL: { sport: "hockey", slug: "nhl" },
-  MLB: { sport: "baseball", slug: "mlb" },
-  MLS: { sport: "soccer", slug: "usa.1" },
-  "Premier League": { sport: "soccer", slug: "eng.1" },
-  "La Liga": { sport: "soccer", slug: "esp.1" },
-  Bundesliga: { sport: "soccer", slug: "ger.1" },
-  "Serie A": { sport: "soccer", slug: "ita.1" },
-  "Ligue 1": { sport: "soccer", slug: "fra.1" },
-  "Champions League": { sport: "soccer", slug: "uefa.champions" },
-  "Europa League": { sport: "soccer", slug: "uefa.europa" },
-};
 
 function mapEspnPhase(
   statusName: string,

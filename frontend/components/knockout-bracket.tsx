@@ -99,7 +99,7 @@ export function KnockoutBracket({ bracket, leagueName }: KnockoutBracketProps) {
             >
               {/* Round header */}
               <div className="mb-1 text-center" style={{ width: COL_W }}>
-                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-tertiary">
+                <div className="text-label-md font-bold uppercase tracking-[0.08em] text-text-tertiary">
                   {round.displayName}
                 </div>
               </div>
@@ -272,7 +272,7 @@ function VsCard({
             <TeamLogo url={tie.teamA.logo} name={tie.teamA.abbreviation} size={34} />
           </div>
           <span
-            className={`max-w-[64px] truncate text-center text-[10px] leading-tight ${
+            className={`max-w-[64px] truncate text-center text-label-sm leading-tight ${
               winnerA ? "font-bold text-text-primary" : winnerB ? "text-text-muted" : "font-medium text-text-primary"
             }`}
           >
@@ -291,7 +291,7 @@ function VsCard({
               >
                 {scoreA}
               </span>
-              <span className="text-[12px] text-text-muted">-</span>
+              <span className="text-label-lg text-text-muted">-</span>
               <span
                 className={`text-[18px] tabular-nums ${
                   winnerB ? "font-bold text-text-primary" : "font-semibold text-text-secondary"
@@ -301,7 +301,7 @@ function VsCard({
               </span>
             </div>
           ) : (
-            <span className="text-[12px] font-semibold uppercase text-text-muted">vs</span>
+            <span className="text-label-lg font-semibold uppercase text-text-muted">vs</span>
           )}
         </div>
 
@@ -311,7 +311,7 @@ function VsCard({
             <TeamLogo url={tie.teamB.logo} name={tie.teamB.abbreviation} size={34} />
           </div>
           <span
-            className={`max-w-[64px] truncate text-center text-[10px] leading-tight ${
+            className={`max-w-[64px] truncate text-center text-label-sm leading-tight ${
               winnerB ? "font-bold text-text-primary" : winnerA ? "text-text-muted" : "font-medium text-text-primary"
             }`}
           >
@@ -328,13 +328,13 @@ function VsCard({
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-red" />
           </span>
         )}
-        <span className={`text-[10px] font-medium ${statusInfo.color}`}>
+        <span className={`text-label-sm font-medium ${statusInfo.color}`}>
           {statusInfo.label}
         </span>
         {aggLabel && (
           <>
-            <span className="text-[10px] text-text-muted">·</span>
-            <span className="text-[10px] font-semibold text-text-tertiary">{aggLabel}</span>
+            <span className="text-label-sm text-text-muted">·</span>
+            <span className="text-label-sm font-semibold text-text-tertiary">{aggLabel}</span>
           </>
         )}
       </div>
@@ -370,21 +370,21 @@ function TBDCard({
         {/* Placeholder A */}
         <div className="flex flex-col items-center gap-0.5">
           <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full border-2 border-dashed border-surface-border/50 bg-surface-hover/40">
-            <span className="text-[10px] text-text-muted">?</span>
+            <span className="text-label-sm text-text-muted">?</span>
           </div>
-          <span className="max-w-[56px] truncate text-center text-[9px] text-text-muted">
+          <span className="max-w-[56px] truncate text-center text-label-xs text-text-muted">
             {prevRoundName ? `W${index * 2 + 1}` : "TBD"}
           </span>
         </div>
 
-        <span className="text-[11px] font-medium text-text-muted">vs</span>
+        <span className="text-label-md font-medium text-text-muted">vs</span>
 
         {/* Placeholder B */}
         <div className="flex flex-col items-center gap-0.5">
           <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full border-2 border-dashed border-surface-border/50 bg-surface-hover/40">
-            <span className="text-[10px] text-text-muted">?</span>
+            <span className="text-label-sm text-text-muted">?</span>
           </div>
-          <span className="max-w-[56px] truncate text-center text-[9px] text-text-muted">
+          <span className="max-w-[56px] truncate text-center text-label-xs text-text-muted">
             {prevRoundName ? `W${index * 2 + 2}` : "TBD"}
           </span>
         </div>

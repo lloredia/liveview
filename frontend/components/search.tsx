@@ -198,11 +198,11 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface px-3 py-1.5 text-[12px] text-text-muted transition-colors hover:border-surface-border-light hover:text-text-secondary"
+        className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface px-3 py-1.5 text-label-lg text-text-muted transition-colors hover:border-surface-border-light hover:text-text-secondary"
       >
         <span>🔍</span>
         <span className="hidden sm:inline">Search...</span>
-        <kbd className="hidden rounded border border-surface-border bg-surface-raised px-1.5 py-0.5 text-[9px] font-semibold text-text-dim sm:inline">
+        <kbd className="hidden rounded border border-surface-border bg-surface-raised px-1.5 py-0.5 text-label-xs font-semibold text-text-dim sm:inline">
           ⌘K
         </kbd>
       </button>
@@ -227,14 +227,14 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-1 bg-transparent text-[14px] text-text-primary placeholder-text-muted outline-none"
+                className="flex-1 bg-transparent text-body-md text-text-primary placeholder-text-muted outline-none"
               />
               {searching && (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-surface-border border-t-accent-green" />
               )}
               <kbd
                 onClick={() => setOpen(false)}
-                className="cursor-pointer rounded border border-surface-border px-1.5 py-0.5 text-[10px] text-text-dim hover:bg-surface-hover"
+                className="cursor-pointer rounded border border-surface-border px-1.5 py-0.5 text-label-sm text-text-dim hover:bg-surface-hover"
               >
                 ESC
               </kbd>
@@ -242,7 +242,7 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
 
             <div className="max-h-[360px] overflow-y-auto">
               {query && results.length === 0 && !searching && (
-                <div className="px-4 py-8 text-center text-[13px] text-text-tertiary">
+                <div className="px-4 py-8 text-center text-body-sm text-text-tertiary">
                   No results for &quot;{query}&quot;
                 </div>
               )}
@@ -266,16 +266,16 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium">{r.title}</div>
-                    <div className="truncate text-[10px] text-text-muted">{r.subtitle}</div>
+                    <div className="truncate text-body-sm font-medium">{r.title}</div>
+                    <div className="truncate text-label-sm text-text-muted">{r.subtitle}</div>
                   </div>
                   {r.live && (
                     <div className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5">
                       <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                      <span className="text-[9px] font-bold text-red-400">LIVE</span>
+                      <span className="text-label-xs font-bold text-red-400">LIVE</span>
                     </div>
                   )}
-                  <span className="rounded bg-surface-raised px-1.5 py-0.5 text-[9px] font-semibold uppercase text-text-dim">
+                  <span className="rounded bg-surface-raised px-1.5 py-0.5 text-label-xs font-semibold uppercase text-text-dim">
                     {r.type}
                   </span>
                 </button>
@@ -283,7 +283,7 @@ export function Search({ onLeagueSelect, onMatchSelect }: SearchProps) {
             </div>
 
             {!query && (
-              <div className="border-t border-surface-border px-4 py-3 text-center text-[11px] text-text-muted">
+              <div className="border-t border-surface-border px-4 py-3 text-center text-label-md text-text-muted">
                 Type to search across all leagues, teams, and matches
               </div>
             )}
