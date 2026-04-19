@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import type { LeagueGroup, LeagueInfo } from "@/lib/types";
 import { sportIcon } from "@/lib/utils";
 import { getLeagueLogo } from "@/lib/league-logos";
@@ -46,10 +46,34 @@ export function Sidebar({
   favoriteLeagueIds = [],
   onToggleFavoriteLeague,
 }: SidebarProps) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredGroups = useMemo(() => {
+    if (!normalizedQuery) return leagues;
+    return leagues
+      .map((group) => ({
+        ...group,
+        leagues: group.leagues.filter((l) => {
+          const name = (l.short_name || l.name || "").toLowerCase();
+          const full = (l.name || "").toLowerCase();
+          return name.includes(normalizedQuery) || full.includes(normalizedQuery);
+        }),
+      }))
+      .filter((group) => group.leagues.length > 0);
+  }, [leagues, normalizedQuery]);
+
   const allLeagues = leagues.flatMap((g) => g.leagues);
   const favoriteLeagues = allLeagues.filter((l) => favoriteLeagueIds.includes(l.id));
+  const filteredFavorites = normalizedQuery
+    ? favoriteLeagues.filter((l) => {
+        const name = (l.short_name || l.name || "").toLowerCase();
+        const full = (l.name || "").toLowerCase();
+        return name.includes(normalizedQuery) || full.includes(normalizedQuery);
+      })
+    : favoriteLeagues;
 
-  const handleFavToggle = (e: React.MouseEvent, id: string) => {
+  const handleFavToggle = (e: React.MouseEvent | React.KeyboardEvent, id: string) => {
     e.stopPropagation();
     hapticSelection();
     onToggleFavoriteLeague?.(id);
@@ -76,15 +100,16 @@ export function Sidebar({
           ${open ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        {/* Today button */}
+        {/* Today button — always visible regardless of search filter */}
         {onTodayClick && (
           <button
             onClick={onTodayClick}
+            style={{ WebkitTapHighlightColor: "transparent" }}
             className={`
-              flex w-full items-center gap-2 px-4 py-2.5 text-left text-label-lg transition-all duration-150 glass-press
+              flex w-full items-center gap-2 px-4 py-2.5 text-left text-label-lg transition-all duration-150 glass-press touch-manipulation
               ${selectedLeagueId === null
                 ? "border-l-2 border-accent-green bg-accent-green/8 text-text-primary"
-                : "border-l-2 border-transparent text-text-secondary hover:bg-glass-hover"
+                : "border-l-2 border-transparent text-text-secondary [@media(hover:hover)]:hover:bg-glass-hover"
               }
             `}
           >
@@ -94,13 +119,26 @@ export function Sidebar({
 
         <GlassDivider className="mx-3" />
 
+        {/* Search / filter input */}
+        <div className="px-3 pb-2 pt-2">
+          <input
+            type="search"
+            inputMode="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search leagues"
+            aria-label="Search leagues"
+            className="w-full rounded-md border border-glass-border bg-glass-hover/40 px-2.5 py-1.5 text-body-sm text-text-primary placeholder:text-text-dim focus:border-accent-green focus:outline-none"
+          />
+        </div>
+
         {/* Favorites */}
-        {favoriteLeagues.length > 0 && (
+        {filteredFavorites.length > 0 && (
           <div className="py-1">
             <div className="px-4 pb-1 pt-2 text-label-xs uppercase tracking-[0.12em] text-accent-amber">
               Favorites
             </div>
-            {favoriteLeagues.map((league) => (
+            {filteredFavorites.map((league) => (
               <LeagueButton
                 key={`fav-${league.id}`}
                 league={league}
@@ -115,8 +153,8 @@ export function Sidebar({
           </div>
         )}
 
-        {/* All leagues */}
-        {leagues.map((group) => (
+        {/* All leagues (filtered) */}
+        {filteredGroups.map((group) => (
           <div key={group.sport} className="py-0.5">
             <div className="flex items-center gap-1.5 px-4 py-1.5 text-label-xs uppercase tracking-[0.12em] text-text-dim">
               <span className="text-xs">{sportIcon(group.sport)}</span>
@@ -137,6 +175,12 @@ export function Sidebar({
           </div>
         ))}
 
+        {normalizedQuery && filteredGroups.length === 0 && filteredFavorites.length === 0 && (
+          <div className="px-4 py-3 text-body-sm text-text-dim">
+            No leagues match &ldquo;{query}&rdquo;.
+          </div>
+        )}
+
         <div className="h-8" />
       </aside>
     </>
@@ -154,18 +198,32 @@ function LeagueButton({
   league: LeagueInfo;
   active: boolean;
   onSelect: (id: string) => void;
-  onFavToggle: (e: React.MouseEvent, id: string) => void;
+  onFavToggle: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void;
   isFav: boolean;
   liveCount: number;
 }) {
+  const handleFavKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      onFavToggle(e, league.id);
+    }
+  };
+
+  // The favorite toggle is hidden (opacity-0) until hover on desktop, or always-visible
+  // when `isFav`. When hidden, it must not absorb taps — `pointer-events-none` keeps
+  // the outer button receiving the first touch on iOS.
+  const favVisible = isFav;
+
   return (
     <button
       onClick={() => onSelect(league.id)}
+      style={{ WebkitTapHighlightColor: "transparent" }}
       className={`
-        group flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-all duration-150 glass-press
+        group relative flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-all duration-150 glass-press touch-manipulation
         ${active
           ? "border-l-2 border-accent-green bg-accent-green/8 text-text-primary"
-          : "border-l-2 border-transparent text-text-secondary hover:bg-glass-hover hover:text-text-primary"
+          : "border-l-2 border-transparent text-text-secondary [@media(hover:hover)]:hover:bg-glass-hover [@media(hover:hover)]:hover:text-text-primary"
         }
       `}
     >
@@ -178,16 +236,24 @@ function LeagueButton({
         </GlassPill>
       )}
 
-      <button
+      {/* Nested interactive: use a div+role="button" to avoid <button> inside <button>.
+          Keep accessibility via role, tabIndex, aria-pressed, and Enter/Space handling. */}
+      <div
+        role="button"
+        tabIndex={favVisible ? 0 : -1}
         onClick={(e) => onFavToggle(e, league.id)}
+        onKeyDown={handleFavKey}
         aria-label={isFav ? `Remove ${league.name} from favorites` : `Add ${league.name} to favorites`}
         aria-pressed={isFav}
-        className={`text-label-sm opacity-0 transition-opacity group-hover:opacity-100 ${
-          isFav ? "!opacity-100 text-accent-amber" : "text-text-dim hover:text-accent-amber"
+        style={{ WebkitTapHighlightColor: "transparent" }}
+        className={`cursor-pointer select-none text-label-sm transition-opacity touch-manipulation ${
+          favVisible
+            ? "opacity-100 text-accent-amber"
+            : "pointer-events-none opacity-0 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100 text-text-dim [@media(hover:hover)]:hover:text-accent-amber"
         }`}
       >
         {isFav ? "★" : "☆"}
-      </button>
+      </div>
     </button>
   );
 }
