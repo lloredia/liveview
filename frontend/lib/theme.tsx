@@ -103,9 +103,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Toggle cycles: dark → light → dark
+  // Toggle cycles: dark → light → auto → dark
   const toggle = useCallback(() => {
-    const next = mode === "dark" ? "light" : "dark";
+    const next: ThemeMode =
+      mode === "dark" ? "light" : mode === "light" ? "auto" : "dark";
     setMode(next);
   }, [mode, setMode]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePolling } from "@/hooks/use-polling";
 import { TeamLogo } from "./team-logo";
 import { KnockoutBracket } from "./knockout-bracket";
@@ -47,7 +47,7 @@ export function Standings({ leagueId, leagueName, leagueShortName }: StandingsPr
   const [selectedGroup, setSelectedGroup] = useState(0);
 
   // Reset mode when league changes
-  useMemo(() => {
+  useEffect(() => {
     setMode(compType === "cup" ? "knockout" : "table");
     setSelectedGroup(0);
   }, [leagueShortName, compType]);

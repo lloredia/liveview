@@ -161,7 +161,7 @@ function FavoriteStar({
         onToggle(teamId);
       }}
       data-testid="favorite-btn"
-      className="shrink-0 rounded p-0.5 text-text-muted hover:text-accent-amber focus:outline-none focus:ring-2 focus:ring-accent-amber/50"
+      className="relative z-10 shrink-0 rounded p-0.5 text-text-muted hover:text-accent-amber focus:outline-none focus:ring-2 focus:ring-accent-amber/50"
       aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
       aria-pressed={isFavorite}
     >
@@ -243,8 +243,7 @@ export const MatchCard = memo(function MatchCard({
   }, [live, match.period]);
 
   return (
-    <Link
-      href={href}
+    <article
       data-testid="match-item"
       className={`
         group relative flex min-h-[56px] items-center touch-manipulation
@@ -262,8 +261,13 @@ export const MatchCard = memo(function MatchCard({
           ? { "--flash-color": scoringFlashColor } as React.CSSProperties
           : {}),
       }}
-      aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
     >
+      <Link
+        href={href}
+        aria-label={`${match.home_team.name} ${match.score.home} ${match.score.away} ${match.away_team.name}, ${live ? "live" : finished ? "full time" : "view match"}`}
+        className="absolute inset-0 z-0"
+      />
+
       {/* Status column */}
       <div className="flex w-[52px] shrink-0 flex-col items-center justify-center px-0.5">
         {live ? (
@@ -389,7 +393,7 @@ export const MatchCard = memo(function MatchCard({
 
       {/* Track */}
       {onTogglePin && (
-        <div className={`mr-1 shrink-0 transition-opacity ${
+        <div className={`relative z-10 mr-1 shrink-0 transition-opacity ${
           pinned
             ? "opacity-100"
             : "opacity-0 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto"
@@ -401,6 +405,6 @@ export const MatchCard = memo(function MatchCard({
           />
         </div>
       )}
-    </Link>
+    </article>
   );
 });

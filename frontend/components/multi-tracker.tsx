@@ -91,11 +91,15 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
     <div className="fixed inset-x-0 bottom-0 z-50 safe-bottom">
       <div className="glass-surface-prominent glass-blur border-t border-glass-border">
         {/* Header bar */}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-between px-4 py-2 glass-press"
-        >
-          <div className="flex items-center gap-2">
+        <div className="relative flex w-full items-center justify-between px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="absolute inset-0 glass-press"
+            aria-label={expanded ? "Collapse tracker" : "Expand tracker"}
+          />
+          <div className="relative flex items-center gap-2">
             <span className="text-label-md font-bold uppercase tracking-wider text-text-muted">
               Tracking
             </span>
@@ -103,8 +107,9 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
               {pinnedIds.length}/{MAX_PINNED}
             </GlassPill>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setPinnedMatches([]);
@@ -123,7 +128,7 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
               <path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
             </svg>
           </div>
-        </button>
+        </div>
 
         {/* Collapsed: horizontal chips */}
         {!expanded && (
@@ -267,13 +272,18 @@ function TrackerCard({
 
   return (
     <div
-      onClick={onClick}
-      className={`mb-1.5 flex cursor-pointer items-center gap-3 rounded-[14px] px-3 py-2.5 transition-all glass-press ${
+      className={`relative mb-1.5 flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-all glass-press ${
         live
           ? "bg-accent-red/5 border border-accent-red/15"
           : "glass-surface hover:bg-glass-hover"
       }`}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Open ${homeShortName} vs ${awayShortName}`}
+        className="absolute inset-0 rounded-[14px]"
+      />
       {/* Home team */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <TeamLogo url={homeLogo} name={homeName} size={20} />
@@ -308,11 +318,12 @@ function TrackerCard({
 
       {/* Remove button */}
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
         }}
-        className="ml-1 shrink-0 rounded-[8px] p-1 text-text-dim transition-colors hover:bg-glass-hover hover:text-accent-red"
+        className="relative z-10 ml-1 shrink-0 rounded-[8px] p-1 text-text-dim transition-colors hover:bg-glass-hover hover:text-accent-red"
         aria-label="Remove from tracker"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

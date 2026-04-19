@@ -202,58 +202,57 @@ function LeagueButton({
   isFav: boolean;
   liveCount: number;
 }) {
-  const handleFavKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      e.stopPropagation();
-      onFavToggle(e, league.id);
-    }
-  };
-
-  // The favorite toggle is hidden (opacity-0) until hover on desktop, or always-visible
-  // when `isFav`. When hidden, it must not absorb taps — `pointer-events-none` keeps
-  // the outer button receiving the first touch on iOS.
   const favVisible = isFav;
 
   return (
-    <button
-      onClick={() => onSelect(league.id)}
-      style={{ WebkitTapHighlightColor: "transparent" }}
+    <div
       className={`
-        group relative flex w-full items-center gap-1.5 py-1.5 pl-6 pr-3 text-left transition-all duration-150 glass-press touch-manipulation
+        group relative w-full transition-all duration-150
         ${active
-          ? "border-l-2 border-accent-green bg-accent-green/8 text-text-primary"
-          : "border-l-2 border-transparent text-text-secondary [@media(hover:hover)]:hover:bg-glass-hover [@media(hover:hover)]:hover:text-text-primary"
+          ? "border-l-2 border-accent-green bg-accent-green/8"
+          : "border-l-2 border-transparent [@media(hover:hover)]:hover:bg-glass-hover"
         }
       `}
     >
-      <LeagueLogo name={league.short_name || league.name} apiLogoUrl={league.logo_url} />
-      <span className="flex-1 truncate text-label-lg">{league.short_name || league.name}</span>
+      <button
+        onClick={() => onSelect(league.id)}
+        style={{ WebkitTapHighlightColor: "transparent" }}
+        className={`
+          flex w-full items-center gap-1.5 py-1.5 pl-6 pr-10 text-left glass-press touch-manipulation
+          ${active
+            ? "text-text-primary"
+            : "text-text-secondary [@media(hover:hover)]:hover:text-text-primary"
+          }
+        `}
+      >
+        <LeagueLogo name={league.short_name || league.name} apiLogoUrl={league.logo_url} />
+        <span className="flex-1 truncate text-label-lg">{league.short_name || league.name}</span>
 
-      {liveCount > 0 && (
-        <GlassPill variant="live" size="xs" pulse>
-          {liveCount}
-        </GlassPill>
-      )}
+        {liveCount > 0 && (
+          <GlassPill variant="live" size="xs" pulse>
+            {liveCount}
+          </GlassPill>
+        )}
+      </button>
 
-      {/* Nested interactive: use a div+role="button" to avoid <button> inside <button>.
-          Keep accessibility via role, tabIndex, aria-pressed, and Enter/Space handling. */}
-      <div
-        role="button"
-        tabIndex={favVisible ? 0 : -1}
-        onClick={(e) => onFavToggle(e, league.id)}
-        onKeyDown={handleFavKey}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFavToggle(e, league.id);
+        }}
         aria-label={isFav ? `Remove ${league.name} from favorites` : `Add ${league.name} to favorites`}
         aria-pressed={isFav}
+        tabIndex={favVisible ? 0 : -1}
         style={{ WebkitTapHighlightColor: "transparent" }}
-        className={`cursor-pointer select-none text-label-sm transition-opacity touch-manipulation ${
+        className={`absolute right-3 top-1/2 -translate-y-1/2 select-none text-label-sm transition-opacity touch-manipulation ${
           favVisible
             ? "opacity-100 text-accent-amber"
             : "pointer-events-none opacity-0 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100 text-text-dim [@media(hover:hover)]:hover:text-accent-amber"
         }`}
       >
         {isFav ? "★" : "☆"}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }

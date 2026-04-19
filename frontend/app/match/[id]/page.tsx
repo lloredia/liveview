@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
@@ -39,6 +39,10 @@ export default function MatchPage() {
 
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+  const totalLiveRef = useRef(0);
+  useEffect(() => {
+    totalLiveRef.current = totalLive;
+  }, [totalLive]);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
   const [tabVisible, setTabVisible] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -94,11 +98,16 @@ export default function MatchPage() {
       setTotalLive(total);
     };
 
-    pollLiveCounts();
-    const interval = tabVisible ? (totalLive > 0 ? 12_000 : 30_000) : 60_000;
-    const timer = setInterval(pollLiveCounts, interval);
-    return () => clearInterval(timer);
-  }, [tabVisible, totalLive]);
+    const getInterval = () =>
+      tabVisible ? (totalLiveRef.current > 0 ? 12_000 : 30_000) : 60_000;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      pollLiveCounts();
+      timer = setTimeout(loop, getInterval());
+    };
+    loop();
+    return () => clearTimeout(timer);
+  }, [tabVisible]);
 
   const handleLeagueSelect = useCallback(
     (id: string) => {

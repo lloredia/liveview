@@ -1351,9 +1351,23 @@ function SoccerPlayerDetailModal({ player, teamName, teamLogo, leagueName, match
     return "0";
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Player stats">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        tabIndex={-1}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      />
       <div className="relative max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-xl">
         {/* Header — LiveScore style: name, team, #, position */}
         <div className="border-b border-surface-border bg-surface-hover/30 px-5 py-4">

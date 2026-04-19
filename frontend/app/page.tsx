@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchLeagues, fetchLiveCounts } from "@/lib/api";
@@ -43,6 +43,10 @@ function HomeContent() {
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [totalLive, setTotalLive] = useState(0);
+  const totalLiveRef = useRef(0);
+  useEffect(() => {
+    totalLiveRef.current = totalLive;
+  }, [totalLive]);
   const [todaySnapshot, setTodaySnapshot] = useState<TodayResponse | null>(null);
   const online = useOnlineStatus();
   const { isAuthed, requireAuth, openLogin } = useRequireAuth();
@@ -131,11 +135,16 @@ function HomeContent() {
         if (!retry) setTimeout(() => pollCounts(true), 2000);
       }
     };
-    pollCounts();
-    const interval = tabVisible ? (totalLive > 0 ? 12_000 : 30_000) : 60_000;
-    const timer = setInterval(() => pollCounts(), interval);
-    return () => clearInterval(timer);
-  }, [leagues, tabVisible, totalLive]);
+    const getInterval = () =>
+      tabVisible ? (totalLiveRef.current > 0 ? 12_000 : 30_000) : 60_000;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      pollCounts();
+      timer = setTimeout(loop, getInterval());
+    };
+    loop();
+    return () => clearTimeout(timer);
+  }, [leagues, tabVisible]);
 
   useEffect(() => {
     const HEALTH_TIMEOUT_MS = 25_000;
