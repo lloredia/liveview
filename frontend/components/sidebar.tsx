@@ -93,10 +93,10 @@ export function Sidebar({
         role="navigation"
         aria-label="League navigation"
         className={`
-          fixed inset-y-[44px] left-0 z-50 w-[260px] overflow-y-auto
+          fixed left-0 top-11 bottom-0 z-50 w-[260px] overflow-y-auto safe-bottom
           glass-surface-elevated glass-blur border-r border-glass-border
           transition-transform duration-200 ease-out
-          md:sticky md:top-[44px] md:z-auto md:h-[calc(100vh-44px)] md:w-[200px] md:min-w-[200px] md:translate-x-0 md:transition-none
+          md:sticky md:top-11 md:z-auto md:h-[calc(100dvh-2.75rem)] md:w-[200px] md:min-w-[200px] md:translate-x-0 md:transition-none
           ${open ? "translate-x-0" : "-translate-x-full"}
         `}
       >
