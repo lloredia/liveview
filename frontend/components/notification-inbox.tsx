@@ -9,6 +9,7 @@ import {
 } from "@/lib/notification-api";
 import { getDeviceId } from "@/lib/device";
 import { GlassPill } from "./ui/glass";
+import { EventIcon } from "./ui/icons";
 
 interface NotificationInboxProps {
   className?: string;
@@ -92,17 +93,18 @@ export function NotificationInbox({ className = "" }: NotificationInboxProps) {
     return `${Math.floor(hrs / 24)}d`;
   };
 
-  const eventIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      score_update: "\u26BD",
-      lead_change: "\uD83D\uDD04",
-      game_start: "\uD83D\uDFE2",
-      halftime: "\u23F8",
-      overtime_start: "\u26A1",
-      final: "\uD83C\uDFC1",
-      major_event: "\uD83D\uDEA8",
+  const renderEventIcon = (type: string) => {
+    // Map notification event types to SVG icons
+    const iconType: Record<string, string> = {
+      score_update: "goal",
+      lead_change: "substitution",
+      game_start: "match_start",
+      halftime: "halftime",
+      overtime_start: "goal",
+      final: "match_end",
+      major_event: "goal",
     };
-    return icons[type] || "\uD83D\uDD14";
+    return <EventIcon type={iconType[type] ?? "match_start"} size={14} className="text-text-secondary" />;
   };
 
   return (
@@ -165,8 +167,8 @@ export function NotificationInbox({ className = "" }: NotificationInboxProps) {
                   border-b border-glass-border-light last:border-b-0
                 `}
               >
-                <span className="mt-0.5 text-base leading-none">
-                  {eventIcon(item.event_type)}
+                <span className="mt-0.5 leading-none">
+                  {renderEventIcon(item.event_type)}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TeamLogo } from "./team-logo";
 import type { ESPNCompetitor, ESPNEvent, LeaderCategory } from "@/lib/espn-types";
 import { LEAGUE_ESPN } from "@/lib/league-map";
+import { SportIcon } from "./ui/icons";
 
 interface StatsDashboardProps {
   leagueName: string;
@@ -59,13 +60,6 @@ function sportLabel(sport: string, key: "points" | "ppg" | "matches") {
     return "Points / Game";
   }
   return "Completed";
-}
-
-function sportIcon(sport: string) {
-  if (sport === "basketball") return "🏀";
-  if (sport === "hockey") return "🏒";
-  if (sport === "baseball") return "⚾";
-  return "⚽";
 }
 
 export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardProps) {
@@ -399,8 +393,8 @@ export function StatsDashboard({ leagueName, leagueShortName }: StatsDashboardPr
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover text-xl">
-                  {sportIcon(stats.sport)}
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover text-text-muted">
+                  <SportIcon sport={stats.sport} size={26} />
                 </div>
               )}
               <div className="min-w-0 flex-1">

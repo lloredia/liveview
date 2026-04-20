@@ -22,6 +22,7 @@ import { playGoalSound } from "@/lib/sounds";
 import { isSoundEnabled } from "@/lib/notification-settings";
 import type { MatchDetailResponse, MatchEvent, MatchStatsResponse } from "@/lib/types";
 import { LEAGUE_ESPN } from "@/lib/league-map";
+import { BarChart3 } from "./ui/icons";
 
 // ===========================================================================
 // Types
@@ -1477,7 +1478,7 @@ function TeamStatsTab({ homeStats, awayStats, homeTeamLogo, awayTeamLogo, homeTe
   if (homeStats.length === 0 && awayStats.length === 0) {
     return (
       <div className="rounded-xl border border-surface-border bg-surface-card py-10 text-center">
-        <div className="mb-3 text-3xl opacity-60">📊</div>
+        <div className="mb-3 flex justify-center text-text-dim"><BarChart3 size={32} /></div>
         <div className="mb-1 text-body-md font-semibold text-text-secondary">
           {isScheduled ? "Pre-Match Stats" : live ? "Waiting for Statistics" : "No Statistics Available"}
         </div>
