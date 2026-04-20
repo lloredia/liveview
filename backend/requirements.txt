@@ -17,7 +17,12 @@ feedparser>=6.0.0
 pywebpush>=2.0.0
 PyJWT>=2.8.0
 cryptography>=42.0.0
-passlib[bcrypt]>=1.7.4
+passlib>=1.7.4
+# Pin bcrypt <4.1 — passlib 1.7.4's version detection breaks on bcrypt 4.1+
+# (reads the removed bcrypt.__about__.__version__ attribute) and falls through
+# to a code path that rejects every password with "password cannot be longer
+# than 72 bytes". This is what broke /v1/auth/register in production.
+bcrypt>=4.0.1,<4.1
 opentelemetry-api>=1.21.0,<2.0
 opentelemetry-sdk>=1.21.0,<2.0
 opentelemetry-exporter-jaeger>=1.21.0,<2.0
