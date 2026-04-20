@@ -79,6 +79,13 @@ MIGRATION_PRESENCE_CHECKS = {
               AND column_name = 'deleted_at'
         )
     """,
+    "009_password_reset_tokens.sql": """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'password_reset_tokens'
+        )
+    """,
 }
 
 

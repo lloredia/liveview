@@ -4,17 +4,26 @@ oauth-ensure (get-or-create user for OAuth, called by NextAuth server).
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
 from api.dependencies import get_db
-from auth.models import AuthIdentityORM, PasswordCredentialORM, UserORM
+from auth.models import (
+    AuthIdentityORM,
+    PasswordCredentialORM,
+    PasswordResetTokenORM,
+    UserORM,
+)
 from shared.utils.database import DatabaseManager
 from shared.utils.logging import get_logger
 
@@ -121,6 +130,187 @@ async def login(
             email=user.email,
             name=user.name,
         )
+
+
+# ── Password Reset ──────────────────────────────────────────────────
+
+RESET_TOKEN_TTL = timedelta(hours=1)
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _reset_link_base() -> str:
+    """Base URL for the reset link shown in the email. Env-configurable."""
+    return (
+        os.environ.get("LV_APP_URL")
+        or os.environ.get("APP_URL")
+        or "https://www.liveview-tracker.com"
+    ).rstrip("/")
+
+
+async def _send_reset_email(to_email: str, reset_url: str) -> bool:
+    """Send reset email via Resend HTTP API when RESEND_API_KEY is set.
+    Returns True if an email was dispatched, False otherwise."""
+    api_key = (os.environ.get("RESEND_API_KEY") or "").strip()
+    if not api_key:
+        return False
+    from_addr = (
+        os.environ.get("RESEND_FROM")
+        or "LiveView <noreply@liveview-tracker.com>"
+    )
+    body_html = f"""<p>We received a request to reset your LiveView password.</p>
+<p><a href=\"{reset_url}\">Reset your password</a></p>
+<p>This link expires in 1 hour. If you didn't ask for this, you can ignore this email.</p>
+"""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": from_addr,
+                    "to": [to_email],
+                    "subject": "Reset your LiveView password",
+                    "html": body_html,
+                },
+            )
+            if resp.status_code >= 400:
+                logger.warning(
+                    "resend email failed status=%s body=%s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+                return False
+            return True
+    except Exception as exc:
+        logger.warning("resend email error: %s", exc)
+        return False
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetRequestResponse(BaseModel):
+    """Always returns ok=True regardless of whether the email exists,
+    to avoid leaking account existence. In non-production, `debug_url` is
+    populated so manual testing doesn't require SMTP."""
+
+    ok: bool = True
+    debug_url: Optional[str] = None
+
+
+@router.post("/auth/password/request-reset", response_model=PasswordResetRequestResponse)
+async def request_password_reset(
+    req: PasswordResetRequest,
+    db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
+):
+    """Issue a single-use, 1-hour reset token. Emails the user if
+    RESEND_API_KEY is configured; otherwise logs the reset URL so an
+    operator can retrieve it from Railway logs. Always returns 200."""
+    email_norm = req.email.strip().lower()
+    debug_url: Optional[str] = None
+    async with db.write_session() as session:
+        cred = (
+            await session.execute(
+                select(PasswordCredentialORM).where(
+                    PasswordCredentialORM.email == email_norm
+                )
+            )
+        ).scalar_one_or_none()
+        if cred:
+            token = secrets.token_urlsafe(32)
+            token_hash = _hash_token(token)
+            expires_at = datetime.now(timezone.utc) + RESET_TOKEN_TTL
+            row = PasswordResetTokenORM(
+                user_id=cred.user_id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+            session.add(row)
+            await session.flush()
+
+            reset_url = f"{_reset_link_base()}/reset-password?token={token}"
+            emailed = await _send_reset_email(email_norm, reset_url)
+            if emailed:
+                logger.info("password reset emailed user=%s", cred.user_id)
+            else:
+                logger.info(
+                    "password reset (no email configured) user=%s url=%s",
+                    cred.user_id,
+                    reset_url,
+                )
+            if not _is_production():
+                debug_url = reset_url
+        else:
+            logger.info("password reset requested for unknown email")
+
+    return PasswordResetRequestResponse(ok=True, debug_url=debug_url)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=16, max_length=256)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    ok: bool = True
+
+
+def _is_production() -> bool:
+    return (
+        os.environ.get("LV_ENV")
+        or os.environ.get("ENVIRONMENT")
+        or ""
+    ).lower() in ("production", "prod")
+
+
+@router.post("/auth/password/reset", response_model=PasswordResetConfirmResponse)
+async def confirm_password_reset(
+    req: PasswordResetConfirm,
+    db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
+):
+    """Verify token, update password, mark token used."""
+    token_hash = _hash_token(req.token)
+    async with db.write_session() as session:
+        row = (
+            await session.execute(
+                select(PasswordResetTokenORM).where(
+                    PasswordResetTokenORM.token_hash == token_hash
+                )
+            )
+        ).scalar_one_or_none()
+        now = datetime.now(timezone.utc)
+        if (
+            not row
+            or row.used_at is not None
+            or row.expires_at < now
+        ):
+            raise HTTPException(400, "Invalid or expired reset link")
+
+        cred = (
+            await session.execute(
+                select(PasswordCredentialORM).where(
+                    PasswordCredentialORM.user_id == row.user_id
+                )
+            )
+        ).scalar_one_or_none()
+        if not cred:
+            raise HTTPException(400, "Invalid or expired reset link")
+
+        cred.password_hash = pwd_ctx.hash(req.password)
+        row.used_at = now
+        await session.flush()
+        logger.info("password reset completed user=%s", row.user_id)
+
+    return PasswordResetConfirmResponse(ok=True)
 
 
 class OAuthEnsureRequest(BaseModel):

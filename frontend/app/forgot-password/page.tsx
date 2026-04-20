@@ -6,24 +6,43 @@ import { SportsBackground } from "@/components/auth/SportsBackground";
 import { VignetteOverlay } from "@/components/auth/VignetteOverlay";
 import { GlassAuthCard } from "@/components/auth/GlassAuthCard";
 
-const SUPPORT_EMAIL = "support@liveview-tracker.com";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [debugUrl, setDebugUrl] = useState<string | null>(null);
 
-  const mailtoHref = (() => {
-    const subject = encodeURIComponent("Password reset — LiveView");
-    const body = encodeURIComponent(
-      [
-        "Hi LiveView team,",
-        "",
-        `I need to reset the password for my account: ${email || "[your email]"}`,
-        "",
-        "Thanks.",
-      ].join("\n"),
-    );
-    return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
-  })();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/auth/password/request-reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (!res.ok) {
+        setError("Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        debug_url?: string | null;
+      };
+      setSent(true);
+      if (data.debug_url) setDebugUrl(data.debug_url);
+    } catch {
+      setError("Could not reach the server. Check your connection.");
+    }
+    setLoading(false);
+  };
 
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-[#08080e] px-4 py-12">
@@ -49,57 +68,75 @@ export default function ForgotPasswordPage() {
           Reset your password
         </h1>
 
-        <p className="mt-3 text-center text-body-sm text-text-secondary leading-relaxed md:text-body-md">
-          Enter the email associated with your account and we&apos;ll help
-          you recover access.
-        </p>
+        {sent ? (
+          <>
+            <p className="mt-4 text-center text-body-sm text-text-secondary leading-relaxed md:text-body-md">
+              If an account exists for <strong>{email}</strong>, we&apos;ve sent
+              a password reset link. It expires in 1 hour.
+            </p>
+            {debugUrl && (
+              <div className="mt-4 rounded-lg border border-accent-amber/40 bg-accent-amber/10 p-3">
+                <p className="text-label-md font-semibold text-accent-amber">
+                  Dev mode link
+                </p>
+                <a
+                  href={debugUrl}
+                  className="mt-1 block break-all text-label-md text-accent-green hover:underline"
+                >
+                  {debugUrl}
+                </a>
+              </div>
+            )}
+            <Link
+              href="/login"
+              className="mt-8 flex h-12 items-center justify-center rounded-[14px] bg-accent-green font-semibold text-black transition-opacity hover:opacity-90"
+            >
+              Back to sign in
+            </Link>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-center text-body-sm text-text-secondary leading-relaxed md:text-body-md">
+              Enter the email for your account. We&apos;ll send you a link to set
+              a new password.
+            </p>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            window.location.href = mailtoHref;
-          }}
-          className="mt-8 flex flex-col gap-3"
-        >
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-12 rounded-[14px] border border-white/[0.12] bg-white/[0.04] px-4 text-text-primary placeholder:text-text-muted focus:border-accent-green focus:outline-none focus:ring-2 focus:ring-accent-green/30"
-            required
-            autoComplete="email"
-            aria-label="Email address"
-            autoFocus
-          />
-          <button
-            type="submit"
-            disabled={!email.trim()}
-            className="h-12 rounded-[14px] bg-accent-green font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 disabled:opacity-40"
-          >
-            Email support
-          </button>
-        </form>
+            <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-3">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12 rounded-[14px] border border-white/[0.12] bg-white/[0.04] px-4 text-text-primary placeholder:text-text-muted focus:border-accent-green focus:outline-none focus:ring-2 focus:ring-accent-green/30"
+                required
+                autoComplete="email"
+                aria-label="Email address"
+                autoFocus
+              />
+              {error && (
+                <p className="text-body-sm text-accent-red md:text-body-md" role="alert">
+                  {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={!email.trim() || loading}
+                className="h-12 rounded-[14px] bg-accent-green font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 disabled:opacity-40"
+              >
+                {loading ? "Sending…" : "Send reset link"}
+              </button>
+            </form>
 
-        <p className="mt-6 text-center text-label-md text-text-muted leading-relaxed md:text-body-sm">
-          We&apos;ll reply within 1 business day. You can also reach us directly at{" "}
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="text-accent-green hover:underline"
-          >
-            {SUPPORT_EMAIL}
-          </a>
-          .
-        </p>
-
-        <div className="mt-8 flex justify-center">
-          <Link
-            href="/login"
-            className="text-body-sm font-medium text-accent-green hover:underline md:text-body-md"
-          >
-            Back to sign in
-          </Link>
-        </div>
+            <div className="mt-8 flex justify-center">
+              <Link
+                href="/login"
+                className="text-body-sm font-medium text-accent-green hover:underline md:text-body-md"
+              >
+                Back to sign in
+              </Link>
+            </div>
+          </>
+        )}
       </GlassAuthCard>
     </div>
   );
