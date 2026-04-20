@@ -39,6 +39,10 @@ const config: Config = {
           "border-light": "var(--glass-border-light)",
           highlight: "var(--glass-highlight)",
         },
+        pitch: {
+          DEFAULT: "var(--color-pitch-bg)",
+          accent: "var(--color-pitch-accent)",
+        },
       },
       fontFamily: {
         display: ["Outfit", "Helvetica Neue", "sans-serif"],

@@ -1092,7 +1092,7 @@ function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName,
           <div className="w-px bg-surface-border" />
           <div className="flex-1 py-4 text-center"><div className="mx-auto h-4 w-28 animate-pulse rounded bg-surface-hover" /></div>
         </div>
-        <div className="h-64 bg-[#0d3d1a]/20" />
+        <div className="h-64 bg-pitch/20" />
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 border-b border-surface-border/30 px-4 py-2.5">
             <div className="h-3 w-20 animate-pulse rounded bg-surface-hover" />
@@ -1126,7 +1126,7 @@ function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName,
           <div className="border-b border-surface-border px-3 py-2 text-label-md text-text-muted">
             Data by {fdLineup.source === "football_data" ? "Football-Data.org" : fdLineup.source}
           </div>
-          <div className="relative bg-[#0d3d1a] text-white" style={{ minHeight: 280 }}>
+          <div className="relative bg-pitch text-white" style={{ minHeight: 280 }}>
             <div className="absolute inset-0 border-[3px] border-white/60 rounded-none" />
             <div className="absolute left-0 right-0 top-1/2 h-0 border-t-2 border-dashed border-white/50" />
             <div className="absolute left-0 right-0 top-2 z-10 flex items-center justify-center gap-2">
@@ -1203,7 +1203,7 @@ function LineupTab({ section, loading, homeTeamLogo, awayTeamLogo, homeTeamName,
 
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
-      <div className="relative bg-[#0d3d1a] text-white" style={{ minHeight: 320 }}>
+      <div className="relative bg-pitch text-white" style={{ minHeight: 320 }}>
         <div className="absolute inset-0 border-[3px] border-white/60 rounded-none" />
         <div className="absolute left-0 right-0 top-1/2 h-0 border-t-2 border-dashed border-white/50" />
         <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/50" />
@@ -1318,7 +1318,7 @@ function LineupPlayerBadge({ player, onClick }: { player: PlayerStatLine; onClic
       onClick={onClick}
       className={`relative flex flex-col items-center ${onClick ? "cursor-pointer transition-transform hover:scale-105 active:scale-95" : ""}`}
     >
-      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#1a4d2a] font-mono text-body-sm font-bold text-white shadow">
+      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white bg-pitch-accent font-mono text-body-sm font-bold text-white shadow">
         {player.jersey || "—"}
         {scored && <span className="absolute -right-0.5 -top-0.5 text-label-sm">⚽</span>}
         {cards.red && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-sm bg-accent-red" title="Red card" />}

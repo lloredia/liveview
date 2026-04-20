@@ -50,6 +50,10 @@
     --glass-solid-bg: #1a1a25;
     --glass-solid-elevated: #1e1e2a;
 
+    /* Soccer pitch background (dark/turf green) */
+    --color-pitch-bg: #0d3d1a;
+    --color-pitch-accent: #1a4d2a;
+
     color-scheme: dark;
   }
 
@@ -90,6 +94,10 @@
 
     --glass-solid-bg: #ffffff;
     --glass-solid-elevated: #f8f9fb;
+
+    /* Soccer pitch background — lighter turf green for light mode */
+    --color-pitch-bg: #2f7a3a;
+    --color-pitch-accent: #3d8f47;
 
     color-scheme: light;
   }
