@@ -223,45 +223,20 @@ export const NewsCard = memo(function NewsCard({
           className="h-full w-full object-cover"
         />
         <div className="p-4">
-          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-            {article.sport ? (
-              <span className="text-[16px]" title={article.sport ?? undefined} aria-hidden>
-                {sportIcon(article.sport)}
-              </span>
-            ) : null}
+          <div className="mb-1.5 flex items-center gap-1.5">
             <CategoryBadge category={article.category} />
-            {article.leagues?.length ? (
-              <span className="text-label-sm text-text-muted">
-                · {article.leagues.slice(0, 2).join(", ")}
-              </span>
-            ) : null}
+            <span className="truncate text-label-md text-text-muted">
+              {article.source} · {relativeTime(article.published_at)}
+            </span>
           </div>
           <Heading className="line-clamp-2 text-heading-sm font-semibold leading-snug text-text-primary">
             {article.title}
           </Heading>
-          {article.teams?.length ? (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {article.teams.slice(0, 4).map((t) => (
-                <span
-                  key={t}
-                  className="rounded bg-glass-hover px-2 py-0.5 text-label-md font-medium text-text-secondary"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          ) : null}
           {!expanded && article.summary && (
-            <p className="mt-1 line-clamp-3 text-body-sm leading-relaxed text-text-secondary">
+            <p className="mt-1.5 line-clamp-2 text-body-sm leading-relaxed text-text-secondary">
               {article.summary}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2 text-label-md text-text-muted">
-            <SourceLogo source={article.source} logoUrl={logoUrl} className="h-3.5 w-3.5 rounded-full object-contain" />
-            <span>{article.source}</span>
-            <span aria-hidden>·</span>
-            <span>{relativeTime(article.published_at)}</span>
-          </div>
         </div>
       </button>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { GlassHeader } from "@/components/ui/glass";
+import { ArrowLeft, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 
 const DEBOUNCE_MS = 300;
 
@@ -15,7 +16,7 @@ interface NewsHeaderProps {
 export function NewsHeader({
   onSearch,
   onOpenFilter,
-  searchPlaceholder = "Search articles…",
+  searchPlaceholder = "Search news",
 }: NewsHeaderProps) {
   const [value, setValue] = useState("");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,51 +28,45 @@ export function NewsHeader({
     timeoutRef.current = setTimeout(() => onSearch(v.trim()), DEBOUNCE_MS);
   };
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
+    },
+    [],
+  );
 
   return (
-    <GlassHeader className="flex h-12 items-center gap-2 px-3 md:px-4">
+    <GlassHeader className="flex h-11 items-center gap-2 px-3 md:px-4">
       <Link
         href="/"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-green/50"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary"
         aria-label="Back to LiveView"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
+        <ArrowLeft size={18} strokeWidth={2} />
       </Link>
-      <h1 className="min-w-0 flex-1 truncate text-heading-sm font-semibold text-text-primary">
-        News
-      </h1>
-      <div className="relative flex min-w-0 max-w-[180px] flex-1 sm:max-w-[220px]">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" strokeLinecap="round" />
-          </svg>
-        </span>
+      <div className="relative min-w-0 flex-1">
+        <SearchIcon
+          size={14}
+          strokeWidth={2}
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+          aria-hidden
+        />
         <input
           type="search"
           value={value}
           onChange={handleChange}
           placeholder={searchPlaceholder}
-          className="w-full rounded-[10px] border-0 bg-glass/80 py-1.5 pl-8 pr-2 text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-green/40"
+          className="w-full rounded-[10px] border border-glass-border bg-glass/60 py-1.5 pl-8 pr-2 text-body-sm text-text-primary placeholder:text-text-muted focus:border-accent-green/50 focus:outline-none"
           aria-label="Search news"
         />
       </div>
       <button
         type="button"
         onClick={onOpenFilter}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-green/50"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary"
         aria-label="Open filters"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <SlidersHorizontal size={16} strokeWidth={2} />
       </button>
     </GlassHeader>
   );

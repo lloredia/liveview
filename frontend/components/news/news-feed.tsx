@@ -8,11 +8,9 @@ import { NewsFeedSkeletons } from "./news-skeleton";
 import { NewsHeader } from "./news-header";
 import { NewsCategoryPills } from "./news-category-pills";
 import { NewsFilterSheet } from "./news-filter-sheet";
-import { NewsTrending, NewsTrendingSheetContent } from "./news-trending";
+import { NewsTrending } from "./news-trending";
 import { NewsHero } from "./news-hero";
-import { NewsDailyHighlights } from "./news-daily-highlights";
 import { getSavedArticleIds } from "@/lib/news-saved";
-import { GlassModalSheet } from "@/components/ui/glass";
 
 export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [heroTrigger, setHeroTrigger] = useState(0);
@@ -28,7 +26,6 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [hours, setHours] = useState(0);
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
-  const [trendingSheetOpen, setTrendingSheetOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -120,29 +117,15 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         onSearch={setQuery}
         onOpenFilter={() => setFilterOpen(true)}
       />
-      <div className="flex flex-col gap-6 px-3 pb-8 md:px-4 lg:flex-row lg:gap-8">
+      <div className="flex flex-col gap-5 px-3 pb-8 pt-3 md:px-4 lg:flex-row lg:gap-8">
         <div className="min-w-0 flex-1">
-          <div className="mb-4">
+          <div className="mb-3">
             <NewsCategoryPills sport={sport} onSportChange={setSport} />
           </div>
 
           {category !== "trending" && (
             <NewsHero refreshTrigger={heroTrigger + refreshTrigger} />
           )}
-
-          {category !== "trending" && <NewsDailyHighlights />}
-
-          {category !== "trending" ? (
-            <div className="lg:hidden">
-              <button
-                type="button"
-                onClick={() => setTrendingSheetOpen(true)}
-                className="mb-4 w-full rounded-[16px] border border-glass-border bg-glass/60 py-3 text-body-sm font-semibold text-text-primary transition-colors hover:bg-glass-hover focus:outline-none focus:ring-2 focus:ring-accent-green/50"
-              >
-                Trending
-              </button>
-            </div>
-          ) : null}
 
           {loading && articles.length === 0 ? (
             <NewsFeedSkeletons count={6} />
@@ -222,14 +205,6 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         onCategoryChange={setCategory}
         onHoursChange={setHours}
       />
-
-      <GlassModalSheet
-        open={trendingSheetOpen}
-        onClose={() => setTrendingSheetOpen(false)}
-        title="Trending"
-      >
-        <NewsTrendingSheetContent />
-      </GlassModalSheet>
       </main>
     </>
   );

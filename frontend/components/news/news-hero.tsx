@@ -41,11 +41,11 @@ export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
 
   return (
     <div
-      className={`relative mb-6 overflow-hidden ${GLASS_RADII.card} border border-glass-border ${FAKE_GLASS} md:mb-8`}
+      className={`relative mb-4 overflow-hidden ${GLASS_RADII.card} border border-glass-border ${FAKE_GLASS}`}
       role="region"
       aria-label="Featured news"
     >
-      <div className="relative h-[200px] w-full md:h-[280px]">
+      <div className="relative aspect-[16/10] w-full md:aspect-[21/9]">
         {articles.map((a, i) => {
           const isActive = i === index;
           return (
@@ -71,27 +71,24 @@ export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
                   placeholder={
                     <div className="h-full w-full bg-gradient-to-br from-accent-green/10 to-glass-hover" />
                   }
-                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02] motion-reduce:transition-none"
+                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02] motion-reduce:transition-none"
                 />
                 <div
-                  className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent"
+                  className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent"
                   aria-hidden
                 />
-                <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6">
-                  <span className="mb-2 inline-block rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
-                    {label}
-                  </span>
-                  <p className="text-[11px] text-white/80">
-                    {a.source} · {relativeTime(a.published_at)}
-                  </p>
-                  <h2 className="mt-1 text-[18px] font-bold leading-tight text-white md:text-2xl">
+                <div className="absolute bottom-0 left-0 right-0 p-4 md:p-5">
+                  <div className="mb-1.5 flex items-center gap-2 text-label-xs text-white/70">
+                    <span className="rounded-full border border-white/25 bg-white/10 px-2 py-0.5 font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                      {label}
+                    </span>
+                    <span className="truncate">
+                      {a.source} · {relativeTime(a.published_at)}
+                    </span>
+                  </div>
+                  <h2 className="line-clamp-2 text-body-md font-bold leading-tight text-white md:text-xl">
                     {a.title}
                   </h2>
-                  {a.summary && (
-                    <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-white/90">
-                      {a.summary}
-                    </p>
-                  )}
                 </div>
               </a>
             </div>
@@ -99,7 +96,7 @@ export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
         })}
 
         {articles.length > 1 ? (
-          <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-center gap-1.5 md:bottom-4 md:left-6 md:right-6">
+          <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-center gap-1.5">
             {articles.map((_, i) => (
               <button
                 key={i}
@@ -109,8 +106,8 @@ export function NewsHero({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
                   e.stopPropagation();
                   goTo(i);
                 }}
-                className={`h-1.5 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-white/50 ${
-                  i === index ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/70"
+                className={`h-1 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-white/50 ${
+                  i === index ? "w-4 bg-white" : "w-1 bg-white/40 hover:bg-white/70"
                 }`}
                 aria-label={`Go to slide ${i + 1} of ${articles.length}`}
                 aria-current={i === index ? "true" : undefined}
