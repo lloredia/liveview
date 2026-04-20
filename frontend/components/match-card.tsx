@@ -396,7 +396,7 @@ export const MatchCard = memo(function MatchCard({
         <div className={`relative z-10 mr-1 shrink-0 transition-opacity ${
           pinned
             ? "opacity-100"
-            : "opacity-0 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto"
+            : "[@media(hover:none)]:opacity-30 [@media(hover:none)]:pointer-events-auto opacity-0 pointer-events-none [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto"
         }`}>
           <TrackButton
             matchId={match.id}

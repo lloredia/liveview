@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchMatch } from "@/lib/api";
 import { setPinnedMatches, togglePinned, MAX_PINNED } from "@/lib/pinned-matches";
-import { usePolling } from "@/hooks/use-polling";
 import { isLive, phaseLabel } from "@/lib/utils";
 import { endLiveActivity, updateLiveActivity } from "@/lib/live-activity";
 import { sendTrackedScoreSummary } from "@/lib/native-notifications";
@@ -55,35 +54,76 @@ function trackerGameFromDetail(result: MatchDetailResponse) {
 
 export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, onMatchSelect, onRemove }: MultiTrackerProps) {
   const [expanded, setExpanded] = useState(false);
+  // Central store of fetched details for matches not in todaySnapshot.
+  // One fetch cycle populates it; child chips/cards read from this map.
+  const [detailsByMatchId, setDetailsByMatchId] = useState<Record<string, MatchDetailResponse>>({});
 
   useEffect(() => {
     if (pinnedIds.length === 0) {
       endLiveActivity();
+      setDetailsByMatchId({});
       return;
     }
+
+    const getMissingIds = () =>
+      pinnedIds.filter((id) => !findTodayMatch(todaySnapshot, id));
+
     const sync = async () => {
+      const missingIds = getMissingIds();
+
+      const fetched: MatchDetailResponse[] =
+        missingIds.length > 0
+          ? (await Promise.all(missingIds.map((id) => fetchMatch(id)))).filter(
+              (r): r is MatchDetailResponse => r != null,
+            )
+          : [];
+
+      // Write everything we fetched into the details map, by matchId.
+      if (fetched.length > 0) {
+        setDetailsByMatchId((prev) => {
+          const next = { ...prev };
+          for (const d of fetched) next[d.match.id] = d;
+          return next;
+        });
+      }
+
       const snapshotGames = pinnedIds
         .map((id) => findTodayMatch(todaySnapshot, id))
         .filter((match): match is MatchSummary => match != null)
         .map(trackerGameFromSummary);
-
-      const missingIds = pinnedIds.filter((id) => !findTodayMatch(todaySnapshot, id));
-      const fetchedGames =
-        missingIds.length > 0
-          ? (await Promise.all(missingIds.map((id) => fetchMatch(id))))
-              .filter((r): r is MatchDetailResponse => r != null)
-              .map(trackerGameFromDetail)
-          : [];
+      const fetchedGames = fetched.map(trackerGameFromDetail);
 
       const games = [...snapshotGames, ...fetchedGames];
       await updateLiveActivity(games);
-      // Send lock screen summary notification for live tracked matches
       await sendTrackedScoreSummary(games);
     };
+
     sync();
-    const interval = setInterval(sync, 15000);
-    return () => clearInterval(interval);
-  }, [pinnedIds, todaySnapshot]);
+
+    // Unified interval: 10s when expanded, 15s collapsed, 30s when no live games.
+    const anyLive = () =>
+      pinnedIds.some((id) => {
+        const t = findTodayMatch(todaySnapshot, id);
+        if (t) return isLive(t.phase);
+        const d = detailsByMatchId[id];
+        return d ? isLive(d.match.phase) : false;
+      });
+
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      const delay = !anyLive() ? 30_000 : expanded ? 10_000 : 15_000;
+      timer = setTimeout(() => {
+        sync();
+        loop();
+      }, delay);
+    };
+    loop();
+
+    return () => clearTimeout(timer);
+    // detailsByMatchId intentionally excluded — it's referenced via closure inside anyLive(),
+    // and re-running the effect on every detail update would cascade endlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinnedIds, todaySnapshot, expanded]);
 
   if (pinnedIds.length === 0) return null;
 
@@ -134,7 +174,13 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
         {!expanded && (
           <div className="flex items-center gap-1.5 overflow-x-auto px-4 pb-2 scrollbar-hide">
             {pinnedIds.map((id) => (
-              <TrackerChip key={id} matchId={id} todaySnapshot={todaySnapshot} onClick={() => onMatchSelect(id)} />
+              <TrackerChip
+                key={id}
+                matchId={id}
+                todaySnapshot={todaySnapshot}
+                detail={detailsByMatchId[id] ?? null}
+                onClick={() => onMatchSelect(id)}
+              />
             ))}
           </div>
         )}
@@ -147,6 +193,7 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
                 key={id}
                 matchId={id}
                 todaySnapshot={todaySnapshot}
+                detail={detailsByMatchId[id] ?? null}
                 onClick={() => onMatchSelect(id)}
                 onRemove={() => {
                   if (onRemove) {
@@ -168,20 +215,16 @@ export function MultiTracker({ pinnedIds, todaySnapshot = null, onPinnedChange, 
 function TrackerChip({
   matchId,
   todaySnapshot,
+  detail,
   onClick,
 }: {
   matchId: string;
   todaySnapshot?: TodayResponse | null;
+  detail: MatchDetailResponse | null;
   onClick: () => void;
 }) {
   const todayMatch = useMemo(() => findTodayMatch(todaySnapshot, matchId), [todaySnapshot, matchId]);
-  const fetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data } = usePolling<MatchDetailResponse>({
-    fetcher,
-    interval: 10000,
-    key: `tracker-${matchId}`,
-    enabled: !todayMatch,
-  });
+  const data = detail;
 
   if (!todayMatch && !data) {
     return (
@@ -226,22 +269,18 @@ function TrackerChip({
 function TrackerCard({
   matchId,
   todaySnapshot,
+  detail,
   onClick,
   onRemove,
 }: {
   matchId: string;
   todaySnapshot?: TodayResponse | null;
+  detail: MatchDetailResponse | null;
   onClick: () => void;
   onRemove: () => void;
 }) {
   const todayMatch = useMemo(() => findTodayMatch(todaySnapshot, matchId), [todaySnapshot, matchId]);
-  const fetcher = useCallback(() => fetchMatch(matchId), [matchId]);
-  const { data } = usePolling<MatchDetailResponse>({
-    fetcher,
-    interval: 10000,
-    key: `tracker-card-${matchId}`,
-    enabled: !todayMatch,
-  });
+  const data = detail;
 
   if (!todayMatch && !data) {
     return (

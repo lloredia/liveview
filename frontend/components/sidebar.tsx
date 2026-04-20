@@ -248,7 +248,7 @@ function LeagueButton({
         className={`absolute right-3 top-1/2 -translate-y-1/2 select-none text-label-sm transition-opacity touch-manipulation ${
           favVisible
             ? "opacity-100 text-accent-amber"
-            : "pointer-events-none opacity-0 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100 text-text-dim [@media(hover:hover)]:hover:text-accent-amber"
+            : "pointer-events-none opacity-0 [@media(hover:none)]:opacity-30 [@media(hover:none)]:pointer-events-auto [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100 text-text-dim [@media(hover:hover)]:hover:text-accent-amber"
         }`}
       >
         {isFav ? "★" : "☆"}
