@@ -310,6 +310,18 @@
   body { overscroll-behavior-y: contain; }
 }
 
+/* iPad & larger: small label tokens get a subtle bump so chrome text
+ * (pill counts, timestamps, section headers) stays legible on an 11"+
+ * display without touching every call site. */
+@media (min-width: 768px) {
+  .text-label-xs { font-size: 0.625rem; line-height: 1.35; }   /* 9 → 10px */
+  .text-label-sm { font-size: 0.6875rem; line-height: 1.35; }  /* 10 → 11px */
+  .text-label-md { font-size: 0.75rem; line-height: 1.35; }    /* 11 → 12px */
+  .text-label-lg { font-size: 0.8125rem; line-height: 1.35; }  /* 12 → 13px */
+  .text-body-sm  { font-size: 0.875rem;  line-height: 1.4; }   /* 13 → 14px */
+  .text-body-md  { font-size: 0.9375rem; line-height: 1.45; }  /* 14 → 15px */
+}
+
 /* ── Interaction ────────────────────────────────────────────────── */
 
 * { -webkit-tap-highlight-color: transparent; }

@@ -7,9 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { SportsBackground } from "@/components/auth/SportsBackground";
 import { VignetteOverlay } from "@/components/auth/VignetteOverlay";
 import { GlassAuthCard } from "@/components/auth/GlassAuthCard";
-import { AppleLogo } from "@/components/auth/AppleLogo";
-import { GoogleLogo } from "@/components/auth/GoogleLogo";
-import { AUTH_GLASS } from "@/lib/ui/glass";
 
 function LoginContent() {
   const [email, setEmail] = useState("");
@@ -20,27 +17,8 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams?.get("callbackUrl") ?? "/";
   const from = searchParams?.get("from") ?? undefined;
-  const oauthError = searchParams?.get("error");
 
-  // Build Google redirect URI hint for Configuration error (must match Google Cloud Console exactly)
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "";
-  const googleCallbackUrl = origin ? `${origin}/api/auth/callback/google` : "";
-
-  // Show OAuth error from NextAuth redirect (e.g. OAuthCallback, Configuration, etc.)
-  const errorMessage =
-    error ||
-    (oauthError === "OAuthAccountNotLinked"
-      ? "This email is already linked to another sign-in method. Try signing in with Email or the other provider."
-      : oauthError === "OAuthCreateAccount" || oauthError === "OAuthCallback"
-        ? "Sign-in failed. Try again or use Email to continue."
-        : oauthError === "Configuration"
-          ? googleCallbackUrl
-            ? "Sign-in with Google/Apple failed. In Google Cloud Console, add this exact Authorized redirect URI: " + googleCallbackUrl
-            : "Sign-in is not configured. Please use Email to sign in."
-          : oauthError
-            ? "Sign-in failed. Try again or use Email."
-            : "");
+  const errorMessage = error;
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,11 +41,6 @@ function LoginContent() {
       setError("Something went wrong.");
     }
     setLoading(false);
-  };
-
-  const handleOAuth = (provider: "apple" | "google") => {
-    setError("");
-    signIn(provider, { callbackUrl, redirect: true });
   };
 
   const signupUrl = `/signup${callbackUrl !== "/" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`;
@@ -95,38 +68,14 @@ function LoginContent() {
           </span>
         </div>
 
-        <h1 className="text-center text-xl font-semibold text-text-primary">
+        <h1 className="text-center text-xl font-semibold text-text-primary md:text-2xl">
           Sign in to track games
         </h1>
+        <p className="mt-2 text-center text-body-sm text-text-secondary md:text-body-md">
+          Enter your email and password to continue.
+        </p>
 
-        <div className="mt-8 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => handleOAuth("apple")}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
-            aria-label="Continue with Apple"
-          >
-            <AppleLogo className="h-5 w-5 shrink-0 text-white" />
-            Continue with Apple
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOAuth("google")}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
-            aria-label="Continue with Google"
-          >
-            <GoogleLogo className="h-5 w-5 shrink-0" />
-            Continue with Google
-          </button>
-        </div>
-
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-white/[0.1]" />
-          <span className="text-[12px] text-text-muted">or</span>
-          <div className="h-px flex-1 bg-white/[0.1]" />
-        </div>
-
-        <form onSubmit={handleCredentials} className="flex flex-col gap-3">
+        <form onSubmit={handleCredentials} className="mt-8 flex flex-col gap-3">
           <input
             type="email"
             placeholder="Email"
@@ -136,7 +85,7 @@ function LoginContent() {
             required
             autoComplete="email"
             aria-label="Email address"
-            autoFocus={!oauthError}
+            autoFocus
           />
           <div className="relative">
             <input
@@ -171,13 +120,13 @@ function LoginContent() {
           <div className="-mt-1 flex justify-end">
             <Link
               href="/forgot-password"
-              className="text-[13px] text-text-muted hover:text-accent-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm transition-colors"
+              className="text-body-sm text-text-muted hover:text-accent-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm transition-colors md:text-body-md"
             >
               Forgot password?
             </Link>
           </div>
           {errorMessage && (
-            <p className="text-[13px] text-accent-red" role="alert">
+            <p className="text-body-sm text-accent-red md:text-body-md" role="alert">
               {errorMessage}
             </p>
           )}
@@ -195,19 +144,19 @@ function LoginContent() {
         <div className="mt-8 flex flex-col items-center gap-2 text-center">
           <Link
             href={signupUrl}
-            className="text-[13px] font-medium text-accent-green hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 rounded-sm"
+            className="text-body-sm font-medium text-accent-green hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 rounded-sm md:text-body-md"
           >
             Create account
           </Link>
           <Link
             href={backHref}
-            className="text-[13px] text-text-muted hover:text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm"
+            className="text-body-sm text-text-muted hover:text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm md:text-body-md"
           >
             Continue without tracking
           </Link>
         </div>
 
-        <p className="mt-6 text-center text-[11px] text-text-muted leading-relaxed">
+        <p className="mt-6 text-center text-label-md text-text-muted leading-relaxed md:text-body-sm">
           Tracking and alerts require an account.
         </p>
       </GlassAuthCard>

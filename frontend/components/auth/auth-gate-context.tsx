@@ -7,10 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { AppleLogo } from "@/components/auth/AppleLogo";
-import { GoogleLogo } from "@/components/auth/GoogleLogo";
 
 interface GateState {
   open: boolean;
@@ -73,27 +70,19 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
               Tracking, favorites, and alerts are available after sign-in.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => signIn("apple", { callbackUrl: gateState.returnPath || "/" })}
-                className="flex items-center justify-center gap-2 rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
-              >
-                <AppleLogo className="h-4 w-4 shrink-0 text-white" />
-                Continue with Apple
-              </button>
-              <button
-                type="button"
-                onClick={() => signIn("google", { callbackUrl: gateState.returnPath || "/" })}
-                className="flex items-center justify-center gap-2 rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
-              >
-                <GoogleLogo className="h-4 w-4 shrink-0" />
-                Continue with Google
-              </button>
               <Link
                 href={loginUrl}
+                onClick={closeGate}
+                className="rounded-xl bg-accent-green px-4 py-2.5 text-sm font-semibold text-black hover:opacity-90"
+              >
+                Sign in
+              </Link>
+              <Link
+                href={gateState.returnPath ? `/signup?callbackUrl=${encodeURIComponent(gateState.returnPath)}` : "/signup"}
+                onClick={closeGate}
                 className="rounded-xl border border-glass-border bg-glass px-4 py-2.5 text-sm font-medium text-text-primary hover:bg-glass-hover"
               >
-                Email
+                Create account
               </Link>
               <button
                 type="button"

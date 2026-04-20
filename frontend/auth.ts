@@ -1,14 +1,14 @@
 import NextAuth from "next-auth";
-import Apple from "next-auth/providers/apple";
-import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-import type { Provider } from "next-auth/providers";
+const secret = (process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "").trim();
 
-const providers: Provider[] = [
-  Credentials({
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...(secret ? { secret } : {}),
+  providers: [
+    Credentials({
       name: "Email",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -37,43 +37,7 @@ const providers: Provider[] = [
         }
       },
     }),
-  ];
-
-if (process.env.APPLE_ID && process.env.APPLE_SECRET) {
-  providers.push(
-    Apple({
-      clientId: process.env.APPLE_ID,
-      clientSecret: process.env.APPLE_SECRET,
-      allowDangerousEmailAccountLinking: true,
-    })
-  );
-}
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  providers.push(
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
-    })
-  );
-}
-
-const secret = (process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "").trim();
-const hasOAuth = !!(process.env.GOOGLE_CLIENT_ID || process.env.APPLE_ID);
-if (!secret && hasOAuth) {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "NEXTAUTH_SECRET or AUTH_SECRET must be set when using OAuth (Apple/Google) in production."
-    );
-  }
-  console.warn(
-    "[NextAuth] NEXTAUTH_SECRET (or AUTH_SECRET) is not set. OAuth sign-in may fail with a Configuration error."
-  );
-}
-
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...(secret ? { secret } : {}),
-  providers,
+  ],
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -83,39 +47,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/login",
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    jwt({ token, user }) {
       if (user) {
         token.email = user.email;
         token.name = user.name;
-        // Credentials: user.id is already our backend UUID. OAuth: get-or-create backend user and use its id.
-        if (account?.provider === "google" || account?.provider === "apple") {
-          const oauthSecret = process.env.OAUTH_ENSURE_SECRET;
-          try {
-            const res = await fetch(`${apiBase}/v1/auth/oauth-ensure`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(oauthSecret ? { "X-OAuth-Secret": oauthSecret } : {}),
-              },
-              body: JSON.stringify({
-                provider: account.provider,
-                provider_account_id: account.providerAccountId ?? (account as { providerAccountId?: string }).providerAccountId ?? "",
-                email: user.email ?? undefined,
-                name: user.name ?? undefined,
-              }),
-            });
-            if (res.ok) {
-              const data = (await res.json()) as { id: string };
-              token.sub = data.id;
-            } else {
-              token.sub = user.id;
-            }
-          } catch {
-            token.sub = user.id;
-          }
-        } else {
-          token.sub = user.id;
-        }
+        token.sub = user.id;
       }
       return token;
     },

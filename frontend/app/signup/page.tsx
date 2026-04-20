@@ -7,9 +7,6 @@ import { signIn } from "next-auth/react";
 import { SportsBackground } from "@/components/auth/SportsBackground";
 import { VignetteOverlay } from "@/components/auth/VignetteOverlay";
 import { GlassAuthCard } from "@/components/auth/GlassAuthCard";
-import { AppleLogo } from "@/components/auth/AppleLogo";
-import { GoogleLogo } from "@/components/auth/GoogleLogo";
-import { AUTH_GLASS } from "@/lib/ui/glass";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -23,11 +20,6 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const callbackUrl = searchParams?.get("callbackUrl") ?? "/";
-
-  const handleOAuth = (provider: "apple" | "google") => {
-    setError("");
-    signIn(provider, { callbackUrl, redirect: true });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,41 +97,14 @@ function SignupContent() {
           </span>
         </div>
 
-        <h1 className="text-center text-xl font-semibold text-text-primary">
+        <h1 className="text-center text-xl font-semibold text-text-primary md:text-2xl">
           Create account
         </h1>
-        <p className="mt-2 text-center text-[14px] text-text-secondary">
-          Sign up with Google, Apple, or email to track games and get alerts.
+        <p className="mt-2 text-center text-body-sm text-text-secondary md:text-body-md">
+          Sign up to track games and get alerts.
         </p>
 
-        <div className="mt-8 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => handleOAuth("apple")}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
-            aria-label="Continue with Apple"
-          >
-            <AppleLogo className="h-5 w-5 shrink-0 text-white" />
-            Continue with Apple
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOAuth("google")}
-            className={`flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/[0.12] bg-white/[0.06] font-medium text-text-primary transition-colors hover:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 active:scale-[0.98] ${AUTH_GLASS.buttonRadius}`}
-            aria-label="Continue with Google"
-          >
-            <GoogleLogo className="h-5 w-5 shrink-0" />
-            Continue with Google
-          </button>
-        </div>
-
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-white/[0.1]" />
-          <span className="text-[12px] text-text-muted">or</span>
-          <div className="h-px flex-1 bg-white/[0.1]" />
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-3">
           <input
             type="text"
             placeholder="Name (optional)"
@@ -191,7 +156,7 @@ function SignupContent() {
             </button>
           </div>
           {error && (
-            <p className="text-[13px] text-accent-red" role="alert">
+            <p className="text-body-sm text-accent-red md:text-body-md" role="alert">
               {error}
             </p>
           )}
@@ -208,19 +173,19 @@ function SignupContent() {
         <div className="mt-8 flex flex-col items-center gap-2 text-center">
           <Link
             href={loginUrl}
-            className="text-[13px] font-medium text-accent-green hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 rounded-sm"
+            className="text-body-sm font-medium text-accent-green hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 rounded-sm md:text-body-md"
           >
             Already have an account? Sign in
           </Link>
           <Link
             href="/"
-            className="text-[13px] text-text-muted hover:text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm transition-colors"
+            className="text-body-sm text-text-muted hover:text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue focus-visible:outline-offset-2 rounded-sm transition-colors md:text-body-md"
           >
             Back to LiveView
           </Link>
         </div>
 
-        <p className="mt-6 text-center text-[11px] text-text-muted leading-relaxed">
+        <p className="mt-6 text-center text-label-md text-text-muted leading-relaxed md:text-body-sm">
           By signing up you agree to our{" "}
           <Link href="/privacy" className="text-text-secondary hover:text-text-primary underline">
             Privacy Policy
