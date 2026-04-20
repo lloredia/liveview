@@ -1,11 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { SportsBackground } from "@/components/auth/SportsBackground";
 import { VignetteOverlay } from "@/components/auth/VignetteOverlay";
 import { GlassAuthCard } from "@/components/auth/GlassAuthCard";
 
+const SUPPORT_EMAIL = "support@liveview-tracker.com";
+
 export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
+
+  const mailtoHref = (() => {
+    const subject = encodeURIComponent("Password reset — LiveView");
+    const body = encodeURIComponent(
+      [
+        "Hi LiveView team,",
+        "",
+        `I need to reset the password for my account: ${email || "[your email]"}`,
+        "",
+        "Thanks.",
+      ].join("\n"),
+    );
+    return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+  })();
+
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-[#08080e] px-4 py-12">
       <SportsBackground />
@@ -26,20 +45,57 @@ export default function ForgotPasswordPage() {
           </span>
         </div>
 
-        <h1 className="text-center text-xl font-semibold text-text-primary">
-          Forgot password?
+        <h1 className="text-center text-xl font-semibold text-text-primary md:text-2xl">
+          Reset your password
         </h1>
 
-        <p className="mt-4 text-center text-[14px] text-text-secondary leading-relaxed">
-          Password reset is not available yet. If you signed up with Apple or Google, use
-          &quot;Continue with Apple&quot; or &quot;Continue with Google&quot; on the sign-in page.
-          Otherwise, use the same email and password you used to create your account.
+        <p className="mt-3 text-center text-body-sm text-text-secondary leading-relaxed md:text-body-md">
+          Enter the email associated with your account and we&apos;ll help
+          you recover access.
         </p>
 
-        <div className="mt-8 flex flex-col gap-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            window.location.href = mailtoHref;
+          }}
+          className="mt-8 flex flex-col gap-3"
+        >
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-12 rounded-[14px] border border-white/[0.12] bg-white/[0.04] px-4 text-text-primary placeholder:text-text-muted focus:border-accent-green focus:outline-none focus:ring-2 focus:ring-accent-green/30"
+            required
+            autoComplete="email"
+            aria-label="Email address"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={!email.trim()}
+            className="h-12 rounded-[14px] bg-accent-green font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2 disabled:opacity-40"
+          >
+            Email support
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-label-md text-text-muted leading-relaxed md:text-body-sm">
+          We&apos;ll reply within 1 business day. You can also reach us directly at{" "}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="text-accent-green hover:underline"
+          >
+            {SUPPORT_EMAIL}
+          </a>
+          .
+        </p>
+
+        <div className="mt-8 flex justify-center">
           <Link
             href="/login"
-            className="flex h-12 items-center justify-center rounded-[14px] bg-accent-green font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green focus-visible:outline-offset-2"
+            className="text-body-sm font-medium text-accent-green hover:underline md:text-body-md"
           >
             Back to sign in
           </Link>
