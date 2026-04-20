@@ -135,7 +135,7 @@ export function NewsFeed({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
                 <div key={a.id} className={i === 0 ? "sm:col-span-2" : undefined}>
                   <NewsCard
                     article={a}
-                    variant={i === 0 ? "featured" : "compact"}
+                    variant="featured"
                     headingLevel={i === 0 ? "h2" : "h3"}
                     savedIds={savedIds}
                   />
