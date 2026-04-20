@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Newspaper, User } from "lucide-react";
 import { Search } from "./search";
 import { useTheme } from "@/lib/theme";
 import { NotificationInbox } from "./notification-inbox";
@@ -38,6 +39,9 @@ function ThemeIcon({ mode }: { mode: "dark" | "light" | "auto" }) {
   );
 }
 
+const ICON_BUTTON =
+  "flex h-8 w-8 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary glass-press";
+
 export function Header({
   connected,
   onToggleSidebar,
@@ -52,13 +56,13 @@ export function Header({
   return (
     <header
       role="banner"
-      className="sticky top-0 z-50 flex h-[44px] items-center justify-between px-3 md:px-4 bg-surface-raised/95 backdrop-blur-md border-b border-surface-border"
+      className="sticky top-0 z-50 flex h-11 items-center justify-between gap-2 px-3 md:px-4 bg-surface-raised/95 backdrop-blur-md border-b border-surface-border"
       style={{ position: "sticky", top: 0 }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <button
           onClick={onToggleSidebar}
-          className="flex h-8 w-8 items-center justify-center rounded-[10px] text-text-muted transition-colors hover:bg-glass-hover hover:text-text-primary glass-press"
+          className={ICON_BUTTON}
           aria-label="Toggle sidebar"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -68,24 +72,31 @@ export function Header({
 
         <Link
           href="/"
-          className="text-heading-sm tracking-tight text-text-primary hover:opacity-90 transition-opacity"
+          className="relative flex items-center text-heading-sm tracking-tight text-text-primary hover:opacity-90 transition-opacity"
+          aria-label="LiveView home"
         >
           LIVE<span className="text-accent-green">VIEW</span>
-        </Link>
-
-        <Link
-          href="/news"
-          className={`ml-2 rounded-[10px] px-2.5 py-1.5 text-body-sm font-semibold transition-all duration-150 glass-press ${
-            isNews
-              ? "bg-accent-green/15 text-accent-green border border-accent-green/20"
-              : "text-text-muted hover:bg-glass-hover hover:text-text-primary"
-          }`}
-        >
-          News
+          {!connected && (
+            <span
+              className="ml-1.5 h-[6px] w-[6px] rounded-full bg-accent-red shadow-[0_0_6px_rgba(255,23,68,0.5)]"
+              title="Offline"
+              aria-label="Offline"
+            />
+          )}
         </Link>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-0.5">
+        <Link
+          href="/news"
+          aria-label="News"
+          className={`${ICON_BUTTON} ${
+            isNews ? "bg-accent-green/15 text-accent-green" : ""
+          }`}
+        >
+          <Newspaper size={16} strokeWidth={2} />
+        </Link>
+
         {onLeagueSelect && onMatchSelect && (
           <Search onLeagueSelect={onLeagueSelect} onMatchSelect={onMatchSelect} />
         )}
@@ -95,27 +106,21 @@ export function Header({
         {status !== "loading" && (
           <Link
             href={session?.user ? "/account" : "/login"}
-            className="rounded-[10px] px-2.5 py-1.5 text-body-sm font-medium text-text-muted hover:bg-glass-hover hover:text-text-primary"
+            aria-label={session?.user ? "Account" : "Sign in"}
+            className={ICON_BUTTON}
           >
-            {session?.user ? "Account" : "Sign in"}
+            <User size={16} strokeWidth={2} />
           </Link>
         )}
 
         <button
           onClick={toggle}
-          className="flex h-8 w-8 items-center justify-center rounded-[10px] text-text-muted transition-colors glass-press hover:bg-glass-hover hover:text-text-primary"
+          className={ICON_BUTTON}
           aria-label={`Theme: ${mode}. Click to switch.`}
           title={`Theme: ${mode}`}
         >
           <ThemeIcon mode={mode} />
         </button>
-
-        <div
-          className={`h-[6px] w-[6px] rounded-full transition-colors ${
-            connected ? "bg-accent-green shadow-[0_0_6px_rgba(0,230,118,0.4)]" : "bg-accent-red shadow-[0_0_6px_rgba(255,23,68,0.4)]"
-          }`}
-          title={connected ? "Connected" : "Offline"}
-        />
       </div>
     </header>
   );
