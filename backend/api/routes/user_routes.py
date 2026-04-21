@@ -13,6 +13,9 @@ from sqlalchemy import delete, select
 from api.dependencies import get_db
 from auth.deps import get_current_user_id
 from auth.models import (
+    AuthIdentityORM,
+    PasswordCredentialORM,
+    PasswordResetTokenORM,
     UserFavoriteORM,
     UserNotificationPrefORM,
     UserORM,
@@ -286,3 +289,58 @@ async def update_notification_prefs(
             quiet_hours=row.quiet_hours,
             sound_enabled=row.sound_enabled,
         )
+
+
+# ── Account Deletion ──────────────────────────────────────────
+
+class DeleteAccountResponse(BaseModel):
+    ok: bool = True
+
+
+@router.delete("/me", response_model=DeleteAccountResponse)
+async def delete_account(
+    user_id: UUID = Depends(get_current_user_id),
+    db: DatabaseManager = Depends(get_db),
+):
+    """Permanently delete the current user and all associated data.
+
+    Required by App Store Guideline 5.1.1(v). Hard-deletes every row
+    tied to the user across: password credential, auth identities,
+    password reset tokens, favorites, tracked games, notification
+    prefs, saved articles, and finally the user row itself.
+    """
+    async with db.write_session() as session:
+        # Ensure the user still exists (JWT might have outlived the row)
+        user = (
+            await session.execute(select(UserORM).where(UserORM.id == user_id))
+        ).scalar_one_or_none()
+        if not user:
+            # Idempotent: already deleted is fine.
+            return DeleteAccountResponse(ok=True)
+
+        await session.execute(
+            delete(PasswordResetTokenORM).where(PasswordResetTokenORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(PasswordCredentialORM).where(PasswordCredentialORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(AuthIdentityORM).where(AuthIdentityORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(UserFavoriteORM).where(UserFavoriteORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(UserTrackedGameORM).where(UserTrackedGameORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(UserNotificationPrefORM).where(UserNotificationPrefORM.user_id == user_id)
+        )
+        await session.execute(
+            delete(UserSavedArticleORM).where(UserSavedArticleORM.user_id == user_id)
+        )
+        await session.execute(delete(UserORM).where(UserORM.id == user_id))
+        await session.flush()
+        logger.info("account deleted user=%s", user_id)
+
+    return DeleteAccountResponse(ok=True)

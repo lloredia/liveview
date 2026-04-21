@@ -134,3 +134,10 @@ export async function removeUserFavorite(
   );
   return res.ok;
 }
+
+// ── Account deletion ──────────────────────────────────────────
+
+export async function deleteUserAccount(token?: string | null): Promise<boolean> {
+  const res = await authFetch("/v1/me", { method: "DELETE", token });
+  return res.ok;
+}

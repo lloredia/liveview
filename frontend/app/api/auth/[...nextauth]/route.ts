@@ -1,8 +1,11 @@
 import { handlers } from "@/auth";
 
 const authSecret = (process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "").trim();
-const authUrl = (process.env.NEXTAUTH_URL || process.env.AUTH_URL || "").trim();
-const authConfigured = Boolean(authSecret) && Boolean(authUrl);
+// NEXTAUTH_URL is optional in NextAuth v5 when trustHost: true is set
+// (which we do). Requiring both here was short-circuiting /api/auth/session
+// to {} in production even though login succeeded, causing useSession() to
+// return unauthenticated and the profile icon to bounce back to /login.
+const authConfigured = Boolean(authSecret);
 
 let warnedDisabled = false;
 function warnOnce() {

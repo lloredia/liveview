@@ -9,6 +9,7 @@ import { getFavoriteLeagues, toggleFavoriteLeague } from "@/lib/favorites";
 import { getFavoriteTeams, toggleFavoriteTeam } from "@/lib/favorite-teams";
 import { getPinnedMatches, setPinnedMatches, togglePinned } from "@/lib/pinned-matches";
 import { isSoundEnabled, setSoundEnabled } from "@/lib/notification-settings";
+import { deleteUserAccount } from "@/lib/auth-api";
 import { EmptyState } from "@/components/ui/empty-state";
 
 type SoundPref = { enabled: boolean };
@@ -118,8 +119,10 @@ export default function AccountPage() {
   const [favTeams, setFavTeams] = useState<string[]>([]);
   const [pinnedIds, setPinnedIdsState] = useState<string[]>([]);
   const [sound, setSound] = useState<SoundPref>({ enabled: true });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -172,17 +175,28 @@ export default function AccountPage() {
   const handleDelete = useCallback(async () => {
     if (deleteConfirm !== "DELETE") return;
     setDeleting(true);
+    setDeleteError(null);
     try {
-      // Clear all local state
+      const ok = await deleteUserAccount();
+      if (!ok) {
+        setDeleteError(
+          "We couldn't delete your account right now. Please try again or contact support@liveview-tracker.com.",
+        );
+        setDeleting(false);
+        return;
+      }
+      // Clear all local state after successful backend delete
       setPinnedMatches([]);
       localStorage.removeItem("lv_favorite_leagues");
       localStorage.removeItem("lv_favorite_teams");
       localStorage.removeItem("lv_sound_enabled");
       localStorage.removeItem("lv_pinned_matches");
       localStorage.removeItem("lv_theme_mode");
-      // Sign out — server-side account deletion would need a backend endpoint.
       await signOut({ callbackUrl: "/" });
-    } finally {
+    } catch {
+      setDeleteError(
+        "We couldn't delete your account right now. Please try again or contact support@liveview-tracker.com.",
+      );
       setDeleting(false);
     }
   }, [deleteConfirm]);
@@ -375,46 +389,97 @@ export default function AccountPage() {
 
         {/* Data */}
         <Section title="Data">
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={handleExport}
-              className="w-full rounded-lg border border-glass-border bg-glass px-4 py-2 text-body-sm font-semibold text-text-primary transition-colors hover:bg-glass-hover"
-            >
-              Export my data (JSON)
-            </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            className="w-full rounded-lg border border-glass-border bg-glass px-4 py-2 text-body-sm font-semibold text-text-primary transition-colors hover:bg-glass-hover md:text-body-md"
+          >
+            Export my data (JSON)
+          </button>
+        </Section>
 
-            <details className="group rounded-lg border border-accent-red/30 bg-accent-red/5 p-3">
-              <summary className="cursor-pointer select-none text-body-sm font-semibold text-accent-red">
-                Delete account
-              </summary>
-              <div className="mt-3 space-y-2">
-                <p className="text-label-md text-text-secondary">
-                  This clears your favorites, tracked matches, and sign you out. Type{" "}
-                  <code className="rounded bg-glass px-1 font-mono text-text-primary">
-                    DELETE
-                  </code>{" "}
-                  to confirm.
+        {/* Delete account — prominent red section, no hidden disclosure */}
+        <Section title="Delete account">
+          <p className="mb-3 text-body-sm text-text-secondary md:text-body-md">
+            Permanently removes your account and all associated data from
+            our servers — favorites, tracked matches, notification prefs,
+            and saved articles. This cannot be undone.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteConfirm("");
+              setDeleteConfirmOpen(true);
+            }}
+            className="w-full rounded-lg bg-accent-red px-4 py-3 text-body-sm font-bold text-white transition-opacity hover:opacity-90 md:text-body-md"
+          >
+            Delete my account
+          </button>
+        </Section>
+
+        {deleteConfirmOpen && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+          >
+            <div className="w-full max-w-sm rounded-2xl border border-accent-red/30 bg-surface p-5 shadow-xl md:max-w-md">
+              <h3
+                id="delete-confirm-title"
+                className="text-body-md font-bold text-accent-red md:text-lg"
+              >
+                Delete your account?
+              </h3>
+              <p className="mt-2 text-body-sm text-text-secondary md:text-body-md">
+                This permanently deletes your account and all data on our
+                servers. You&apos;ll be signed out. This cannot be undone.
+              </p>
+              <p className="mt-4 text-body-sm text-text-secondary md:text-body-md">
+                Type{" "}
+                <code className="rounded bg-glass px-1.5 py-0.5 font-mono text-text-primary">
+                  DELETE
+                </code>{" "}
+                to confirm.
+              </p>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+                autoFocus
+                className="mt-2 w-full rounded-lg border border-glass-border bg-surface-card px-3 py-2 font-mono text-body-sm text-text-primary outline-none focus:border-accent-red md:text-body-md"
+              />
+              {deleteError && (
+                <p
+                  className="mt-3 text-body-sm text-accent-red md:text-body-md"
+                  role="alert"
+                >
+                  {deleteError}
                 </p>
-                <input
-                  type="text"
-                  value={deleteConfirm}
-                  onChange={(e) => setDeleteConfirm(e.target.value)}
-                  placeholder="DELETE"
-                  className="w-full rounded-lg border border-glass-border bg-surface-card px-3 py-2 font-mono text-body-sm text-text-primary outline-none focus:border-accent-red"
-                />
+              )}
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleting}
+                  className="rounded-lg border border-glass-border bg-glass px-4 py-2 text-body-sm font-semibold text-text-primary hover:bg-glass-hover md:text-body-md"
+                >
+                  Cancel
+                </button>
                 <button
                   type="button"
                   onClick={handleDelete}
                   disabled={deleteConfirm !== "DELETE" || deleting}
-                  className="w-full rounded-lg bg-accent-red px-4 py-2 text-body-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                  className="rounded-lg bg-accent-red px-4 py-2 text-body-sm font-semibold text-white hover:opacity-90 disabled:opacity-40 md:text-body-md"
                 >
-                  {deleting ? "Deleting…" : "Delete account"}
+                  {deleting ? "Deleting…" : "Delete forever"}
                 </button>
               </div>
-            </details>
+            </div>
           </div>
-        </Section>
+        )}
 
         {/* Sign out */}
         <button
