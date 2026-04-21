@@ -10,7 +10,7 @@ const appUrl =
   "https://frontend-lloredias-projects.vercel.app";
 
 const config: CapacitorConfig = {
-  appId: "com.liveview.tracker",
+  appId: "com.lloredia.liveview",
   appName: "LiveView",
   webDir: "public",
   server: {
