@@ -46,22 +46,49 @@ def _parse_scheduled(scheduled: Optional[str]) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _coerce_score(raw: Any) -> int | None:
+    """ESPN's `competitor.score` arrives as one of:
+      - int  (e.g. 7)
+      - str  (e.g. "7")
+      - dict {value: 7, displayValue: "7"}  ← MLB and others
+    int(<dict>) raises TypeError, which silently zeroed every finished
+    game. Handle each shape explicitly; return None if nothing usable.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        # bools are ints in Python; reject explicitly to avoid 0/1 noise
+        return None
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return None
+        try:
+            return int(float(s))
+        except ValueError:
+            return None
+    if isinstance(raw, dict):
+        for key in ("value", "displayValue"):
+            v = raw.get(key)
+            n = _coerce_score(v)
+            if n is not None:
+                return n
+    return None
+
+
 def _competitor_score(competitor: Dict[str, Any]) -> int:
-    try:
-        sc = int(competitor.get("score", 0))
-    except (ValueError, TypeError):
-        sc = 0
-    if sc > 0:
+    sc = _coerce_score(competitor.get("score"))
+    if sc and sc > 0:
         return sc
+    total = sc or 0
     for ls in competitor.get("linescores", []) or []:
         if isinstance(ls, dict):
-            val = ls.get("displayValue", ls.get("value"))
-            if val is not None:
-                try:
-                    sc += int(val)
-                except (ValueError, TypeError):
-                    pass
-    return sc
+            n = _coerce_score(ls.get("displayValue", ls.get("value")))
+            if n is not None:
+                total += n
+    return total
 
 
 def normalize_espn_events(
