@@ -218,12 +218,69 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
   const scheduled = isScheduled(m.phase);
   const homeWin = finished && m.score.home > m.score.away;
   const awayWin = finished && m.score.away > m.score.home;
+  const homeLost = finished && m.score.away > m.score.home;
+  const awayLost = finished && m.score.home > m.score.away;
   const start = m.start_time
     ? new Date(m.start_time).toLocaleTimeString([], {
         hour: "numeric",
         minute: "2-digit",
       })
     : "";
+
+  // Status block (left rail) — vertically centered next to the 2-line team stack.
+  const renderStatus = () => {
+    if (live) {
+      return (
+        <View style={{ alignItems: "center", gap: 2 }}>
+          <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
+          <Text
+            style={[
+              text.labelXs,
+              { color: c.accentRed, fontWeight: "900", letterSpacing: 0.4 },
+            ]}
+          >
+            {phaseShortLabel(m.phase, m.clock) || "LIVE"}
+          </Text>
+          {m.period && (
+            <Text style={[text.labelXs, { color: c.textDim }]}>{m.period}</Text>
+          )}
+        </View>
+      );
+    }
+    if (finished) {
+      return (
+        <Text
+          style={[
+            text.labelSm,
+            {
+              color: c.textMuted,
+              fontWeight: "800",
+              letterSpacing: 0.6,
+            },
+          ]}
+        >
+          FT
+        </Text>
+      );
+    }
+    if (scheduled) {
+      return (
+        <Text
+          style={[
+            text.labelMd,
+            { color: c.textSecondary, fontWeight: "700", textAlign: "center" },
+          ]}
+        >
+          {start}
+        </Text>
+      );
+    }
+    return (
+      <Text style={[text.labelXs, { color: c.textMuted, fontWeight: "800" }]}>
+        {phaseShortLabel(m.phase, m.clock).slice(0, 4)}
+      </Text>
+    );
+  };
 
   return (
     <Link href={{ pathname: "/match/[id]", params: { id: m.id } }} asChild>
@@ -236,52 +293,11 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
           },
         ]}
       >
-        {/* Status column */}
-        <View style={styles.statusCol}>
-          {live ? (
-            <View style={styles.liveStatus}>
-              <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
-              <Text
-                style={[
-                  text.labelXs,
-                  { color: c.accentRed, fontWeight: "800", letterSpacing: 0.5 },
-                ]}
-              >
-                {phaseShortLabel(m.phase, m.clock) || "LIVE"}
-              </Text>
-            </View>
-          ) : finished ? (
-            <Text
-              style={[
-                text.labelXs,
-                {
-                  color: c.textMuted,
-                  fontWeight: "800",
-                  letterSpacing: 1,
-                  textTransform: "uppercase",
-                },
-              ]}
-            >
-              FT
-            </Text>
-          ) : scheduled ? (
-            <Text style={[text.labelMd, { color: c.textSecondary, fontWeight: "600" }]}>
-              {start}
-            </Text>
-          ) : (
-            <Text style={[text.labelXs, { color: c.textMuted, fontWeight: "800" }]}>
-              {phaseShortLabel(m.phase, m.clock).slice(0, 4)}
-            </Text>
-          )}
-          {live && m.period && (
-            <Text style={[text.labelXs, { color: c.textDim, marginTop: 2 }]}>
-              {m.period}
-            </Text>
-          )}
-        </View>
+        {/* Status — vertically centered */}
+        <View style={styles.statusCol}>{renderStatus()}</View>
 
-        {/* Teams + scores */}
-        <View style={{ flex: 1, gap: 6 }}>
+        {/* Teams + scores stacked, tight 2-line block */}
+        <View style={styles.teamsBlock}>
           <View style={styles.teamLine}>
             <Text
               numberOfLines={1}
@@ -289,8 +305,8 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
                 text.bodyMd,
                 {
                   flex: 1,
-                  color: scheduled ? c.textSecondary : homeWin || live ? c.textPrimary : c.textSecondary,
-                  fontWeight: homeWin ? "800" : "600",
+                  color: homeLost ? c.textMuted : c.textPrimary,
+                  fontWeight: homeWin || live ? "800" : "700",
                 },
               ]}
             >
@@ -299,10 +315,10 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
             {!scheduled && (
               <Text
                 style={[
-                  text.scoreMd,
+                  styles.score,
                   {
-                    color: homeWin || live ? c.textPrimary : c.textSecondary,
-                    fontVariant: ["tabular-nums"],
+                    color: homeLost ? c.textMuted : c.textPrimary,
+                    fontWeight: homeWin || live ? "900" : "800",
                   },
                 ]}
               >
@@ -310,15 +326,15 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
               </Text>
             )}
           </View>
-          <View style={styles.teamLine}>
+          <View style={[styles.teamLine, { marginTop: 4 }]}>
             <Text
               numberOfLines={1}
               style={[
                 text.bodyMd,
                 {
                   flex: 1,
-                  color: scheduled ? c.textSecondary : awayWin || live ? c.textPrimary : c.textSecondary,
-                  fontWeight: awayWin ? "800" : "600",
+                  color: awayLost ? c.textMuted : c.textPrimary,
+                  fontWeight: awayWin || live ? "800" : "700",
                 },
               ]}
             >
@@ -327,10 +343,10 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
             {!scheduled && (
               <Text
                 style={[
-                  text.scoreMd,
+                  styles.score,
                   {
-                    color: awayWin || live ? c.textPrimary : c.textSecondary,
-                    fontVariant: ["tabular-nums"],
+                    color: awayLost ? c.textMuted : c.textPrimary,
+                    fontWeight: awayWin || live ? "900" : "800",
                   },
                 ]}
               >
@@ -393,23 +409,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: spacing.lg,
-    minHeight: 64,
+    minHeight: 72,
   },
   statusCol: {
-    width: 56,
-    alignItems: "flex-start",
-  },
-  liveStatus: {
-    flexDirection: "row",
+    width: 52,
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+  },
+  teamsBlock: {
+    flex: 1,
+    paddingLeft: spacing.md,
   },
   teamLine: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+  },
+  score: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontVariant: ["tabular-nums"],
+    minWidth: 32,
+    textAlign: "right",
   },
 });
