@@ -133,3 +133,75 @@ export async function confirmPasswordReset(token: string, password: string): Pro
     body: { token, password },
   });
 }
+
+// ── Scoreboard ──────────────────────────────────────────────────
+
+export interface Team {
+  id: string;
+  name: string;
+  short_name: string;
+  logo_url: string | null;
+}
+
+export interface MatchScore {
+  home: number;
+  away: number;
+  aggregate_home?: number | null;
+  aggregate_away?: number | null;
+}
+
+export interface MatchSummary {
+  id: string;
+  phase: string;
+  start_time: string | null;
+  venue: string | null;
+  score: MatchScore;
+  clock: string | null;
+  period: string | null;
+  version: number;
+  home_team: Team;
+  away_team: Team;
+}
+
+export interface LeagueGroup {
+  league_id: string;
+  league_name: string;
+  league_short_name: string;
+  league_country: string | null;
+  league_logo_url: string | null;
+  sport: string;
+  sport_type: string;
+  matches: MatchSummary[];
+}
+
+export interface TodayResponse {
+  date: string;
+  total_matches: number;
+  live: number;
+  finished: number;
+  scheduled: number;
+  leagues: LeagueGroup[];
+  generated_at: string;
+}
+
+export async function fetchToday(signal?: AbortSignal): Promise<TodayResponse> {
+  return apiFetch<TodayResponse>("/v1/today", { signal });
+}
+
+// ── Match detail ─────────────────────────────────────────────────
+
+export interface MatchDetailResponse {
+  match: MatchSummary & { league: { id: string; name: string; short_name: string } };
+  state: {
+    score_home: number;
+    score_away: number;
+    clock: string | null;
+    period: string | null;
+    version: number;
+  } | null;
+  league: { id: string; name: string; short_name: string };
+}
+
+export async function fetchMatch(matchId: string, signal?: AbortSignal): Promise<MatchDetailResponse> {
+  return apiFetch<MatchDetailResponse>(`/v1/matches/${matchId}`, { signal });
+}
