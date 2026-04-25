@@ -132,6 +132,112 @@ async def login(
         )
 
 
+# ── Token issuance (mobile / native clients) ─────────────────────────
+
+import time as _time
+import jwt as _jwt
+from auth.deps import _get_jwt_secret as _get_token_secret
+
+JWT_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
+
+
+class TokenResponse(BaseModel):
+    user: UserResponse
+    token: str
+    expires_in: int = JWT_TTL_SECONDS
+
+
+def _issue_token(user_id: str, email: str) -> str:
+    secret = _get_token_secret()
+    now = int(_time.time())
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "iat": now,
+        "exp": now + JWT_TTL_SECONDS,
+    }
+    return _jwt.encode(payload, secret, algorithm="HS256")
+
+
+@router.post("/auth/token", response_model=TokenResponse)
+async def login_for_token(
+    req: LoginRequest,
+    db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
+):
+    """Validate email/password and return a Bearer JWT.
+
+    Used by native (mobile) clients that don't have a NextAuth session
+    cookie. The JWT is signed with AUTH_JWT_SECRET — same secret the
+    rest of the API uses for `Authorization: Bearer <jwt>` validation.
+    """
+    async with db.read_session() as session:
+        cred = (
+            await session.execute(
+                select(PasswordCredentialORM).where(
+                    PasswordCredentialORM.email == req.email
+                )
+            )
+        ).scalar_one_or_none()
+        if not cred or not pwd_ctx.verify(req.password, cred.password_hash):
+            raise HTTPException(401, "Invalid email or password")
+        user = (
+            await session.execute(select(UserORM).where(UserORM.id == cred.user_id))
+        ).scalar_one()
+        token = _issue_token(str(user.id), user.email)
+        return TokenResponse(
+            user=UserResponse(
+                id=str(user.id),
+                email=user.email,
+                name=user.name,
+            ),
+            token=token,
+        )
+
+
+@router.post("/auth/register-token", response_model=TokenResponse)
+async def register_for_token(
+    req: RegisterRequest,
+    db: DatabaseManager = Depends(get_db),
+    _csrf: None = Depends(_require_ajax),
+):
+    """Register and immediately return a Bearer JWT.
+
+    Convenience endpoint for mobile signup so the client doesn't need a
+    second round-trip to /auth/token after register succeeds.
+    """
+    async with db.write_session() as session:
+        existing = (
+            await session.execute(select(UserORM).where(UserORM.email == req.email))
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(400, "Email already registered")
+        user = UserORM(
+            id=uuid.uuid4(),
+            email=req.email,
+            name=req.name or None,
+        )
+        session.add(user)
+        await session.flush()
+        pw_hash = pwd_ctx.hash(req.password)
+        cred = PasswordCredentialORM(
+            user_id=user.id,
+            email=user.email,
+            password_hash=pw_hash,
+        )
+        session.add(cred)
+        await session.flush()
+        token = _issue_token(str(user.id), user.email)
+        return TokenResponse(
+            user=UserResponse(
+                id=str(user.id),
+                email=user.email,
+                name=user.name,
+            ),
+            token=token,
+        )
+
+
 # ── Password Reset ──────────────────────────────────────────────────
 
 RESET_TOKEN_TTL = timedelta(hours=1)
