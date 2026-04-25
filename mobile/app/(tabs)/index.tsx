@@ -54,6 +54,7 @@ export default function ScoreboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [day, setDay] = useState<"yesterday" | "today" | "upcoming">("today");
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -122,6 +123,7 @@ export default function ScoreboardScreen() {
               : "Today"}
           </Text>
         </View>
+        <DayStrip active={day} onSelect={setDay} c={c} />
       </SafeAreaView>
 
       {loading && !data ? (
@@ -244,22 +246,35 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
       })
     : "";
 
-  // Status block (left rail) — vertically centered next to the 2-line team stack.
-  const renderStatus = () => {
+  // Center pillar: status pill + (live ? clock : nothing)
+  const renderCenter = () => {
     if (live) {
       return (
-        <View style={{ alignItems: "center", gap: 2 }}>
-          <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
-          <Text
-            style={[
-              text.labelXs,
-              { color: c.accentRed, fontWeight: "900", letterSpacing: 0.4 },
-            ]}
-          >
-            {phaseShortLabel(m.phase, m.clock) || "LIVE"}
-          </Text>
+        <View style={{ alignItems: "center" }}>
+          <View style={styles.liveRow}>
+            <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
+            <Text
+              style={[
+                text.labelMd,
+                {
+                  color: c.accentRed,
+                  fontWeight: "900",
+                  letterSpacing: 0.4,
+                },
+              ]}
+            >
+              LIVE
+            </Text>
+          </View>
+          {m.clock && (
+            <Text style={[text.labelMd, { color: c.textPrimary, marginTop: 2 }]}>
+              {m.clock}
+            </Text>
+          )}
           {m.period && (
-            <Text style={[text.labelXs, { color: c.textDim }]}>{m.period}</Text>
+            <Text style={[text.labelXs, { color: c.textMuted, marginTop: 2 }]}>
+              {m.period}
+            </Text>
           )}
         </View>
       );
@@ -268,32 +283,35 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
       return (
         <Text
           style={[
-            text.labelSm,
-            {
-              color: c.textMuted,
-              fontWeight: "800",
-              letterSpacing: 0.6,
-            },
+            text.bodyMd,
+            { color: c.textPrimary, fontWeight: "700", textAlign: "center" },
           ]}
         >
-          FT
+          Final
         </Text>
       );
     }
     if (scheduled) {
       return (
-        <Text
-          style={[
-            text.labelMd,
-            { color: c.textSecondary, fontWeight: "700", textAlign: "center" },
-          ]}
-        >
-          {start}
-        </Text>
+        <View style={{ alignItems: "center" }}>
+          <Text
+            style={[
+              text.bodyMd,
+              { color: c.textPrimary, fontWeight: "800", textAlign: "center" },
+            ]}
+          >
+            {start || "TBD"}
+          </Text>
+        </View>
       );
     }
     return (
-      <Text style={[text.labelXs, { color: c.textMuted, fontWeight: "800" }]}>
+      <Text
+        style={[
+          text.labelMd,
+          { color: c.textMuted, fontWeight: "700", textAlign: "center" },
+        ]}
+      >
         {phaseShortLabel(m.phase, m.clock).slice(0, 4)}
       </Text>
     );
@@ -310,82 +328,153 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
           },
         ]}
       >
-        {/* Status — vertically centered */}
-        <View style={styles.statusCol}>{renderStatus()}</View>
+        {/* Home block: logo on top, name below, record under name */}
+        <View style={styles.teamBlock}>
+          <TeamLogo
+            url={m.home_team.logo_url}
+            name={m.home_team.short_name || m.home_team.name}
+            size={36}
+          />
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.teamNameStacked,
+              {
+                color: homeLost ? c.textMuted : c.textPrimary,
+                fontWeight: homeWin || live ? "800" : "700",
+              },
+            ]}
+          >
+            {m.home_team.name || m.home_team.short_name}
+          </Text>
+        </View>
 
-        {/* Teams + scores stacked, tight 2-line block */}
-        <View style={styles.teamsBlock}>
-          <View style={styles.teamLine}>
-            <TeamLogo
-              url={m.home_team.logo_url}
-              name={m.home_team.short_name || m.home_team.name}
-              size={22}
-            />
+        {/* Home score */}
+        <View style={styles.scoreCol}>
+          {!scheduled && (
             <Text
-              numberOfLines={1}
               style={[
-                text.bodyMd,
+                styles.bigScore,
                 {
-                  flex: 1,
-                  marginLeft: spacing.md,
                   color: homeLost ? c.textMuted : c.textPrimary,
-                  fontWeight: homeWin || live ? "800" : "700",
+                  fontWeight: homeWin || live ? "900" : "800",
                 },
               ]}
             >
-              {m.home_team.short_name || m.home_team.name}
+              {m.score.home}
             </Text>
-            {!scheduled && (
-              <Text
-                style={[
-                  styles.score,
-                  {
-                    color: homeLost ? c.textMuted : c.textPrimary,
-                    fontWeight: homeWin || live ? "900" : "800",
-                  },
-                ]}
-              >
-                {m.score.home}
-              </Text>
-            )}
-          </View>
-          <View style={styles.teamLine}>
-            <TeamLogo
-              url={m.away_team.logo_url}
-              name={m.away_team.short_name || m.away_team.name}
-              size={22}
-            />
+          )}
+        </View>
+
+        {/* Center pillar: status / clock */}
+        <View style={styles.centerCol}>{renderCenter()}</View>
+
+        {/* Away score */}
+        <View style={styles.scoreCol}>
+          {!scheduled && (
             <Text
-              numberOfLines={1}
               style={[
-                text.bodyMd,
+                styles.bigScore,
                 {
-                  flex: 1,
-                  marginLeft: spacing.md,
                   color: awayLost ? c.textMuted : c.textPrimary,
-                  fontWeight: awayWin || live ? "800" : "700",
+                  fontWeight: awayWin || live ? "900" : "800",
+                  textAlign: "left",
                 },
               ]}
             >
-              {m.away_team.short_name || m.away_team.name}
+              {m.score.away}
             </Text>
-            {!scheduled && (
-              <Text
-                style={[
-                  styles.score,
-                  {
-                    color: awayLost ? c.textMuted : c.textPrimary,
-                    fontWeight: awayWin || live ? "900" : "800",
-                  },
-                ]}
-              >
-                {m.score.away}
-              </Text>
-            )}
-          </View>
+          )}
+        </View>
+
+        {/* Away block: logo on top, name below */}
+        <View style={styles.teamBlock}>
+          <TeamLogo
+            url={m.away_team.logo_url}
+            name={m.away_team.short_name || m.away_team.name}
+            size={36}
+          />
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.teamNameStacked,
+              {
+                color: awayLost ? c.textMuted : c.textPrimary,
+                fontWeight: awayWin || live ? "800" : "700",
+              },
+            ]}
+          >
+            {m.away_team.name || m.away_team.short_name}
+          </Text>
         </View>
       </Pressable>
     </Link>
+  );
+}
+
+interface DayOption {
+  key: "yesterday" | "today" | "upcoming";
+  label: string;
+}
+
+function DayStrip({
+  active,
+  onSelect,
+  c,
+}: {
+  active: DayOption["key"];
+  onSelect: (k: DayOption["key"]) => void;
+  c: typeof colors.dark;
+}) {
+  const opts: DayOption[] = [
+    { key: "yesterday", label: "Yesterday" },
+    { key: "today", label: "Today" },
+    { key: "upcoming", label: "Upcoming" },
+  ];
+  return (
+    <View
+      style={[
+        styles.dayStrip,
+        { borderBottomColor: c.surfaceBorder, backgroundColor: c.surface },
+      ]}
+    >
+      {opts.map((o) => {
+        const isActive = o.key === active;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onSelect(o.key)}
+            style={({ pressed }) => [
+              styles.dayCell,
+              {
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                text.bodyMd,
+                {
+                  color: isActive ? c.textPrimary : c.textMuted,
+                  fontWeight: isActive ? "800" : "600",
+                  textAlign: "center",
+                },
+              ]}
+            >
+              {o.label}
+            </Text>
+            {isActive && (
+              <View
+                style={[
+                  styles.dayUnderline,
+                  { backgroundColor: c.accentGreen },
+                ]}
+              />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -443,33 +532,63 @@ const styles = StyleSheet.create({
   },
   matchRow: {
     flexDirection: "row",
-    alignItems: "stretch",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 100,
   },
-  statusCol: {
-    width: 56,
+  teamBlock: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: spacing.xs,
+    gap: 6,
+  },
+  teamNameStacked: {
+    fontSize: 13,
+    lineHeight: 16,
+    textAlign: "center",
+  },
+  scoreCol: {
+    width: 44,
     alignItems: "center",
     justifyContent: "center",
-    paddingRight: spacing.sm,
   },
-  teamsBlock: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingLeft: spacing.md,
-    minHeight: 56,
-    gap: 10,
+  bigScore: {
+    fontSize: 32,
+    lineHeight: 36,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -1,
   },
-  teamLine: {
+  centerCol: {
+    minWidth: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xs,
+  },
+  liveRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
-  score: {
-    fontSize: 22,
-    lineHeight: 24,
-    fontVariant: ["tabular-nums"],
-    minWidth: 32,
-    textAlign: "right",
+  dayStrip: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dayCell: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    position: "relative",
+  },
+  dayUnderline: {
+    position: "absolute",
+    bottom: 0,
+    left: spacing.md,
+    right: spacing.md,
+    height: 3,
+    borderRadius: 2,
   },
 });
