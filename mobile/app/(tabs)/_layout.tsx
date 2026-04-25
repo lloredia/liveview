@@ -1,30 +1,8 @@
 import { Tabs } from "expo-router";
-import { Platform, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { CircleDot, UserRound } from "lucide-react-native";
+import { Platform, StyleSheet, useColorScheme } from "react-native";
 
-import { colors, spacing } from "@/src/theme";
-
-interface TabBarIconProps {
-  symbol: string;
-  color: string;
-  focused: boolean;
-}
-
-function TabBarIcon({ symbol, color, focused }: TabBarIconProps) {
-  return (
-    <View style={styles.iconWrap}>
-      <Text
-        style={{
-          color,
-          fontSize: focused ? 22 : 20,
-          fontWeight: focused ? "900" : "700",
-          lineHeight: 22,
-        }}
-      >
-        {symbol}
-      </Text>
-    </View>
-  );
-}
+import { colors } from "@/src/theme";
 
 export default function TabsLayout() {
   const scheme = useColorScheme() === "light" ? "light" : "dark";
@@ -55,7 +33,7 @@ export default function TabsLayout() {
         options={{
           title: "Scoreboard",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon symbol="◉" color={color} focused={focused} />
+            <CircleDot size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
@@ -64,19 +42,10 @@ export default function TabsLayout() {
         options={{
           title: "Account",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon symbol="◐" color={color} focused={focused} />
+            <UserRound size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  iconWrap: {
-    width: 24,
-    height: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

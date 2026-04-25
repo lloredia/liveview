@@ -19,14 +19,10 @@ import {
   type MatchSummary,
   type TodayResponse,
 } from "@/src/api";
-import {
-  isFinished,
-  isLive,
-  isScheduled,
-  phaseShortLabel,
-  sportEmoji,
-} from "@/src/match-utils";
+import { isFinished, isLive, isScheduled, phaseShortLabel } from "@/src/match-utils";
 import { colors, radii, spacing, text } from "@/src/theme";
+import { TeamLogo } from "@/src/components/TeamLogo";
+import { SportIcon } from "@/src/components/SportIcon";
 
 interface Row {
   type: "league-header" | "match";
@@ -189,7 +185,18 @@ function LeagueHeader({ league: lg, c }: { league: LeagueGroup; c: typeof colors
         { backgroundColor: c.surface, borderBottomColor: c.surfaceBorder },
       ]}
     >
-      <Text style={{ fontSize: 14 }}>{sportEmoji(lg.sport)}</Text>
+      {lg.league_logo_url ? (
+        <TeamLogo url={lg.league_logo_url} name={lg.league_short_name || lg.league_name} size={22} />
+      ) : (
+        <View
+          style={[
+            styles.sportIconWrap,
+            { backgroundColor: c.surfaceCard, borderColor: c.surfaceBorder },
+          ]}
+        >
+          <SportIcon sport={lg.sport} size={12} color={c.textTertiary} />
+        </View>
+      )}
       <Text
         style={[
           text.labelMd,
@@ -198,16 +205,26 @@ function LeagueHeader({ league: lg, c }: { league: LeagueGroup; c: typeof colors
             fontWeight: "800",
             letterSpacing: 0.6,
             textTransform: "uppercase",
+            marginLeft: spacing.sm,
           },
         ]}
       >
         {lg.league_short_name || lg.league_name}
       </Text>
       {lg.league_country && (
-        <Text style={[text.labelSm, { color: c.textDim }]}>{lg.league_country}</Text>
+        <Text
+          style={[
+            text.labelSm,
+            { color: c.textDim, marginLeft: spacing.sm, textTransform: "uppercase" },
+          ]}
+        >
+          {lg.league_country}
+        </Text>
       )}
       <View style={{ flex: 1 }} />
-      <Text style={[text.labelSm, { color: c.textMuted }]}>{lg.matches.length}</Text>
+      <Text style={[text.labelSm, { color: c.textMuted, fontWeight: "700" }]}>
+        {lg.matches.length}
+      </Text>
     </View>
   );
 }
@@ -299,12 +316,18 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
         {/* Teams + scores stacked, tight 2-line block */}
         <View style={styles.teamsBlock}>
           <View style={styles.teamLine}>
+            <TeamLogo
+              url={m.home_team.logo_url}
+              name={m.home_team.short_name || m.home_team.name}
+              size={22}
+            />
             <Text
               numberOfLines={1}
               style={[
                 text.bodyMd,
                 {
                   flex: 1,
+                  marginLeft: spacing.md,
                   color: homeLost ? c.textMuted : c.textPrimary,
                   fontWeight: homeWin || live ? "800" : "700",
                 },
@@ -326,13 +349,19 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
               </Text>
             )}
           </View>
-          <View style={[styles.teamLine, { marginTop: 4 }]}>
+          <View style={[styles.teamLine, { marginTop: 6 }]}>
+            <TeamLogo
+              url={m.away_team.logo_url}
+              name={m.away_team.short_name || m.away_team.name}
+              size={22}
+            />
             <Text
               numberOfLines={1}
               style={[
                 text.bodyMd,
                 {
                   flex: 1,
+                  marginLeft: spacing.md,
                   color: awayLost ? c.textMuted : c.textPrimary,
                   fontWeight: awayWin || live ? "800" : "700",
                 },
@@ -399,11 +428,18 @@ const styles = StyleSheet.create({
   leagueHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sportIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   matchRow: {
     flexDirection: "row",
