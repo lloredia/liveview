@@ -1,23 +1,33 @@
 import { Tabs } from "expo-router";
-import { useColorScheme, View, Text } from "react-native";
+import { Platform, StyleSheet, Text, useColorScheme, View } from "react-native";
 
-import { colors } from "@/src/theme";
+import { colors, spacing } from "@/src/theme";
 
 interface TabBarIconProps {
   symbol: string;
   color: string;
+  focused: boolean;
 }
 
-function TabBarIcon({ symbol, color }: TabBarIconProps) {
+function TabBarIcon({ symbol, color, focused }: TabBarIconProps) {
   return (
-    <View style={{ width: 24, alignItems: "center" }}>
-      <Text style={{ color, fontSize: 18, fontWeight: "700" }}>{symbol}</Text>
+    <View style={styles.iconWrap}>
+      <Text
+        style={{
+          color,
+          fontSize: focused ? 22 : 20,
+          fontWeight: focused ? "900" : "700",
+          lineHeight: 22,
+        }}
+      >
+        {symbol}
+      </Text>
     </View>
   );
 }
 
 export default function TabsLayout() {
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
+  const scheme = useColorScheme() === "light" ? "light" : "dark";
   const c = colors[scheme];
 
   return (
@@ -27,8 +37,16 @@ export default function TabsLayout() {
         tabBarActiveTintColor: c.accentGreen,
         tabBarInactiveTintColor: c.textMuted,
         tabBarStyle: {
-          backgroundColor: c.surfaceRaised,
+          backgroundColor: c.surface,
           borderTopColor: c.surfaceBorder,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: Platform.OS === "ios" ? 84 : 64,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "700",
+          letterSpacing: 0.3,
         },
       }}
     >
@@ -36,16 +54,29 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Scoreboard",
-          tabBarIcon: ({ color }) => <TabBarIcon symbol="●" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon symbol="◉" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="account"
         options={{
           title: "Account",
-          tabBarIcon: ({ color }) => <TabBarIcon symbol="◉" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon symbol="◐" color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconWrap: {
+    width: 24,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

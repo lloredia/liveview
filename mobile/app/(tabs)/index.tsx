@@ -5,6 +5,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  StatusBar,
   StyleSheet,
   Text,
   useColorScheme,
@@ -12,8 +13,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { fetchToday, type LeagueGroup, type MatchSummary, type TodayResponse } from "@/src/api";
-import { isFinished, isLive, isScheduled, phaseShortLabel, sportEmoji } from "@/src/match-utils";
+import {
+  fetchToday,
+  type LeagueGroup,
+  type MatchSummary,
+  type TodayResponse,
+} from "@/src/api";
+import {
+  isFinished,
+  isLive,
+  isScheduled,
+  phaseShortLabel,
+  sportEmoji,
+} from "@/src/match-utils";
 import { colors, radii, spacing, text } from "@/src/theme";
 
 interface Row {
@@ -37,8 +49,10 @@ function buildRows(today: TodayResponse | null): Row[] {
 }
 
 export default function ScoreboardScreen() {
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
+  // Force dark for premium scoreboard look — light mode option lives in Account
+  const scheme = useColorScheme() === "light" ? "light" : "dark";
   const c = colors[scheme];
+  const isDark = scheme === "dark";
 
   const [data, setData] = useState<TodayResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,170 +87,46 @@ export default function ScoreboardScreen() {
   }, [load]);
 
   const rows = buildRows(data);
+  const liveCount = data?.live ?? 0;
+  const totalCount = data?.total_matches ?? 0;
 
   const renderItem = ({ item }: { item: Row }) => {
     if (item.type === "league-header" && item.league) {
-      const lg = item.league;
-      return (
-        <View
-          style={[
-            styles.leagueHeader,
-            { backgroundColor: c.surface, borderBottomColor: c.surfaceBorder },
-          ]}
-        >
-          <Text style={{ fontSize: 16 }}>{sportEmoji(lg.sport)}</Text>
-          <Text style={[text.labelLg, { color: c.textPrimary, fontWeight: "800" }]}>
-            {lg.league_short_name || lg.league_name}
-          </Text>
-          {lg.league_country && (
-            <Text style={[text.labelMd, { color: c.textMuted }]}>
-              {lg.league_country}
-            </Text>
-          )}
-          <View style={{ flex: 1 }} />
-          <Text style={[text.labelMd, { color: c.textMuted }]}>
-            {lg.matches.length}
-          </Text>
-        </View>
-      );
+      return <LeagueHeader league={item.league} c={c} />;
     }
-
-    if (item.type === "match" && item.match && item.league) {
-      const m = item.match;
-      const live = isLive(m.phase);
-      const finished = isFinished(m.phase);
-      const scheduled = isScheduled(m.phase);
-      const start = m.start_time
-        ? new Date(m.start_time).toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          })
-        : "";
-      const statusLabel = live
-        ? phaseShortLabel(m.phase, m.clock)
-        : finished
-          ? "FT"
-          : scheduled
-            ? start
-            : phaseShortLabel(m.phase, m.clock);
-      return (
-        <Link
-          href={{ pathname: "/match/[id]", params: { id: m.id } }}
-          asChild
-        >
-          <Pressable
-            style={({ pressed }) => [
-              styles.matchRow,
-              {
-                backgroundColor: pressed ? c.surfaceHover : c.surface,
-                borderBottomColor: c.surfaceBorder,
-              },
-            ]}
-          >
-            <View style={styles.statusCol}>
-              <Text
-                style={[
-                  text.labelMd,
-                  {
-                    color: live ? c.accentRed : finished ? c.textMuted : c.textSecondary,
-                    fontWeight: "700",
-                  },
-                ]}
-              >
-                {statusLabel || "—"}
-              </Text>
-              {live && m.period && (
-                <Text style={[text.labelXs, { color: c.textMuted, marginTop: 2 }]}>
-                  {m.period}
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.teamCol}>
-              <Text
-                numberOfLines={1}
-                style={[
-                  text.bodySm,
-                  {
-                    color: c.textPrimary,
-                    fontWeight:
-                      finished && m.score.home > m.score.away ? "800" : "600",
-                  },
-                ]}
-              >
-                {m.home_team.short_name || m.home_team.name}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[
-                  text.bodySm,
-                  {
-                    color: c.textPrimary,
-                    marginTop: 2,
-                    fontWeight:
-                      finished && m.score.away > m.score.home ? "800" : "600",
-                  },
-                ]}
-              >
-                {m.away_team.short_name || m.away_team.name}
-              </Text>
-            </View>
-
-            <View style={styles.scoreCol}>
-              {scheduled ? (
-                <Text style={[text.bodySm, { color: c.textMuted }]}>vs</Text>
-              ) : (
-                <>
-                  <Text
-                    style={[
-                      text.scoreMd,
-                      {
-                        color:
-                          live || (finished && m.score.home > m.score.away)
-                            ? c.textPrimary
-                            : c.textSecondary,
-                      },
-                    ]}
-                  >
-                    {m.score.home}
-                  </Text>
-                  <Text
-                    style={[
-                      text.scoreMd,
-                      {
-                        color:
-                          live || (finished && m.score.away > m.score.home)
-                            ? c.textPrimary
-                            : c.textSecondary,
-                      },
-                    ]}
-                  >
-                    {m.score.away}
-                  </Text>
-                </>
-              )}
-            </View>
-          </Pressable>
-        </Link>
-      );
+    if (item.type === "match" && item.match) {
+      return <MatchRow match={item.match} c={c} />;
     }
     return null;
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }}>
-      <View style={[styles.header, { borderBottomColor: c.surfaceBorder }]}>
-        <Text style={[text.headingMd, { color: c.textPrimary }]}>
-          LIVE
-          <Text style={{ color: c.accentGreen }}>VIEW</Text>
-        </Text>
-        {data && (
-          <Text style={[text.labelMd, { color: c.textMuted }]}>
-            {data.live > 0 ? `${data.live} live · ` : ""}
-            {data.total_matches} today
+    <View style={{ flex: 1, backgroundColor: c.surface }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: c.surface }}>
+        {/* Hero header */}
+        <View style={styles.heroHeader}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: spacing.sm }}>
+            <Text style={[text.headingLg, { color: c.textPrimary, letterSpacing: -0.5 }]}>
+              LIVE
+              <Text style={{ color: c.accentGreen }}>VIEW</Text>
+            </Text>
+            {liveCount > 0 && (
+              <View style={[styles.livePill, { backgroundColor: c.accentRed + "22" }]}>
+                <View style={[styles.liveDot, { backgroundColor: c.accentRed }]} />
+                <Text style={[text.labelSm, { color: c.accentRed, fontWeight: "800" }]}>
+                  {liveCount} LIVE
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[text.labelMd, { color: c.textMuted, marginTop: 2 }]}>
+            {totalCount > 0
+              ? `${totalCount} matches today`
+              : "Today"}
           </Text>
-        )}
-      </View>
+        </View>
+      </SafeAreaView>
 
       {loading && !data ? (
         <View style={styles.center}>
@@ -267,6 +157,7 @@ export default function ScoreboardScreen() {
           data={rows}
           keyExtractor={(item) => item.key}
           renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: spacing.xl }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -286,18 +177,196 @@ export default function ScoreboardScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
+  );
+}
+
+function LeagueHeader({ league: lg, c }: { league: LeagueGroup; c: typeof colors.dark }) {
+  return (
+    <View
+      style={[
+        styles.leagueHeader,
+        { backgroundColor: c.surface, borderBottomColor: c.surfaceBorder },
+      ]}
+    >
+      <Text style={{ fontSize: 14 }}>{sportEmoji(lg.sport)}</Text>
+      <Text
+        style={[
+          text.labelMd,
+          {
+            color: c.textPrimary,
+            fontWeight: "800",
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+          },
+        ]}
+      >
+        {lg.league_short_name || lg.league_name}
+      </Text>
+      {lg.league_country && (
+        <Text style={[text.labelSm, { color: c.textDim }]}>{lg.league_country}</Text>
+      )}
+      <View style={{ flex: 1 }} />
+      <Text style={[text.labelSm, { color: c.textMuted }]}>{lg.matches.length}</Text>
+    </View>
+  );
+}
+
+function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark }) {
+  const live = isLive(m.phase);
+  const finished = isFinished(m.phase);
+  const scheduled = isScheduled(m.phase);
+  const homeWin = finished && m.score.home > m.score.away;
+  const awayWin = finished && m.score.away > m.score.home;
+  const start = m.start_time
+    ? new Date(m.start_time).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
+
+  return (
+    <Link href={{ pathname: "/match/[id]", params: { id: m.id } }} asChild>
+      <Pressable
+        style={({ pressed }) => [
+          styles.matchRow,
+          {
+            backgroundColor: pressed ? c.surfaceHover : c.surface,
+            borderBottomColor: c.surfaceBorder,
+          },
+        ]}
+      >
+        {/* Status column */}
+        <View style={styles.statusCol}>
+          {live ? (
+            <View style={styles.liveStatus}>
+              <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
+              <Text
+                style={[
+                  text.labelXs,
+                  { color: c.accentRed, fontWeight: "800", letterSpacing: 0.5 },
+                ]}
+              >
+                {phaseShortLabel(m.phase, m.clock) || "LIVE"}
+              </Text>
+            </View>
+          ) : finished ? (
+            <Text
+              style={[
+                text.labelXs,
+                {
+                  color: c.textMuted,
+                  fontWeight: "800",
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                },
+              ]}
+            >
+              FT
+            </Text>
+          ) : scheduled ? (
+            <Text style={[text.labelMd, { color: c.textSecondary, fontWeight: "600" }]}>
+              {start}
+            </Text>
+          ) : (
+            <Text style={[text.labelXs, { color: c.textMuted, fontWeight: "800" }]}>
+              {phaseShortLabel(m.phase, m.clock).slice(0, 4)}
+            </Text>
+          )}
+          {live && m.period && (
+            <Text style={[text.labelXs, { color: c.textDim, marginTop: 2 }]}>
+              {m.period}
+            </Text>
+          )}
+        </View>
+
+        {/* Teams + scores */}
+        <View style={{ flex: 1, gap: 6 }}>
+          <View style={styles.teamLine}>
+            <Text
+              numberOfLines={1}
+              style={[
+                text.bodyMd,
+                {
+                  flex: 1,
+                  color: scheduled ? c.textSecondary : homeWin || live ? c.textPrimary : c.textSecondary,
+                  fontWeight: homeWin ? "800" : "600",
+                },
+              ]}
+            >
+              {m.home_team.short_name || m.home_team.name}
+            </Text>
+            {!scheduled && (
+              <Text
+                style={[
+                  text.scoreMd,
+                  {
+                    color: homeWin || live ? c.textPrimary : c.textSecondary,
+                    fontVariant: ["tabular-nums"],
+                  },
+                ]}
+              >
+                {m.score.home}
+              </Text>
+            )}
+          </View>
+          <View style={styles.teamLine}>
+            <Text
+              numberOfLines={1}
+              style={[
+                text.bodyMd,
+                {
+                  flex: 1,
+                  color: scheduled ? c.textSecondary : awayWin || live ? c.textPrimary : c.textSecondary,
+                  fontWeight: awayWin ? "800" : "600",
+                },
+              ]}
+            >
+              {m.away_team.short_name || m.away_team.name}
+            </Text>
+            {!scheduled && (
+              <Text
+                style={[
+                  text.scoreMd,
+                  {
+                    color: awayWin || live ? c.textPrimary : c.textSecondary,
+                    fontVariant: ["tabular-nums"],
+                  },
+                ]}
+              >
+                {m.score.away}
+              </Text>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    </Link>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  heroHeader: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  livePill: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  liveDotSm: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   center: {
     flex: 1,
@@ -316,7 +385,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   matchRow: {
@@ -325,20 +395,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: spacing.md,
+    gap: spacing.lg,
+    minHeight: 64,
   },
   statusCol: {
     width: 56,
     alignItems: "flex-start",
   },
-  teamCol: {
-    flex: 1,
-    minWidth: 0,
+  liveStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  scoreCol: {
-    width: 36,
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    height: 44,
+  teamLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
 });
