@@ -533,13 +533,16 @@ const styles = StyleSheet.create({
   matchRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "nowrap",
     paddingHorizontal: spacing.md,
     paddingVertical: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 100,
+    width: "100%",
   },
   teamBlock: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     paddingHorizontal: spacing.xs,
     gap: 6,
