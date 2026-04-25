@@ -36,8 +36,33 @@ def to_asyncpg_dsn(database_url: str) -> str:
     return database_url
 
 
+def resolve_database_url() -> str:
+    """Find a usable Postgres URL from Railway-style env vars.
+
+    Tries direct URL vars first, then assembles from PG*. Raises if
+    nothing usable is set.
+    """
+    for key in ("DATABASE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_URL", "PGURL"):
+        v = os.environ.get(key)
+        if v:
+            return v
+    # Build from PG* parts
+    user = os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER")
+    pw = os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD")
+    host = os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST")
+    port = os.environ.get("PGPORT") or os.environ.get("POSTGRES_PORT") or "5432"
+    db = os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB")
+    if user and pw and host and db:
+        return f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+    raise SystemExit(
+        "No Postgres URL or PG* env vars found. If running outside the\n"
+        "Postgres service, scope to it explicitly:\n"
+        "  railway run --service Postgres python3 backend/scripts/delete_user.py <email>",
+    )
+
+
 async def delete_user(email: str) -> int:
-    dsn = to_asyncpg_dsn(os.environ["DATABASE_URL"])
+    dsn = to_asyncpg_dsn(resolve_database_url())
     conn = await asyncpg.connect(dsn)
     try:
         async with conn.transaction():
