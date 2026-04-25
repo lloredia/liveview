@@ -42,7 +42,16 @@ def resolve_database_url() -> str:
     Tries direct URL vars first, then assembles from PG*. Raises if
     nothing usable is set.
     """
-    for key in ("DATABASE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_URL", "PGURL"):
+    # Prefer PUBLIC_URL when running outside the Railway network (laptop /
+    # CI), else fall back to internal URLs.
+    for key in (
+        "DATABASE_PUBLIC_URL",
+        "POSTGRES_PUBLIC_URL",
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "LV_DATABASE_URL",
+        "PGURL",
+    ):
         v = os.environ.get(key)
         if v:
             return v
