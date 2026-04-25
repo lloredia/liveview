@@ -349,7 +349,7 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
               </Text>
             )}
           </View>
-          <View style={[styles.teamLine, { marginTop: 6 }]}>
+          <View style={styles.teamLine}>
             <TeamLogo
               url={m.away_team.logo_url}
               name={m.away_team.short_name || m.away_team.name}
@@ -443,20 +443,23 @@ const styles = StyleSheet.create({
   },
   matchRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 72,
   },
   statusCol: {
-    width: 52,
+    width: 56,
     alignItems: "center",
     justifyContent: "center",
+    paddingRight: spacing.sm,
   },
   teamsBlock: {
     flex: 1,
+    justifyContent: "space-between",
     paddingLeft: spacing.md,
+    minHeight: 56,
+    gap: 10,
   },
   teamLine: {
     flexDirection: "row",
