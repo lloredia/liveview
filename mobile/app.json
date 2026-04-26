@@ -14,6 +14,9 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "production"
       }
     },
     "android": {
@@ -34,6 +37,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -58,8 +62,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": ""
+        "projectId": "a4caccbf-da26-4909-95a1-6e1114c82dae"
       }
-    }
+    },
+    "owner": "lloredia"
   }
 }

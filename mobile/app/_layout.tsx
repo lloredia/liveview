@@ -1,11 +1,23 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { useColorScheme } from "react-native";
 import "react-native-reanimated";
 
 import { AuthProvider, useAuth } from "@/src/auth-context";
+import { registerForPushNotifications } from "@/src/notifications";
+import { PreferencesProvider, usePreferences } from "@/src/preferences-context";
+
+// Show banner + sound when a push arrives while the app is foregrounded.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function RootNav() {
   const { status } = useAuth();
@@ -30,14 +42,27 @@ function RootNav() {
   );
 }
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+function ThemedShell() {
+  const { scheme } = usePreferences();
+
+  useEffect(() => {
+    void registerForPushNotifications();
+  }, []);
+
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <RootNav />
-        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-      </AuthProvider>
+    <ThemeProvider value={scheme === "dark" ? DarkTheme : DefaultTheme}>
+      <RootNav />
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <PreferencesProvider>
+      <AuthProvider>
+        <ThemedShell />
+      </AuthProvider>
+    </PreferencesProvider>
   );
 }

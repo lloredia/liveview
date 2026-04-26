@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,6 +23,9 @@ import { isFinished, isLive, isScheduled, phaseShortLabel } from "@/src/match-ut
 import { colors, radii, spacing, text } from "@/src/theme";
 import { TeamLogo } from "@/src/components/TeamLogo";
 import { SportIcon } from "@/src/components/SportIcon";
+import { MatchRowSkeleton } from "@/src/components/Skeleton";
+import { usePreferences } from "@/src/preferences-context";
+import { ChevronDown, ChevronRight, LayoutGrid, Search, Star } from "lucide-react-native";
 
 interface Row {
   type: "league-header" | "match";
@@ -31,13 +34,57 @@ interface Row {
   match?: MatchSummary;
 }
 
-function buildRows(today: TodayResponse | null): Row[] {
+type Filter = "all" | "live" | "favorites";
+type DayKey = "yesterday" | "today" | "upcoming";
+
+function dateForDay(day: DayKey): string {
+  const d = new Date();
+  if (day === "yesterday") d.setDate(d.getDate() - 1);
+  else if (day === "upcoming") d.setDate(d.getDate() + 1);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** live → scheduled (by start_time asc) → finished. */
+function sortMatches(matches: MatchSummary[]): MatchSummary[] {
+  const rank = (m: MatchSummary): number => {
+    if (isLive(m.phase)) return 0;
+    if (isScheduled(m.phase)) return 1;
+    if (isFinished(m.phase)) return 2;
+    return 3;
+  };
+  return [...matches].sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    const ta = a.start_time ? new Date(a.start_time).getTime() : 0;
+    const tb = b.start_time ? new Date(b.start_time).getTime() : 0;
+    return ta - tb;
+  });
+}
+
+function buildRows(
+  today: TodayResponse | null,
+  filter: Filter,
+  collapsed: Set<string>,
+  favorites: Set<string>,
+): Row[] {
   if (!today) return [];
   const rows: Row[] = [];
   for (const lg of today.leagues) {
     if (!lg.matches.length) continue;
-    rows.push({ type: "league-header", key: `lg-${lg.league_id}`, league: lg });
-    for (const m of lg.matches) {
+    let filtered = lg.matches;
+    if (filter === "live") filtered = filtered.filter((m) => isLive(m.phase));
+    else if (filter === "favorites")
+      filtered = filtered.filter(
+        (m) => favorites.has(m.home_team.id) || favorites.has(m.away_team.id),
+      );
+    if (!filtered.length) continue;
+    const sorted = sortMatches(filtered);
+    rows.push({ type: "league-header", key: `lg-${lg.league_id}`, league: { ...lg, matches: sorted } });
+    if (collapsed.has(lg.league_id)) continue;
+    for (const m of sorted) {
       rows.push({ type: "match", key: m.id, match: m, league: lg });
     }
   }
@@ -49,20 +96,35 @@ export default function ScoreboardScreen() {
   const scheme = useColorScheme() === "light" ? "light" : "dark";
   const c = colors[scheme];
   const isDark = scheme === "dark";
+  const router = useRouter();
+  const { favorites } = usePreferences();
+  const favCount = favorites.size;
 
   const [data, setData] = useState<TodayResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [day, setDay] = useState<"yesterday" | "today" | "upcoming">("today");
+  const [day, setDay] = useState<DayKey>("today");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
+
+  const toggleLeague = useCallback((leagueId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(leagueId)) next.delete(leagueId);
+      else next.add(leagueId);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
-      const res = await fetchToday(ctrl.signal);
+      const date = dateForDay(day);
+      const res = await fetchToday(ctrl.signal, { date });
       setData(res);
       setError(null);
     } catch (e) {
@@ -72,27 +134,37 @@ export default function ScoreboardScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [day]);
 
   useEffect(() => {
+    setLoading(true);
     load();
+    // Only auto-refresh today; yesterday/upcoming don't tick.
+    if (day !== "today") return () => abortRef.current?.abort();
     const interval = setInterval(load, 30_000);
     return () => {
       clearInterval(interval);
       abortRef.current?.abort();
     };
-  }, [load]);
+  }, [load, day]);
 
-  const rows = buildRows(data);
+  const rows = buildRows(data, filter, collapsed, favorites);
   const liveCount = data?.live ?? 0;
   const totalCount = data?.total_matches ?? 0;
 
   const renderItem = ({ item }: { item: Row }) => {
     if (item.type === "league-header" && item.league) {
-      return <LeagueHeader league={item.league} c={c} />;
+      return (
+        <LeagueHeader
+          league={item.league}
+          c={c}
+          collapsed={collapsed.has(item.league.league_id)}
+          onToggle={() => toggleLeague(item.league!.league_id)}
+        />
+      );
     }
     if (item.type === "match" && item.match) {
-      return <MatchRow match={item.match} c={c} />;
+      return <MatchRow match={item.match} c={c} router={router} />;
     }
     return null;
   };
@@ -103,19 +175,47 @@ export default function ScoreboardScreen() {
       <SafeAreaView edges={["top"]} style={{ backgroundColor: c.surface }}>
         {/* Hero header */}
         <View style={styles.heroHeader}>
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: spacing.sm }}>
-            <Text style={[text.headingLg, { color: c.textPrimary, letterSpacing: -0.5 }]}>
-              LIVE
-              <Text style={{ color: c.accentGreen }}>VIEW</Text>
-            </Text>
-            {liveCount > 0 && (
-              <View style={[styles.livePill, { backgroundColor: c.accentRed + "22" }]}>
-                <View style={[styles.liveDot, { backgroundColor: c.accentRed }]} />
-                <Text style={[text.labelSm, { color: c.accentRed, fontWeight: "800" }]}>
-                  {liveCount} LIVE
-                </Text>
-              </View>
-            )}
+          <View style={styles.heroTop}>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: spacing.sm, flex: 1 }}>
+              <Text style={[text.headingLg, { color: c.textPrimary, letterSpacing: -0.5 }]}>
+                LIVE
+                <Text style={{ color: c.accentGreen }}>VIEW</Text>
+              </Text>
+              {liveCount > 0 && (
+                <View style={[styles.livePill, { backgroundColor: c.accentRed + "22" }]}>
+                  <View style={[styles.liveDot, { backgroundColor: c.accentRed }]} />
+                  <Text style={[text.labelSm, { color: c.accentRed, fontWeight: "800" }]}>
+                    {liveCount} LIVE
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Pressable
+              onPress={() => router.push("/leagues")}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: pressed ? c.surfaceHover : c.surfaceCard,
+                  borderColor: c.surfaceBorder,
+                },
+              ]}
+            >
+              <LayoutGrid size={18} color={c.textPrimary} strokeWidth={2.2} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push("/search")}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.iconBtn,
+                {
+                  backgroundColor: pressed ? c.surfaceHover : c.surfaceCard,
+                  borderColor: c.surfaceBorder,
+                },
+              ]}
+            >
+              <Search size={18} color={c.textPrimary} strokeWidth={2.2} />
+            </Pressable>
           </View>
           <Text style={[text.labelMd, { color: c.textMuted, marginTop: 2 }]}>
             {totalCount > 0
@@ -124,11 +224,21 @@ export default function ScoreboardScreen() {
           </Text>
         </View>
         <DayStrip active={day} onSelect={setDay} c={c} />
+        <FilterPills
+          active={filter}
+          onSelect={setFilter}
+          liveCount={liveCount}
+          totalCount={totalCount}
+          favCount={favCount}
+          c={c}
+        />
       </SafeAreaView>
 
       {loading && !data ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={c.accentGreen} />
+        <View>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <MatchRowSkeleton key={i} scheme={scheme} />
+          ))}
         </View>
       ) : error && !data ? (
         <View style={styles.center}>
@@ -179,12 +289,27 @@ export default function ScoreboardScreen() {
   );
 }
 
-function LeagueHeader({ league: lg, c }: { league: LeagueGroup; c: typeof colors.dark }) {
+function LeagueHeader({
+  league: lg,
+  c,
+  collapsed,
+  onToggle,
+}: {
+  league: LeagueGroup;
+  c: typeof colors.dark;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const Chevron = collapsed ? ChevronRight : ChevronDown;
   return (
-    <View
-      style={[
+    <Pressable
+      onPress={onToggle}
+      style={({ pressed }) => [
         styles.leagueHeader,
-        { backgroundColor: c.surface, borderBottomColor: c.surfaceBorder },
+        {
+          backgroundColor: pressed ? c.surfaceHover : c.surface,
+          borderBottomColor: c.surfaceBorder,
+        },
       ]}
     >
       {lg.league_logo_url ? (
@@ -224,14 +349,23 @@ function LeagueHeader({ league: lg, c }: { league: LeagueGroup; c: typeof colors
         </Text>
       )}
       <View style={{ flex: 1 }} />
-      <Text style={[text.labelSm, { color: c.textMuted, fontWeight: "700" }]}>
+      <Text style={[text.labelSm, { color: c.textMuted, fontWeight: "700", marginRight: 6 }]}>
         {lg.matches.length}
       </Text>
-    </View>
+      <Chevron size={16} color={c.textMuted} strokeWidth={2.5} />
+    </Pressable>
   );
 }
 
-function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark }) {
+function MatchRow({
+  match: m,
+  c,
+  router,
+}: {
+  match: MatchSummary;
+  c: typeof colors.dark;
+  router: ReturnType<typeof useRouter>;
+}) {
   const live = isLive(m.phase);
   const finished = isFinished(m.phase);
   const scheduled = isScheduled(m.phase);
@@ -246,7 +380,6 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
       })
     : "";
 
-  // Center pillar: status pill + (live ? clock : nothing)
   const renderCenter = () => {
     if (live) {
       return (
@@ -255,24 +388,20 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
             <View style={[styles.liveDotSm, { backgroundColor: c.accentRed }]} />
             <Text
               style={[
-                text.labelMd,
-                {
-                  color: c.accentRed,
-                  fontWeight: "900",
-                  letterSpacing: 0.4,
-                },
+                text.labelSm,
+                { color: c.accentRed, fontWeight: "900", letterSpacing: 0.4 },
               ]}
             >
               LIVE
             </Text>
           </View>
           {m.clock && (
-            <Text style={[text.labelMd, { color: c.textPrimary, marginTop: 2 }]}>
+            <Text style={[text.labelSm, { color: c.textPrimary, marginTop: 2 }]}>
               {m.clock}
             </Text>
           )}
           {m.period && (
-            <Text style={[text.labelXs, { color: c.textMuted, marginTop: 2 }]}>
+            <Text style={[text.labelXs, { color: c.textMuted, marginTop: 1 }]}>
               {m.period}
             </Text>
           )}
@@ -283,7 +412,7 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
       return (
         <Text
           style={[
-            text.bodyMd,
+            text.labelLg,
             { color: c.textPrimary, fontWeight: "700", textAlign: "center" },
           ]}
         >
@@ -295,13 +424,23 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
       return (
         <View style={{ alignItems: "center" }}>
           <Text
+            numberOfLines={1}
             style={[
-              text.bodyMd,
+              text.labelLg,
               { color: c.textPrimary, fontWeight: "800", textAlign: "center" },
             ]}
           >
             {start || "TBD"}
           </Text>
+          {!!m.venue && (
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.venueText, { color: c.textMuted }]}
+            >
+              {m.venue}
+            </Text>
+          )}
         </View>
       );
     }
@@ -318,103 +457,181 @@ function MatchRow({ match: m, c }: { match: MatchSummary; c: typeof colors.dark 
   };
 
   return (
-    <Link href={{ pathname: "/match/[id]", params: { id: m.id } }} asChild>
-      <Pressable
-        style={({ pressed }) => [
-          styles.matchRow,
+    <Pressable
+      onPress={() => router.push({ pathname: "/match/[id]", params: { id: m.id } })}
+      style={({ pressed }) => [
+        styles.matchRow,
+        {
+          backgroundColor: pressed ? c.surfaceHover : c.surface,
+          borderBottomColor: c.surfaceBorder,
+        },
+      ]}
+    >
+      {/* Home block: small logo + name on the same horizontal line */}
+      <View style={styles.teamBlock}>
+        <TeamLogo
+          url={m.home_team.logo_url}
+          name={m.home_team.short_name || m.home_team.name}
+          size={28}
+        />
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={[
+            styles.teamNameInline,
+            {
+              color: homeLost ? c.textMuted : c.textPrimary,
+              fontWeight: homeWin || live ? "800" : "700",
+            },
+          ]}
+        >
+          {m.home_team.short_name || m.home_team.name}
+        </Text>
+      </View>
+
+      <Text
+        style={[
+          styles.bigScore,
           {
-            backgroundColor: pressed ? c.surfaceHover : c.surface,
-            borderBottomColor: c.surfaceBorder,
+            color: homeLost ? c.textMuted : c.textPrimary,
+            fontWeight: homeWin || live ? "900" : "800",
+            opacity: scheduled ? 0 : 1,
           },
         ]}
       >
-        {/* Home block: logo on top, name below, record under name */}
-        <View style={styles.teamBlock}>
-          <TeamLogo
-            url={m.home_team.logo_url}
-            name={m.home_team.short_name || m.home_team.name}
-            size={36}
-          />
-          <Text
-            numberOfLines={2}
-            style={[
-              styles.teamNameStacked,
-              {
-                color: homeLost ? c.textMuted : c.textPrimary,
-                fontWeight: homeWin || live ? "800" : "700",
-              },
-            ]}
-          >
-            {m.home_team.name || m.home_team.short_name}
-          </Text>
-        </View>
+        {m.score.home}
+      </Text>
 
-        {/* Home score */}
-        <View style={styles.scoreCol}>
-          {!scheduled && (
-            <Text
-              style={[
-                styles.bigScore,
-                {
-                  color: homeLost ? c.textMuted : c.textPrimary,
-                  fontWeight: homeWin || live ? "900" : "800",
-                },
-              ]}
-            >
-              {m.score.home}
-            </Text>
-          )}
-        </View>
+      <View style={styles.centerCol}>{renderCenter()}</View>
 
-        {/* Center pillar: status / clock */}
-        <View style={styles.centerCol}>{renderCenter()}</View>
+      <Text
+        style={[
+          styles.bigScore,
+          {
+            color: awayLost ? c.textMuted : c.textPrimary,
+            fontWeight: awayWin || live ? "900" : "800",
+            opacity: scheduled ? 0 : 1,
+          },
+        ]}
+      >
+        {m.score.away}
+      </Text>
 
-        {/* Away score */}
-        <View style={styles.scoreCol}>
-          {!scheduled && (
-            <Text
-              style={[
-                styles.bigScore,
-                {
-                  color: awayLost ? c.textMuted : c.textPrimary,
-                  fontWeight: awayWin || live ? "900" : "800",
-                  textAlign: "left",
-                },
-              ]}
-            >
-              {m.score.away}
-            </Text>
-          )}
-        </View>
-
-        {/* Away block: logo on top, name below */}
-        <View style={styles.teamBlock}>
-          <TeamLogo
-            url={m.away_team.logo_url}
-            name={m.away_team.short_name || m.away_team.name}
-            size={36}
-          />
-          <Text
-            numberOfLines={2}
-            style={[
-              styles.teamNameStacked,
-              {
-                color: awayLost ? c.textMuted : c.textPrimary,
-                fontWeight: awayWin || live ? "800" : "700",
-              },
-            ]}
-          >
-            {m.away_team.name || m.away_team.short_name}
-          </Text>
-        </View>
-      </Pressable>
-    </Link>
+      <View style={[styles.teamBlock, { justifyContent: "flex-end" }]}>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={[
+            styles.teamNameInline,
+            {
+              color: awayLost ? c.textMuted : c.textPrimary,
+              fontWeight: awayWin || live ? "800" : "700",
+              textAlign: "right",
+            },
+          ]}
+        >
+          {m.away_team.short_name || m.away_team.name}
+        </Text>
+        <TeamLogo
+          url={m.away_team.logo_url}
+          name={m.away_team.short_name || m.away_team.name}
+          size={28}
+        />
+      </View>
+    </Pressable>
   );
 }
 
-interface DayOption {
-  key: "yesterday" | "today" | "upcoming";
-  label: string;
+function FilterPills({
+  active,
+  onSelect,
+  liveCount,
+  totalCount,
+  favCount,
+  c,
+}: {
+  active: Filter;
+  onSelect: (k: Filter) => void;
+  liveCount: number;
+  totalCount: number;
+  favCount: number;
+  c: typeof colors.dark;
+}) {
+  const opts: { key: Filter; label: string; count: number }[] = [
+    { key: "all", label: "All", count: totalCount },
+    { key: "live", label: "Live", count: liveCount },
+    { key: "favorites", label: "Favorites", count: favCount },
+  ];
+  return (
+    <View
+      style={[
+        styles.filterStrip,
+        { borderBottomColor: c.surfaceBorder, backgroundColor: c.surface },
+      ]}
+    >
+      {opts.map((o) => {
+        const isActive = o.key === active;
+        const tint = isActive
+          ? o.key === "live"
+            ? c.accentRed
+            : o.key === "favorites"
+              ? c.accentAmber
+              : c.accentGreen
+          : c.surfaceCard;
+        const labelColor = isActive ? "#000" : c.textSecondary;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onSelect(o.key)}
+            style={({ pressed }) => [
+              styles.filterPill,
+              { backgroundColor: tint, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            {o.key === "live" && o.count > 0 && (
+              <View
+                style={[
+                  styles.liveDotSm,
+                  { backgroundColor: isActive ? "#000" : c.accentRed },
+                ]}
+              />
+            )}
+            {o.key === "favorites" && (
+              <Star
+                size={12}
+                color={isActive ? "#000" : c.accentAmber}
+                fill={isActive ? "#000" : c.accentAmber}
+                strokeWidth={2}
+              />
+            )}
+            <Text
+              style={[
+                text.labelMd,
+                {
+                  color: labelColor,
+                  fontWeight: "800",
+                  letterSpacing: 0.3,
+                },
+              ]}
+            >
+              {o.label}
+            </Text>
+            <Text
+              style={[
+                text.labelSm,
+                {
+                  color: isActive ? "#000" : c.textMuted,
+                  fontWeight: "700",
+                },
+              ]}
+            >
+              {o.count}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 function DayStrip({
@@ -422,11 +639,11 @@ function DayStrip({
   onSelect,
   c,
 }: {
-  active: DayOption["key"];
-  onSelect: (k: DayOption["key"]) => void;
+  active: DayKey;
+  onSelect: (k: DayKey) => void;
   c: typeof colors.dark;
 }) {
-  const opts: DayOption[] = [
+  const opts: { key: DayKey; label: string }[] = [
     { key: "yesterday", label: "Yesterday" },
     { key: "today", label: "Today" },
     { key: "upcoming", label: "Upcoming" },
@@ -484,6 +701,19 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   livePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -533,41 +763,36 @@ const styles = StyleSheet.create({
   matchRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "nowrap",
     paddingHorizontal: spacing.md,
-    paddingVertical: 18,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 100,
-    width: "100%",
   },
   teamBlock: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     minWidth: 0,
-    alignItems: "center",
-    paddingHorizontal: spacing.xs,
-    gap: 6,
   },
-  teamNameStacked: {
-    fontSize: 13,
-    lineHeight: 16,
-    textAlign: "center",
-  },
-  scoreCol: {
-    width: 44,
-    alignItems: "center",
-    justifyContent: "center",
+  teamNameInline: {
+    fontSize: 14,
+    lineHeight: 18,
+    flexShrink: 1,
   },
   bigScore: {
-    fontSize: 32,
-    lineHeight: 36,
+    fontSize: 28,
+    lineHeight: 32,
     fontVariant: ["tabular-nums"],
-    letterSpacing: -1,
+    letterSpacing: -0.5,
+    minWidth: 28,
+    textAlign: "center",
+    paddingHorizontal: 4,
   },
   centerCol: {
-    minWidth: 56,
+    width: 92,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: 4,
   },
   liveRow: {
     flexDirection: "row",
@@ -593,5 +818,27 @@ const styles = StyleSheet.create({
     right: spacing.md,
     height: 3,
     borderRadius: 2,
+  },
+  filterStrip: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radii.pill,
+  },
+  venueText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 3,
   },
 });

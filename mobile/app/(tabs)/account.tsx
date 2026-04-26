@@ -8,13 +8,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth-context";
 import { ApiError, deleteAccount } from "@/src/api";
+import { usePreferences } from "@/src/preferences-context";
+import type { ThemePref } from "@/src/preferences";
 import { colors, radii, spacing, text } from "@/src/theme";
 
 interface SectionProps {
@@ -23,7 +24,7 @@ interface SectionProps {
 }
 
 function Section({ title, children }: SectionProps) {
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
+  const { scheme } = usePreferences();
   const c = colors[scheme];
   return (
     <View
@@ -51,7 +52,7 @@ function Section({ title, children }: SectionProps) {
 }
 
 export default function AccountScreen() {
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
+  const { scheme, theme, setTheme, favorites } = usePreferences();
   const c = colors[scheme];
   const { user, signOut } = useAuth();
 
@@ -113,6 +114,51 @@ export default function AccountScreen() {
               </Text>
             </View>
           </View>
+        </Section>
+
+        {/* Appearance */}
+        <Section title="Appearance">
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            {(["system", "light", "dark"] as ThemePref[]).map((opt) => {
+              const active = theme === opt;
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => setTheme(opt)}
+                  style={({ pressed }) => [
+                    styles.themePill,
+                    {
+                      backgroundColor: active ? c.accentGreen : c.surface,
+                      borderColor: active ? c.accentGreen : c.surfaceBorder,
+                      opacity: pressed ? 0.85 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      text.bodySm,
+                      {
+                        color: active ? "#000" : c.textPrimary,
+                        fontWeight: "800",
+                        textTransform: "capitalize",
+                      },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+
+        {/* Favorites summary */}
+        <Section title="Favorites">
+          <Text style={[text.bodySm, { color: c.textSecondary }]}>
+            {favorites.size === 0
+              ? "Tap a team logo on the match screen to add it to your favorites — then filter the scoreboard to just their games."
+              : `Tracking ${favorites.size} team${favorites.size === 1 ? "" : "s"}. Use the "Favorites" filter on the scoreboard to focus on their games.`}
+          </Text>
         </Section>
 
         {/* Sign out */}
@@ -318,5 +364,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  themePill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    alignItems: "center",
   },
 });

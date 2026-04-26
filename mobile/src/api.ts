@@ -184,8 +184,83 @@ export interface TodayResponse {
   generated_at: string;
 }
 
-export async function fetchToday(signal?: AbortSignal): Promise<TodayResponse> {
-  return apiFetch<TodayResponse>("/v1/today", { signal });
+export async function fetchToday(
+  signal?: AbortSignal,
+  opts: { date?: string; tzOffset?: number } = {},
+): Promise<TodayResponse> {
+  const tz = opts.tzOffset ?? new Date().getTimezoneOffset();
+  const qp = new URLSearchParams({ tz_offset: String(tz) });
+  if (opts.date) qp.set("date", opts.date);
+  return apiFetch<TodayResponse>(`/v1/today?${qp.toString()}`, { signal });
+}
+
+// ── Devices & push ──────────────────────────────────────────────
+
+interface DeviceRegisterResponse {
+  device_id: string;
+}
+
+export async function registerDevice(
+  platform: "ios" | "android" | "web",
+  userAgent?: string,
+  deviceId?: string,
+): Promise<string> {
+  const res = await apiFetch<DeviceRegisterResponse>("/v1/devices/register", {
+    method: "POST",
+    body: { platform, user_agent: userAgent, device_id: deviceId },
+  });
+  return res.device_id;
+}
+
+export async function registerIosPushToken(
+  deviceId: string,
+  apnsToken: string,
+  bundleId: string,
+): Promise<void> {
+  await apiFetch<{ ok: boolean }>("/v1/notifications/ios/register-token", {
+    method: "POST",
+    body: { device_id: deviceId, apns_token: apnsToken, bundle_id: bundleId },
+  });
+}
+
+// ── News ────────────────────────────────────────────────────────
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  summary: string | null;
+  content_snippet: string | null;
+  source: string;
+  source_url: string;
+  image_url: string | null;
+  category: string;
+  sport: string | null;
+  leagues: string[];
+  teams: string[];
+  published_at: string;
+  fetched_at: string;
+  trending_score: number;
+  is_breaking: boolean;
+}
+
+export interface NewsListResponse {
+  articles: NewsArticle[];
+  total: number;
+  page: number;
+  pages: number;
+  has_next: boolean;
+}
+
+export async function fetchNews(
+  signal?: AbortSignal,
+  opts: { page?: number; limit?: number; sport?: string; q?: string } = {},
+): Promise<NewsListResponse> {
+  const qp = new URLSearchParams();
+  qp.set("page", String(opts.page ?? 1));
+  qp.set("limit", String(opts.limit ?? 20));
+  if (opts.sport) qp.set("sport", opts.sport);
+  if (opts.q) qp.set("q", opts.q);
+  return apiFetch<NewsListResponse>(`/v1/news?${qp.toString()}`, { signal });
 }
 
 // ── Match detail ─────────────────────────────────────────────────

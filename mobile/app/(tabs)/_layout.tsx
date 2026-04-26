@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { CircleDot, UserRound } from "lucide-react-native";
+import { CircleDot, Newspaper, UserRound } from "lucide-react-native";
 import { Platform, StyleSheet, useColorScheme } from "react-native";
 
 import { colors } from "@/src/theme";
@@ -34,6 +34,15 @@ export default function TabsLayout() {
           title: "Scoreboard",
           tabBarIcon: ({ color, focused }) => (
             <CircleDot size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: "News",
+          tabBarIcon: ({ color, focused }) => (
+            <Newspaper size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />

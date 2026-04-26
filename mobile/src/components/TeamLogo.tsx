@@ -32,6 +32,8 @@ export function TeamLogo({
   const showImage = !!url && !failed;
 
   if (showImage) {
+    // Always use a light pad so dark crests (Swansea, Juventus, Newcastle) stay visible.
+    // The pad is barely perceptible behind logos that already have light backgrounds.
     return (
       <View
         style={[
@@ -40,7 +42,7 @@ export function TeamLogo({
             width: size,
             height: size,
             borderRadius: radius,
-            backgroundColor: c.surfaceCard,
+            backgroundColor: "#ffffff",
           },
           style,
         ]}
