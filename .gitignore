@@ -1,54 +1,47 @@
-# liveview-app: frontend/ and backend/ only; ignore node/python artifacts
-# dependencies
-/node_modules
-/frontend/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-/frontend/coverage
-
-# next.js (root and frontend)
-/.next/
-/frontend/.next/
-/out/
-/frontend/out/
-
-# production
-/build
-/frontend/build
-
-# misc
+# liveview: Expo mobile + FastAPI backend
 .DS_Store
-*.pem
 .cursor/
+.claude/
+.vscode/
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
+# secrets / env
 .env
 .env*.local
 backend/.env
 
-# vercel
-.vercel
-/frontend/.vercel
+# node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# expo / react native (mobile/)
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+mobile/*.tsbuildinfo
 
-# PWA (frontend)
-/frontend/public/sw.js
-/frontend/public/workbox-*.js
-/frontend/public/fallback-*.js
-/frontend/public/sw.js.map
-/frontend/public/workbox-*.js.map
+# python (backend/)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/htmlcov/
+backend/.coverage
+backend/*.log
 
-# backend
-/backend/__pycache__
-/backend/.venv
+# build artifacts
+build/
+out/
+
+# vercel (legacy)
+.vercel/
+
+# certificates / keys
+*.pem
+*.p8
+*.p12
+*.mobileprovision
