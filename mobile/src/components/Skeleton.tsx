@@ -79,6 +79,58 @@ export function MatchRowSkeleton({ scheme = "dark" }: { scheme?: "dark" | "light
   );
 }
 
+/**
+ * Match detail skeleton — same shape as the real card so the swap to
+ * loaded data doesn't shift any neighbour. Top bar, status row, hero,
+ * broadcast strip, period table.
+ */
+export function MatchDetailSkeleton({ scheme = "dark" }: { scheme?: "dark" | "light" }) {
+  const c = colors[scheme];
+  return (
+    <View style={[detailStyles.card, { borderColor: c.surfaceBorder }]}>
+      <View style={detailStyles.topBar}>
+        <SkeletonBlock width={64} height={26} radius={13} scheme={scheme} />
+        <SkeletonBlock width={92} height={11} scheme={scheme} />
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          <SkeletonBlock width={28} height={28} radius={14} scheme={scheme} />
+          <SkeletonBlock width={28} height={28} radius={14} scheme={scheme} />
+        </View>
+      </View>
+
+      <View style={detailStyles.statusRow}>
+        <SkeletonBlock width={70} height={20} radius={10} scheme={scheme} />
+        <SkeletonBlock width={80} height={12} scheme={scheme} />
+      </View>
+
+      <View style={detailStyles.hero}>
+        <View style={detailStyles.heroSide}>
+          <SkeletonBlock width={52} height={52} radius={26} scheme={scheme} />
+          <SkeletonBlock width={48} height={12} scheme={scheme} />
+          <SkeletonBlock width={80} height={9} scheme={scheme} />
+        </View>
+        <View style={{ alignItems: "center", gap: 6 }}>
+          <SkeletonBlock width={120} height={36} scheme={scheme} />
+        </View>
+        <View style={detailStyles.heroSide}>
+          <SkeletonBlock width={52} height={52} radius={26} scheme={scheme} />
+          <SkeletonBlock width={48} height={12} scheme={scheme} />
+          <SkeletonBlock width={80} height={9} scheme={scheme} />
+        </View>
+      </View>
+
+      <View style={detailStyles.broadcastStrip}>
+        <SkeletonBlock width="80%" height={9} scheme={scheme} />
+      </View>
+
+      <View style={detailStyles.tablePanel}>
+        <SkeletonBlock width="100%" height={14} scheme={scheme} />
+        <SkeletonBlock width="100%" height={14} scheme={scheme} />
+        <SkeletonBlock width="100%" height={14} scheme={scheme} />
+      </View>
+    </View>
+  );
+}
+
 /** News row skeleton: title block + thumbnail block. */
 export function NewsRowSkeleton({ scheme = "dark" }: { scheme?: "dark" | "light" }) {
   const c = colors[scheme];
@@ -116,5 +168,46 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+});
+
+const detailStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#000",
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    margin: 12,
+  },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 10,
+  },
+  heroSide: { flex: 1, alignItems: "center", gap: 8 },
+  broadcastStrip: {
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  tablePanel: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
   },
 });

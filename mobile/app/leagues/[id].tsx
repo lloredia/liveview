@@ -169,20 +169,21 @@ function Row({ match: m, c, onPress }: { match: MatchSummary; c: typeof colors.d
         { backgroundColor: pressed ? c.surfaceHover : c.surface, borderBottomColor: c.surfaceBorder },
       ]}
     >
+      {/* Away on left (matches scoreboard + match-detail layout) */}
       <View style={styles.teamBlock}>
-        <TeamLogo url={m.home_team.logo_url} name={m.home_team.short_name || m.home_team.name} size={28} />
+        <TeamLogo url={m.away_team.logo_url} name={m.away_team.short_name || m.away_team.name} size={28} />
         <Text
           numberOfLines={1}
           ellipsizeMode="tail"
           style={[
             styles.teamNameInline,
             {
-              color: homeLost ? c.textMuted : c.textPrimary,
-              fontWeight: homeWin || live ? "800" : "700",
+              color: awayLost ? c.textMuted : c.textPrimary,
+              fontWeight: awayWin || live ? "800" : "700",
             },
           ]}
         >
-          {m.home_team.short_name || m.home_team.name}
+          {m.away_team.short_name || m.away_team.name}
         </Text>
       </View>
 
@@ -190,13 +191,13 @@ function Row({ match: m, c, onPress }: { match: MatchSummary; c: typeof colors.d
         style={[
           styles.bigScore,
           {
-            color: homeLost ? c.textMuted : c.textPrimary,
-            fontWeight: homeWin || live ? "900" : "800",
+            color: awayLost ? c.textMuted : c.textPrimary,
+            fontWeight: awayWin || live ? "900" : "800",
             opacity: scheduled ? 0 : 1,
           },
         ]}
       >
-        {m.score.home}
+        {m.score.away}
       </Text>
 
       <View style={styles.centerCol}>
@@ -223,13 +224,13 @@ function Row({ match: m, c, onPress }: { match: MatchSummary; c: typeof colors.d
         style={[
           styles.bigScore,
           {
-            color: awayLost ? c.textMuted : c.textPrimary,
-            fontWeight: awayWin || live ? "900" : "800",
+            color: homeLost ? c.textMuted : c.textPrimary,
+            fontWeight: homeWin || live ? "900" : "800",
             opacity: scheduled ? 0 : 1,
           },
         ]}
       >
-        {m.score.away}
+        {m.score.home}
       </Text>
 
       <View style={[styles.teamBlock, { justifyContent: "flex-end" }]}>
@@ -239,15 +240,15 @@ function Row({ match: m, c, onPress }: { match: MatchSummary; c: typeof colors.d
           style={[
             styles.teamNameInline,
             {
-              color: awayLost ? c.textMuted : c.textPrimary,
-              fontWeight: awayWin || live ? "800" : "700",
+              color: homeLost ? c.textMuted : c.textPrimary,
+              fontWeight: homeWin || live ? "800" : "700",
               textAlign: "right",
             },
           ]}
         >
-          {m.away_team.short_name || m.away_team.name}
+          {m.home_team.short_name || m.home_team.name}
         </Text>
-        <TeamLogo url={m.away_team.logo_url} name={m.away_team.short_name || m.away_team.name} size={28} />
+        <TeamLogo url={m.home_team.logo_url} name={m.home_team.short_name || m.home_team.name} size={28} />
       </View>
     </Pressable>
   );

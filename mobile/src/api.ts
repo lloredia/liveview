@@ -141,6 +141,12 @@ export interface Team {
   name: string;
   short_name: string;
   logo_url: string | null;
+  /** Optional season record, e.g. "52-30". Backend may not populate this yet. */
+  record?: string | null;
+  /** Optional standing string, e.g. "2nd East". */
+  standing?: string | null;
+  /** Optional team brand hex color, e.g. "#007A33". Drives table dots, leader avatars. */
+  color_primary?: string | null;
 }
 
 export interface MatchScore {
@@ -161,6 +167,12 @@ export interface MatchSummary {
   version: number;
   home_team: Team;
   away_team: Team;
+  /** Which side has the ball / serve / possession right now. */
+  possession?: "home" | "away" | null;
+  /** Reported attendance, e.g. 18247. */
+  attendance?: number | null;
+  /** Broadcast network string, e.g. "NBA TV". */
+  broadcast?: string | null;
 }
 
 export interface LeagueGroup {
@@ -223,6 +235,45 @@ export async function registerIosPushToken(
   });
 }
 
+export interface TrackedGame {
+  device_id: string;
+  game_id: string;
+  sport: string | null;
+  league: string | null;
+  notify_flags: Record<string, boolean>;
+  created_at: string;
+}
+
+export async function trackGame(
+  deviceId: string,
+  gameId: string,
+  opts: { sport?: string; league?: string; notifyFlags?: Record<string, boolean> } = {},
+): Promise<TrackedGame> {
+  return apiFetch<TrackedGame>("/v1/tracked-games", {
+    method: "POST",
+    body: {
+      device_id: deviceId,
+      game_id: gameId,
+      sport: opts.sport,
+      league: opts.league,
+      notify_flags: opts.notifyFlags,
+    },
+  });
+}
+
+export async function untrackGame(deviceId: string, gameId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(
+    `/v1/tracked-games/${gameId}?device_id=${encodeURIComponent(deviceId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function listTrackedGames(deviceId: string): Promise<TrackedGame[]> {
+  return apiFetch<TrackedGame[]>(
+    `/v1/tracked-games?device_id=${encodeURIComponent(deviceId)}`,
+  );
+}
+
 // ── News ────────────────────────────────────────────────────────
 
 export interface NewsArticle {
@@ -265,6 +316,36 @@ export async function fetchNews(
 
 // ── Match detail ─────────────────────────────────────────────────
 
+export interface PeriodScore {
+  period: string;
+  home: number;
+  away: number;
+}
+
+export interface WinProbability {
+  home: number;
+  away: number;
+  delta_last_play: number;
+}
+
+export interface LeaderLine {
+  initials: string;
+  name: string;
+  position: string;
+  jersey: string;
+  pts: number;
+  reb: number;
+  ast: number;
+}
+
+export interface LastPlay {
+  team: "home" | "away";
+  text: string;
+  seconds_ago: number;
+  points: number;
+  distance_ft?: number | null;
+}
+
 export interface MatchDetailResponse {
   match: MatchSummary & { league: { id: string; name: string; short_name: string } };
   state: {
@@ -272,11 +353,95 @@ export interface MatchDetailResponse {
     score_away: number;
     clock: string | null;
     period: string | null;
+    period_scores?: PeriodScore[];
     version: number;
   } | null;
   league: { id: string; name: string; short_name: string };
+  /** Live win probability snapshot. Optional — missing on most matches today. */
+  win_probability?: WinProbability | null;
+  leaders?: { home?: LeaderLine | null; away?: LeaderLine | null } | null;
+  last_play?: LastPlay | null;
 }
 
 export async function fetchMatch(matchId: string, signal?: AbortSignal): Promise<MatchDetailResponse> {
   return apiFetch<MatchDetailResponse>(`/v1/matches/${matchId}`, { signal });
+}
+
+// ── Match details (player stats / box-score) ───────────────────
+
+/**
+ * Raw player-stats slice from /v1/matches/{id}/details. Each side has a
+ * flat `players` array and a separate `statColumns` list defining which
+ * keys appear in each player's `stats` map (varies by sport / source).
+ */
+export interface RawPlayer {
+  name: string;
+  jersey: string;
+  position: string;
+  stats: Record<string, string>;
+  starter?: boolean;
+}
+
+export interface RawPlayerStatsSide {
+  teamName?: string;
+  players: RawPlayer[];
+  statColumns: string[];
+}
+
+export interface RawMatchPlayerStats {
+  source: string | null;
+  home: RawPlayerStatsSide | null;
+  away: RawPlayerStatsSide | null;
+}
+
+interface RawMatchDetails {
+  playerStats?: RawMatchPlayerStats | null;
+}
+
+export async function fetchMatchPlayerStats(
+  matchId: string,
+  signal?: AbortSignal,
+): Promise<RawMatchPlayerStats> {
+  const res = await apiFetch<RawMatchDetails>(`/v1/matches/${matchId}/details`, { signal });
+  return res.playerStats ?? { source: null, home: null, away: null };
+}
+
+// ── Match timeline (event stream) ──────────────────────────────
+
+export interface RawMatchEvent {
+  id: string;
+  seq: number;
+  event_type: string;
+  minute: number | null;
+  second: number | null;
+  period: string | null;
+  team_id: string | null;
+  player_id: string | null;
+  player_name: string | null;
+  detail: Record<string, unknown> | null;
+  score_home: number | null;
+  score_away: number | null;
+  synthetic: boolean;
+  confidence: number | null;
+  created_at: string | null;
+}
+
+interface RawTimelineResponse {
+  match_id: string;
+  phase: string;
+  events: RawMatchEvent[];
+  count: number;
+  next_seq: number | null;
+  has_more: boolean;
+}
+
+export async function fetchMatchTimeline(
+  matchId: string,
+  signal?: AbortSignal,
+): Promise<RawMatchEvent[]> {
+  const res = await apiFetch<RawTimelineResponse>(
+    `/v1/matches/${matchId}/timeline?limit=20`,
+    { signal },
+  );
+  return res.events ?? [];
 }

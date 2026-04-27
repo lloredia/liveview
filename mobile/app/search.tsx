@@ -164,12 +164,12 @@ function MatchHitRow({ hit, c, onPress }: { hit: MatchHit; c: typeof colors.dark
       ]}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <TeamLogo url={m.home_team.logo_url} name={m.home_team.short_name} size={22} />
         <TeamLogo url={m.away_team.logo_url} name={m.away_team.short_name} size={22} />
+        <TeamLogo url={m.home_team.logo_url} name={m.home_team.short_name} size={22} />
       </View>
       <View style={{ flex: 1, marginLeft: spacing.sm }}>
         <Text numberOfLines={1} style={[text.bodySm, { color: c.textPrimary, fontWeight: "700" }]}>
-          {m.home_team.short_name || m.home_team.name} vs {m.away_team.short_name || m.away_team.name}
+          {m.away_team.short_name || m.away_team.name} @ {m.home_team.short_name || m.home_team.name}
         </Text>
         <Text numberOfLines={1} style={[text.labelSm, { color: c.textMuted, marginTop: 2 }]}>
           {hit.league.league_short_name || hit.league.league_name}

@@ -467,11 +467,11 @@ function MatchRow({
         },
       ]}
     >
-      {/* Home block: small logo + name on the same horizontal line */}
+      {/* Away on left (matches NBA scorebug + match-detail layout) */}
       <View style={styles.teamBlock}>
         <TeamLogo
-          url={m.home_team.logo_url}
-          name={m.home_team.short_name || m.home_team.name}
+          url={m.away_team.logo_url}
+          name={m.away_team.short_name || m.away_team.name}
           size={28}
         />
         <Text
@@ -480,29 +480,14 @@ function MatchRow({
           style={[
             styles.teamNameInline,
             {
-              color: homeLost ? c.textMuted : c.textPrimary,
-              fontWeight: homeWin || live ? "800" : "700",
+              color: awayLost ? c.textMuted : c.textPrimary,
+              fontWeight: awayWin || live ? "800" : "700",
             },
           ]}
         >
-          {m.home_team.short_name || m.home_team.name}
+          {m.away_team.short_name || m.away_team.name}
         </Text>
       </View>
-
-      <Text
-        style={[
-          styles.bigScore,
-          {
-            color: homeLost ? c.textMuted : c.textPrimary,
-            fontWeight: homeWin || live ? "900" : "800",
-            opacity: scheduled ? 0 : 1,
-          },
-        ]}
-      >
-        {m.score.home}
-      </Text>
-
-      <View style={styles.centerCol}>{renderCenter()}</View>
 
       <Text
         style={[
@@ -517,6 +502,21 @@ function MatchRow({
         {m.score.away}
       </Text>
 
+      <View style={styles.centerCol}>{renderCenter()}</View>
+
+      <Text
+        style={[
+          styles.bigScore,
+          {
+            color: homeLost ? c.textMuted : c.textPrimary,
+            fontWeight: homeWin || live ? "900" : "800",
+            opacity: scheduled ? 0 : 1,
+          },
+        ]}
+      >
+        {m.score.home}
+      </Text>
+
       <View style={[styles.teamBlock, { justifyContent: "flex-end" }]}>
         <Text
           numberOfLines={1}
@@ -524,17 +524,17 @@ function MatchRow({
           style={[
             styles.teamNameInline,
             {
-              color: awayLost ? c.textMuted : c.textPrimary,
-              fontWeight: awayWin || live ? "800" : "700",
+              color: homeLost ? c.textMuted : c.textPrimary,
+              fontWeight: homeWin || live ? "800" : "700",
               textAlign: "right",
             },
           ]}
         >
-          {m.away_team.short_name || m.away_team.name}
+          {m.home_team.short_name || m.home_team.name}
         </Text>
         <TeamLogo
-          url={m.away_team.logo_url}
-          name={m.away_team.short_name || m.away_team.name}
+          url={m.home_team.logo_url}
+          name={m.home_team.short_name || m.home_team.name}
           size={28}
         />
       </View>
