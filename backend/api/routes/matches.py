@@ -678,6 +678,7 @@ async def get_match_center(
                 at.c.logo_url.label("at_logo"),
                 LeagueORM.id.label("league_id"),
                 LeagueORM.name.label("league_name"),
+                LeagueORM.short_name.label("league_short_name"),
             )
             .outerjoin(MatchStateORM, MatchORM.id == MatchStateORM.match_id)
             .outerjoin(ht, MatchORM.home_team_id == ht.c.id)
@@ -692,7 +693,15 @@ async def get_match_center(
 
         home_team = {"id": str(row.ht_id), "name": row.ht_name, "short_name": row.ht_short, "logo_url": row.ht_logo} if row.ht_id else None
         away_team = {"id": str(row.at_id), "name": row.at_name, "short_name": row.at_short, "logo_url": row.at_logo} if row.at_id else None
-        league = {"id": str(row.league_id), "name": row.league_name} if getattr(row, "league_id", None) else None
+        league = (
+            {
+                "id": str(row.league_id),
+                "name": row.league_name,
+                "short_name": row.league_short_name,
+            }
+            if getattr(row, "league_id", None)
+            else None
+        )
 
         state = row if row.score_home is not None else None
 
